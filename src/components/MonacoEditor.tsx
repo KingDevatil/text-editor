@@ -124,7 +124,6 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
   const valueRef = useRef(content);
   const onChangeRef = useRef(onChange);
   const isComposingRef = useRef(false);
-  const pendingContentRef = useRef<string | null>(null);
   onChangeRef.current = onChange;
 
   // Initialize editor
@@ -257,7 +256,9 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
     const disposable = editor.onDidChangeModelContent(() => {
       const newValue = editor.getValue();
       valueRef.current = newValue;
-      onChangeRef.current(newValue);
+      if (!isComposingRef.current) {
+        onChangeRef.current(newValue);
+      }
     });
 
     const compStart = editor.onDidCompositionStart(() => {
@@ -266,10 +267,9 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
 
     const compEnd = editor.onDidCompositionEnd(() => {
       isComposingRef.current = false;
-      if (pendingContentRef.current !== null && pendingContentRef.current !== editor.getValue()) {
-        editor.setValue(pendingContentRef.current);
-      }
-      pendingContentRef.current = null;
+      const finalValue = editor.getValue();
+      valueRef.current = finalValue;
+      onChangeRef.current(finalValue);
     });
 
     editor.focus();
@@ -325,10 +325,7 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;
-    if (isComposingRef.current) {
-      pendingContentRef.current = content;
-      return;
-    }
+    if (isComposingRef.current) return;
     if (content !== editor.getValue()) {
       editor.setValue(content);
     }
