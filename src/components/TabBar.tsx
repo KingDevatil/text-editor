@@ -12,6 +12,7 @@ interface TabBarProps {
   onTabClose: (id: string) => void;
   onNewFile?: () => void;
   onNewFileInGroup?: (group: 1 | 2) => void;
+  onMoveTabToGroup?: (tabId: string, group: 1 | 2) => void;
 }
 
 interface ScrollState {
@@ -32,12 +33,14 @@ const TabBar: React.FC<TabBarProps> = ({
   onTabClose,
   onNewFile,
   onNewFileInGroup,
+  onMoveTabToGroup,
 }) => {
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const g1ScrollRef = useRef<HTMLDivElement>(null);
   const g2ScrollRef = useRef<HTMLDivElement>(null);
   const [g1Scroll, setG1Scroll] = useState<ScrollState>({ canLeft: false, canRight: false });
   const [g2Scroll, setG2Scroll] = useState<ScrollState>({ canLeft: false, canRight: false });
+  const [dragOverGroup, setDragOverGroup] = useState<1 | 2 | null>(null);
 
   const checkScroll = useCallback((el: HTMLDivElement | null, setter: React.Dispatch<React.SetStateAction<ScrollState>>) => {
     if (!el) return;
@@ -90,6 +93,35 @@ const TabBar: React.FC<TabBarProps> = ({
     onNewFileInGroup?.(group);
   }, [onNewFileInGroup]);
 
+  const handleDragStart = useCallback((e: React.DragEvent, tabId: string) => {
+    e.dataTransfer.setData('text/tab-id', tabId);
+    e.dataTransfer.effectAllowed = 'move';
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, group: 1 | 2) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverGroup(group);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDragOverGroup(null);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, group: 1 | 2) => {
+    e.preventDefault();
+    setDragOverGroup(null);
+    const tabId = e.dataTransfer.getData('text/tab-id');
+    if (tabId && onMoveTabToGroup) {
+      onMoveTabToGroup(tabId, group);
+    }
+  }, [onMoveTabToGroup]);
+
   const group1Tabs = tabs.filter((t) => t.group === 1 || !t.group);
   const group2Tabs = tabs.filter((t) => t.group === 2);
 
@@ -101,6 +133,8 @@ const TabBar: React.FC<TabBarProps> = ({
     return (
       <div
         key={tab.id}
+        draggable
+        onDragStart={(e) => handleDragStart(e, tab.id)}
         onClick={() => handleTabClick(tab.id, group)}
         onDoubleClick={(e) => {
           e.stopPropagation();
@@ -169,9 +203,14 @@ const TabBar: React.FC<TabBarProps> = ({
       )}
       <div
         ref={scrollRef}
-        className="flex overflow-x-auto scrollbar-hide flex-1 pt-[2px]"
+        className={`flex overflow-x-auto scrollbar-hide flex-1 pt-[2px] transition-colors duration-150 ${
+          dragOverGroup === group ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''
+        }`}
         onScroll={(e) => checkScroll(e.currentTarget, setter)}
         onDoubleClick={() => handleBlankDoubleClick(group)}
+        onDragOver={(e) => handleDragOver(e, group)}
+        onDragLeave={handleDragLeave}
+        onDrop={(e) => handleDrop(e, group)}
       >
         {groupTabs.map((tab) => renderTab(tab, group))}
       </div>

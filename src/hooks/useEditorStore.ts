@@ -204,29 +204,35 @@ export function useEditorStore() {
   }, []);
 
   const setSplitMode = useCallback((mode: boolean) => {
+    if (mode && tabs.length < 2) return;
     setSplitModeState(mode);
     if (mode) {
       setPreviewVisible(false);
       setTabs((prev) => {
         const hasGroup2 = prev.some((t) => t.group === 2);
-        if (!hasGroup2 && prev.length >= 2) {
-          const activeG1 = prev.find((t) => t.id === activeGroup1TabId)?.id || prev[0].id;
-          const nonActive = prev.find((t) => t.id !== activeG1);
-          if (nonActive) {
-            return prev.map((t) => (t.id === nonActive.id ? { ...t, group: 2 as 2 } : t));
-          }
+        if (!hasGroup2 && prev.length >= 2 && activeTabId) {
+          // 把当前激活的页签移到 group2
+          return prev.map((t) => (t.id === activeTabId ? { ...t, group: 2 as 2 } : t));
         }
         return prev;
       });
       setActiveGroup2TabId((current) => {
         if (current) return current;
-        return tabs.find((t) => t.group === 2)?.id || null;
+        return activeTabId;
+      });
+      setActiveGroup1TabId((current) => {
+        if (current === activeTabId) {
+          // 当前 group1 激活页签被移走了，找 group1 中剩下的第一个
+          const remainingG1 = tabs.filter((t) => t.id !== activeTabId && (t.group === 1 || !t.group));
+          return remainingG1[0]?.id || null;
+        }
+        return current;
       });
     } else {
       setTabs((prev) => prev.map((t) => ({ ...t, group: 1 as 1 })));
       setActiveGroup2TabId(null);
     }
-  }, [tabs, activeGroup1TabId]);
+  }, [tabs, activeTabId]);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || null;
 
