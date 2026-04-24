@@ -36,7 +36,7 @@ const TabBar: React.FC<TabBarProps> = ({
   const [g2MenuOpen, setG2MenuOpen] = useState(false);
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Detect overflow per group
+  // Detect overflow per group (delay to ensure DOM is updated)
   useEffect(() => {
     const check = () => {
       const g1Overflow = group1Ref.current ? group1Ref.current.scrollWidth > group1Ref.current.clientWidth : false;
@@ -44,9 +44,12 @@ const TabBar: React.FC<TabBarProps> = ({
       setG1Overflow(g1Overflow);
       setG2Overflow(g2Overflow);
     };
-    check();
+    const id = setTimeout(check, 0);
     window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
+    return () => {
+      clearTimeout(id);
+      window.removeEventListener('resize', check);
+    };
   }, [tabs, splitMode]);
 
   // Close menus on outside click
@@ -103,7 +106,7 @@ const TabBar: React.FC<TabBarProps> = ({
         onClick={() => handleTabClick(tab.id, group)}
         onDoubleClick={() => handleTabDoubleClick(tab.id)}
         className={`
-          group relative flex items-center gap-2 px-3.5 min-w-[120px] max-w-[220px] cursor-pointer select-none
+          group relative flex items-center gap-2 px-3.5 min-w-[120px] max-w-[220px] cursor-pointer select-none flex-shrink-0
           text-sm transition-all duration-100
           ${isActive && isGroupActive
             ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 z-10'
@@ -236,7 +239,7 @@ const TabBar: React.FC<TabBarProps> = ({
                 {group1Tabs.map((tab) => renderTab(tab, 1))}
               </div>
               {!g1Overflow && (
-                <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
+                <div className="min-w-[40px] flex-shrink-0" onDoubleClick={handleBlankDoubleClick} />
               )}
               {g1Overflow && renderDropdown(group1Tabs, 1, g1MenuOpen, setG1MenuOpen)}
             </div>
@@ -251,7 +254,7 @@ const TabBar: React.FC<TabBarProps> = ({
                   {group2Tabs.map((tab) => renderTab(tab, 2))}
                 </div>
                 {!g2Overflow && (
-                  <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
+                  <div className="min-w-[40px] flex-shrink-0" onDoubleClick={handleBlankDoubleClick} />
                 )}
                 {g2Overflow && renderDropdown(group2Tabs, 2, g2MenuOpen, setG2MenuOpen)}
               </div>
@@ -266,7 +269,7 @@ const TabBar: React.FC<TabBarProps> = ({
               {group1Tabs.map((tab) => renderTab(tab, 1))}
             </div>
             {!g1Overflow && (
-              <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
+              <div className="min-w-[40px] flex-shrink-0" onDoubleClick={handleBlankDoubleClick} />
             )}
             {g1Overflow && renderDropdown(group1Tabs, 1, g1MenuOpen, setG1MenuOpen)}
           </div>
