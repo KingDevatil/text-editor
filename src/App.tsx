@@ -66,8 +66,8 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [store.activeTab, store.findReplaceVisible]);
 
-  const handleNewFile = useCallback(() => {
-    store.createTab();
+  const handleNewFile = useCallback((group: 1 | 2 = 1) => {
+    store.createTab(undefined, undefined, undefined, undefined, group);
   }, [store.createTab]);
 
   const handleOpenFile = useCallback(() => {

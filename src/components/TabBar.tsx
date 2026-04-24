@@ -10,7 +10,7 @@ interface TabBarProps {
   splitMode: boolean;
   onTabClick: (id: string, group: 1 | 2) => void;
   onTabClose: (id: string) => void;
-  onNewFile?: () => void;
+  onNewFile?: (group?: 1 | 2) => void;
 }
 
 interface ScrollState {
@@ -84,8 +84,8 @@ const TabBar: React.FC<TabBarProps> = ({
     }, 200);
   }, [handleTabActivate]);
 
-  const handleBlankDoubleClick = useCallback(() => {
-    onNewFile?.();
+  const handleBlankDoubleClick = useCallback((group: 1 | 2) => {
+    onNewFile?.(group);
   }, [onNewFile]);
 
   const group1Tabs = tabs.filter((t) => t.group === 1 || !t.group);
@@ -169,7 +169,7 @@ const TabBar: React.FC<TabBarProps> = ({
         ref={scrollRef}
         className="flex overflow-x-auto scrollbar-hide flex-1 pt-[2px]"
         onScroll={(e) => checkScroll(e.currentTarget, setter)}
-        onDoubleClick={handleBlankDoubleClick}
+        onDoubleClick={() => handleBlankDoubleClick(group)}
       >
         {groupTabs.map((tab) => renderTab(tab, group))}
       </div>
@@ -189,7 +189,7 @@ const TabBar: React.FC<TabBarProps> = ({
     return (
       <div
         className="h-9 border-b border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900 flex items-center px-4 text-sm text-gray-400 dark:text-gray-500 cursor-pointer hover:text-gray-500 dark:hover:text-gray-400 transition-colors"
-        onDoubleClick={handleBlankDoubleClick}
+        onDoubleClick={() => handleBlankDoubleClick(1)}
       >
         <span className="flex-1">双击新建文件</span>
       </div>
