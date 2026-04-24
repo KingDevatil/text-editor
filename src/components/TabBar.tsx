@@ -36,11 +36,27 @@ const TabBar: React.FC<TabBarProps> = ({
   const [g2MenuOpen, setG2MenuOpen] = useState(false);
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Detect overflow per group (delay to ensure DOM is updated)
+  // Detect overflow per group by summing child widths (more reliable than scrollWidth)
   useEffect(() => {
     const check = () => {
-      const g1Overflow = group1Ref.current ? group1Ref.current.scrollWidth > group1Ref.current.clientWidth : false;
-      const g2Overflow = group2Ref.current ? group2Ref.current.scrollWidth > group2Ref.current.clientWidth : false;
+      const g1El = group1Ref.current;
+      const g2El = group2Ref.current;
+      let g1Overflow = false;
+      let g2Overflow = false;
+      if (g1El) {
+        let total = 0;
+        for (const child of g1El.children) {
+          total += (child as HTMLElement).offsetWidth;
+        }
+        g1Overflow = total > g1El.clientWidth;
+      }
+      if (g2El) {
+        let total = 0;
+        for (const child of g2El.children) {
+          total += (child as HTMLElement).offsetWidth;
+        }
+        g2Overflow = total > g2El.clientWidth;
+      }
       setG1Overflow(g1Overflow);
       setG2Overflow(g2Overflow);
     };
@@ -232,7 +248,7 @@ const TabBar: React.FC<TabBarProps> = ({
             style={{ width: sidebarVisible ? sidebarWidth : 0 }}
           />
           {/* Tabs area - mirrors the editor pane layout below */}
-          <div className="flex flex-1 overflow-hidden">
+          <div className="flex flex-1">
             {/* Group 1 tabs */}
             <div className="w-1/2 flex flex-shrink-0 pt-[2px]">
               <div ref={group1Ref} className="flex overflow-hidden flex-1" onDoubleClick={handleBlankDoubleClick}>
