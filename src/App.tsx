@@ -310,24 +310,6 @@ function App() {
         theme={store.theme}
       />
 
-      <TabBar
-        tabs={store.tabs}
-        activeTabId={store.activeTabId}
-        activeGroup1TabId={store.activeGroup1TabId}
-        activeGroup2TabId={store.activeGroup2TabId}
-        splitMode={store.splitMode}
-        sidebarVisible={store.sidebarVisible}
-        sidebarWidth={sidebarWidth}
-        onTabClick={handleTabClick}
-        onTabClose={store.closeTab}
-        onNewFile={handleNewFile}
-      />
-
-      <FindReplace
-        visible={store.findReplaceVisible}
-        onClose={() => store.setFindReplaceVisible(false)}
-      />
-
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           visible={store.sidebarVisible}
@@ -338,72 +320,90 @@ function App() {
           onFontSizeChange={store.setFontSize}
         />
 
-        <div className="flex flex-1 overflow-hidden">
-          {group1Tab ? (
-            <>
-              <div className={`h-full ${store.splitMode || (store.previewVisible && canPreview) ? 'w-1/2' : 'w-full'}`}>
-                <MonacoEditor
-                  content={group1Tab.content}
-                  language={group1Tab.language}
-                  theme={store.theme}
-                  onChange={handleEditorChange(group1Tab.id)}
-                  editorRef={editorInstanceRef}
-                  unicodeHighlight={store.unicodeHighlight}
-                  fontSize={store.fontSize}
-                />
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <TabBar
+            tabs={store.tabs}
+            activeTabId={store.activeTabId}
+            activeGroup1TabId={store.activeGroup1TabId}
+            activeGroup2TabId={store.activeGroup2TabId}
+            splitMode={store.splitMode}
+            onTabClick={handleTabClick}
+            onTabClose={store.closeTab}
+            onNewFile={handleNewFile}
+          />
+
+          <FindReplace
+            visible={store.findReplaceVisible}
+            onClose={() => store.setFindReplaceVisible(false)}
+          />
+
+          <div className="flex flex-1 overflow-hidden">
+            {group1Tab ? (
+              <>
+                <div className={`h-full ${store.splitMode || (store.previewVisible && canPreview) ? 'w-1/2' : 'w-full'}`}>
+                  <MonacoEditor
+                    content={group1Tab.content}
+                    language={group1Tab.language}
+                    theme={store.theme}
+                    onChange={handleEditorChange(group1Tab.id)}
+                    editorRef={editorInstanceRef}
+                    unicodeHighlight={store.unicodeHighlight}
+                    fontSize={store.fontSize}
+                  />
+                </div>
+                {store.splitMode && (
+                  <>
+                    <div className="w-px bg-gray-200 dark:bg-gray-800 self-stretch" />
+                    <div className="w-1/2 h-full">
+                      {store.activeGroup2TabId ? (
+                        <MonacoEditor
+                          content={store.tabs.find((t) => t.id === store.activeGroup2TabId)?.content || ''}
+                          language={store.tabs.find((t) => t.id === store.activeGroup2TabId)?.language || 'plaintext'}
+                          theme={store.theme}
+                          onChange={handleEditorChange(store.activeGroup2TabId)}
+                          editorRef={secondaryEditorInstanceRef}
+                          unicodeHighlight={store.unicodeHighlight}
+                          fontSize={store.fontSize}
+                        />
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-600 bg-white dark:bg-gray-900">
+                          <p className="text-sm">选择标签页开始编辑</p>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+                {store.previewVisible && canPreview && (
+                  <>
+                    <div className="w-px bg-gray-200 dark:bg-gray-800 self-stretch" />
+                    <div className="w-1/2 h-full">
+                      <MarkdownPreview content={group1Tab.content} theme={store.theme} />
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-gray-400 dark:text-gray-600 bg-white dark:bg-gray-900">
+                <div className="text-center">
+                  <p className="text-lg mb-2">没有打开的文件</p>
+                  <p className="text-sm">点击"新建"或"打开"开始编辑</p>
+                </div>
               </div>
-              {store.splitMode && (
-                <>
-                  <div className="w-px bg-gray-200 dark:bg-gray-800 self-stretch" />
-                  <div className="w-1/2 h-full">
-                    {store.activeGroup2TabId ? (
-                      <MonacoEditor
-                        content={store.tabs.find((t) => t.id === store.activeGroup2TabId)?.content || ''}
-                        language={store.tabs.find((t) => t.id === store.activeGroup2TabId)?.language || 'plaintext'}
-                        theme={store.theme}
-                        onChange={handleEditorChange(store.activeGroup2TabId)}
-                        editorRef={secondaryEditorInstanceRef}
-                        unicodeHighlight={store.unicodeHighlight}
-                        fontSize={store.fontSize}
-                      />
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-600 bg-white dark:bg-gray-900">
-                        <p className="text-sm">选择标签页开始编辑</p>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-              {store.previewVisible && canPreview && (
-                <>
-                  <div className="w-px bg-gray-200 dark:bg-gray-800 self-stretch" />
-                  <div className="w-1/2 h-full">
-                    <MarkdownPreview content={group1Tab.content} theme={store.theme} />
-                  </div>
-                </>
-              )}
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-gray-400 dark:text-gray-600 bg-white dark:bg-gray-900">
-              <div className="text-center">
-                <p className="text-lg mb-2">没有打开的文件</p>
-                <p className="text-sm">点击"新建"或"打开"开始编辑</p>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
+
+          <StatusBar
+            activeTab={store.activeTab}
+            theme={store.theme}
+            onEncodingChange={handleEncodingChange}
+            onLanguageChange={(lang) => {
+              if (store.activeTab) {
+                store.setTabLanguage(store.activeTab.id, lang);
+              }
+            }}
+          />
         </div>
       </div>
-
-      <StatusBar
-        activeTab={store.activeTab}
-        theme={store.theme}
-        onEncodingChange={handleEncodingChange}
-        onLanguageChange={(lang) => {
-          if (store.activeTab) {
-            store.setTabLanguage(store.activeTab.id, lang);
-          }
-        }}
-      />
     </div>
   );
 }

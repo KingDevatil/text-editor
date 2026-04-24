@@ -8,8 +8,6 @@ interface TabBarProps {
   activeGroup1TabId: string | null;
   activeGroup2TabId: string | null;
   splitMode: boolean;
-  sidebarVisible: boolean;
-  sidebarWidth: number;
   onTabClick: (id: string, group: 1 | 2) => void;
   onTabClose: (id: string) => void;
   onNewFile?: () => void;
@@ -29,8 +27,6 @@ const TabBar: React.FC<TabBarProps> = ({
   activeGroup1TabId,
   activeGroup2TabId,
   splitMode,
-  sidebarVisible,
-  sidebarWidth,
   onTabClick,
   onTabClose,
   onNewFile,
@@ -200,12 +196,7 @@ const TabBar: React.FC<TabBarProps> = ({
   return (
     <div className="relative flex h-9 border-b border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900 overflow-hidden">
       {splitMode ? (
-        <>
-          <div
-            className="flex-shrink-0"
-            style={{ width: sidebarVisible ? sidebarWidth : 0 }}
-          />
-          <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden">
             <div className="w-1/2 flex flex-shrink-0 overflow-hidden">
               {renderScrollArea(group1Tabs, 1, g1ScrollRef, g1Scroll, setG1Scroll)}
             </div>
@@ -218,8 +209,7 @@ const TabBar: React.FC<TabBarProps> = ({
               </div>
             )}
           </div>
-        </>
-      ) : (
+        ) : (
         <>
           {renderScrollArea(group1Tabs, 1, g1ScrollRef, g1Scroll, setG1Scroll)}
         </>
