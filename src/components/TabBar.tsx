@@ -1,5 +1,5 @@
-import React from 'react';
-import { X } from 'lucide-react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { X, ChevronDown } from 'lucide-react';
 import type { EditorTab } from '../types';
 
 interface TabBarProps {
@@ -10,6 +10,7 @@ interface TabBarProps {
   splitMode: boolean;
   onTabClick: (id: string, group: 1 | 2) => void;
   onTabClose: (id: string) => void;
+  onNewFile?: () => void;
 }
 
 const TabBar: React.FC<TabBarProps> = ({
@@ -20,7 +21,62 @@ const TabBar: React.FC<TabBarProps> = ({
   splitMode,
   onTabClick,
   onTabClose,
+  onNewFile,
 }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Detect overflow
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const check = () => setOverflow(el.scrollWidth > el.clientWidth);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, [tabs, splitMode]);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handle = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [menuOpen]);
+
+  const handleTabActivate = useCallback((tabId: string, group: 1 | 2) => {
+    onTabClick(tabId, group);
+  }, [onTabClick]);
+
+  const handleTabDoubleClick = useCallback((tabId: string) => {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+    }
+    onTabClose(tabId);
+  }, [onTabClose]);
+
+  const handleTabClick = useCallback((tabId: string, group: 1 | 2) => {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+    }
+    clickTimer.current = setTimeout(() => {
+      clickTimer.current = null;
+      handleTabActivate(tabId, group);
+    }, 200);
+  }, [handleTabActivate]);
+
+  const handleBlankDoubleClick = useCallback(() => {
+    onNewFile?.();
+  }, [onNewFile]);
+
   const group1Tabs = tabs.filter((t) => t.group === 1 || !t.group);
   const group2Tabs = tabs.filter((t) => t.group === 2);
 
@@ -30,7 +86,8 @@ const TabBar: React.FC<TabBarProps> = ({
     return (
       <div
         key={tab.id}
-        onClick={() => onTabClick(tab.id, group)}
+        onClick={() => handleTabClick(tab.id, group)}
+        onDoubleClick={() => handleTabDoubleClick(tab.id)}
         className={`
           group flex items-center gap-2 px-3 min-w-[120px] max-w-[200px] cursor-pointer select-none
           border-r border-gray-200 dark:border-gray-700 text-sm
@@ -64,21 +121,88 @@ const TabBar: React.FC<TabBarProps> = ({
 
   if (tabs.length === 0) {
     return (
-      <div className="h-9 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex items-center px-4 text-sm text-gray-400 dark:text-gray-500">
-        无打开的文件
+      <div
+        className="h-9 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex items-center px-4 text-sm text-gray-400 dark:text-gray-500 cursor-pointer"
+        onDoubleClick={handleBlankDoubleClick}
+      >
+        <span className="flex-1">无打开的文件（双击新建）</span>
       </div>
     );
   }
 
   return (
-    <div className="flex h-9 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-x-auto">
-      {group1Tabs.map((tab) => renderTab(tab, 1))}
+    <div
+      ref={containerRef}
+      className="relative flex h-9 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden"
+    >
+      <div className="flex overflow-hidden">
+        {group1Tabs.map((tab) => renderTab(tab, 1))}
 
-      {splitMode && group2Tabs.length > 0 && (
-        <>
-          <div className="w-px bg-gray-300 dark:bg-gray-600 self-stretch mx-1" />
-          {group2Tabs.map((tab) => renderTab(tab, 2))}
-        </>
+        {splitMode && group2Tabs.length > 0 && (
+          <>
+            <div className="w-px bg-gray-300 dark:bg-gray-600 self-stretch mx-1" />
+            {group2Tabs.map((tab) => renderTab(tab, 2))}
+          </>
+        )}
+      </div>
+
+      {/* Blank area: double-click to create new file */}
+      <div
+        className="flex-1 min-w-[40px]"
+        onDoubleClick={handleBlankDoubleClick}
+      />
+
+      {/* Overflow dropdown button */}
+      {overflow && (
+        <div className="relative flex items-center">
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="px-2 h-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+            title="更多标签"
+          >
+            <ChevronDown size={16} />
+          </button>
+          {menuOpen && (
+            <div className="absolute top-full right-0 z-50 w-56 max-h-80 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg rounded-b-md">
+              {tabs.map((tab) => {
+                const group = tab.group || 1;
+                const isActive = tab.id === activeTabId;
+                return (
+                  <div
+                    key={tab.id}
+                    onClick={() => {
+                      onTabClick(tab.id, group as 1 | 2);
+                      setMenuOpen(false);
+                    }}
+                    className={`
+                      flex items-center gap-2 px-3 py-2 text-sm cursor-pointer select-none
+                      ${isActive
+                        ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300'
+                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      }
+                    `}
+                  >
+                    <span className="truncate flex-1">
+                      {tab.isDirty && <span className="text-blue-500 mr-1">●</span>}
+                      {tab.title}
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onTabClose(tab.id);
+                        if (tabs.length <= 1) setMenuOpen(false);
+                      }}
+                      className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-opacity"
+                      title="关闭"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

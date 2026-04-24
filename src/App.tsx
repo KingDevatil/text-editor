@@ -318,6 +318,7 @@ function App() {
         splitMode={store.splitMode}
         onTabClick={handleTabClick}
         onTabClose={store.closeTab}
+        onNewFile={handleNewFile}
       />
 
       <FindReplace
