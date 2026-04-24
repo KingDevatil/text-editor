@@ -87,37 +87,55 @@ const TabBar: React.FC<TabBarProps> = ({
   const renderTab = (tab: EditorTab, group: 1 | 2) => {
     const isActive = tab.id === activeTabId;
     const isGroupActive = group === 1 ? tab.id === activeGroup1TabId : tab.id === activeGroup2TabId;
+    const isDirty = tab.isDirty;
+
     return (
       <div
         key={tab.id}
         onClick={() => handleTabClick(tab.id, group)}
         onDoubleClick={() => handleTabDoubleClick(tab.id)}
         className={`
-          group flex items-center gap-2 px-3 min-w-[120px] max-w-[200px] cursor-pointer select-none
-          border-r border-gray-200 dark:border-gray-700 text-sm
-          transition-colors
-          ${
-            isActive && isGroupActive
-              ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-b-2 border-b-blue-500'
-              : isGroupActive
-              ? 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
-              : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+          group relative flex items-center gap-2 px-3.5 min-w-[120px] max-w-[220px] cursor-pointer select-none
+          text-sm transition-all duration-100
+          ${isActive && isGroupActive
+            ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 z-10'
+            : isGroupActive
+            ? 'bg-gray-100/80 dark:bg-gray-800/60 text-gray-800 dark:text-gray-200'
+            : 'bg-gray-100/40 dark:bg-gray-800/20 text-gray-500 dark:text-gray-400 hover:bg-gray-100/70 dark:hover:bg-gray-700/40 hover:text-gray-700 dark:hover:text-gray-300'
           }
         `}
+        style={{
+          borderRadius: '8px 8px 0 0',
+          marginRight: '2px',
+        }}
       >
-        <span className="truncate flex-1">
-          {tab.isDirty && <span className="text-blue-500 mr-1">●</span>}
+        {/* Active top accent line */}
+        {isActive && isGroupActive && (
+          <div className="absolute top-0 left-2 right-2 h-[2px] bg-gradient-to-r from-blue-500 to-blue-400 rounded-full" />
+        )}
+
+        <span className={`truncate flex-1 ${isDirty ? 'italic' : ''}`}>
+          {isDirty && (
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5 align-middle" />
+          )}
           {tab.title}
         </span>
+
         <button
           onClick={(e) => {
             e.stopPropagation();
             onTabClose(tab.id);
           }}
-          className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-opacity"
+          className={`
+            p-0.5 rounded-md transition-all duration-100
+            ${isActive && isGroupActive
+              ? 'text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700'
+              : 'text-gray-300 hover:text-gray-600 dark:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200/50 dark:hover:bg-gray-700/50'
+            }
+          `}
           title="关闭"
         >
-          <X size={12} />
+          <X size={12} strokeWidth={2.5} />
         </button>
       </div>
     );
@@ -126,10 +144,10 @@ const TabBar: React.FC<TabBarProps> = ({
   if (tabs.length === 0) {
     return (
       <div
-        className="h-9 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex items-center px-4 text-sm text-gray-400 dark:text-gray-500 cursor-pointer"
+        className="h-9 border-b border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900 flex items-center px-4 text-sm text-gray-400 dark:text-gray-500 cursor-pointer hover:text-gray-500 dark:hover:text-gray-400 transition-colors"
         onDoubleClick={handleBlankDoubleClick}
       >
-        <span className="flex-1">无打开的文件（双击新建）</span>
+        <span className="flex-1">双击新建文件</span>
       </div>
     );
   }
@@ -137,7 +155,7 @@ const TabBar: React.FC<TabBarProps> = ({
   return (
     <div
       ref={containerRef}
-      className="relative flex h-9 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden"
+      className="relative flex h-9 border-b border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900 overflow-hidden"
     >
       {/* Sidebar spacer to align with editor layout below (only in split mode) */}
       {splitMode && (
@@ -147,34 +165,38 @@ const TabBar: React.FC<TabBarProps> = ({
         />
       )}
 
-      {/* Editor area tabs */}
-      <div className="flex flex-1 overflow-hidden">
-        <div className={`flex overflow-hidden ${splitMode ? 'w-1/2' : 'flex-1'}`}>
-          {group1Tabs.map((tab) => renderTab(tab, 1))}
-          {!splitMode && (
-            <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
-          )}
-        </div>
-
-        {splitMode && group2Tabs.length > 0 && (
-          <div className="w-1/2 flex overflow-hidden">
-            {group2Tabs.map((tab) => renderTab(tab, 2))}
-          </div>
+      {/* Group 1 tabs */}
+      <div className={`flex overflow-hidden flex-shrink-0 pt-[2px] ${splitMode ? 'w-1/2' : 'flex-1'}`}>
+        {group1Tabs.map((tab) => renderTab(tab, 1))}
+        {!splitMode && (
+          <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
         )}
       </div>
 
+      {/* Split divider */}
+      {splitMode && group2Tabs.length > 0 && (
+        <div className="flex-shrink-0 w-px bg-gradient-to-b from-transparent via-gray-300 dark:via-gray-600 to-transparent self-stretch mx-0.5" />
+      )}
+
+      {/* Group 2 tabs */}
+      {splitMode && group2Tabs.length > 0 && (
+        <div className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
+          {group2Tabs.map((tab) => renderTab(tab, 2))}
+        </div>
+      )}
+
       {/* Overflow dropdown button */}
       {overflow && (
-        <div className="relative flex items-center">
+        <div className="relative flex items-center flex-shrink-0">
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="px-2 h-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+            className="px-2.5 h-full hover:bg-gray-200/70 dark:hover:bg-gray-700/70 text-gray-500 dark:text-gray-400 transition-colors"
             title="更多标签"
           >
             <ChevronDown size={16} />
           </button>
           {menuOpen && (
-            <div className="absolute top-full right-0 z-50 w-56 max-h-80 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg rounded-b-md">
+            <div className="tab-dropdown-animate absolute top-full right-0 z-50 w-60 max-h-80 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-xl rounded-xl py-1">
               {tabs.map((tab) => {
                 const group = tab.group || 1;
                 const isActive = tab.id === activeTabId;
@@ -186,7 +208,7 @@ const TabBar: React.FC<TabBarProps> = ({
                       setMenuOpen(false);
                     }}
                     className={`
-                      flex items-center gap-2 px-3 py-2 text-sm cursor-pointer select-none
+                      flex items-center gap-2 px-3 py-2 text-sm cursor-pointer select-none mx-1 rounded-lg transition-colors
                       ${isActive
                         ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300'
                         : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
@@ -194,7 +216,7 @@ const TabBar: React.FC<TabBarProps> = ({
                     `}
                   >
                     <span className="truncate flex-1">
-                      {tab.isDirty && <span className="text-blue-500 mr-1">●</span>}
+                      {tab.isDirty && <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5 align-middle" />}
                       {tab.title}
                     </span>
                     <button
@@ -203,7 +225,7 @@ const TabBar: React.FC<TabBarProps> = ({
                         onTabClose(tab.id);
                         if (tabs.length <= 1) setMenuOpen(false);
                       }}
-                      className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-opacity"
+                      className="p-0.5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
                       title="关闭"
                     >
                       <X size={12} />

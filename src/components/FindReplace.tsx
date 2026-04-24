@@ -22,75 +22,75 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
 
   if (!visible) return null;
 
+  const inputClass =
+    'px-3 py-1.5 text-sm rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all';
+
+  const iconBtnClass =
+    'p-1.5 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-700/80 text-gray-500 dark:text-gray-400 transition-colors active:scale-95';
+
   return (
-    <div className="flex flex-col gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+    <div className="flex flex-col gap-2.5 px-4 py-3 border-b border-gray-200 dark:border-gray-700/80 bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-sm shadow-sm">
       <div className="flex items-center gap-2">
         <div className="flex-1 flex items-center gap-2">
-          <input
-            ref={findInputRef}
-            type="text"
-            placeholder="查找"
-            value={findText}
-            onChange={(e) => setFindText(e.target.value)}
-            className="flex-1 px-3 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') onClose();
-            }}
-          />
-          {showReplace && (
+          <div className="relative flex-1">
             <input
+              ref={findInputRef}
               type="text"
-              placeholder="替换为"
-              value={replaceText}
-              onChange={(e) => setReplaceText(e.target.value)}
-              className="flex-1 px-3 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="查找"
+              value={findText}
+              onChange={(e) => setFindText(e.target.value)}
+              className={`${inputClass} w-full border-gray-300 dark:border-gray-600`}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') onClose();
+              }}
             />
+          </div>
+          {showReplace && (
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="替换为"
+                value={replaceText}
+                onChange={(e) => setReplaceText(e.target.value)}
+                className={`${inputClass} w-full border-gray-300 dark:border-gray-600`}
+              />
+            </div>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           {showReplace && (
             <>
-              <button
-                title="替换"
-                className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
-              >
+              <button title="替换" className={iconBtnClass}>
                 <Replace size={14} />
               </button>
-              <button
-                title="全部替换"
-                className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
-              >
+              <button title="全部替换" className={iconBtnClass}>
                 <ReplaceAll size={14} />
               </button>
             </>
           )}
           <button
             onClick={() => setShowReplace(!showReplace)}
-            className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
+            className={iconBtnClass}
             title={showReplace ? '隐藏替换' : '显示替换'}
           >
             {showReplace ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
-            title="关闭"
-          >
+          <button onClick={onClose} className={iconBtnClass} title="关闭">
             <X size={14} />
           </button>
         </div>
       </div>
       <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-        <label className="flex items-center gap-1 cursor-pointer">
+        <label className="flex items-center gap-1.5 cursor-pointer select-none">
           <input
             type="checkbox"
             checked={caseSensitive}
             onChange={(e) => setCaseSensitive(e.target.checked)}
-            className="rounded"
+            className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
           />
-          区分大小写
+          <span>区分大小写</span>
         </label>
-        <span>提示: 使用编辑器内置的 Ctrl+H 可进行高级查找替换</span>
+        <span className="text-gray-400 dark:text-gray-500">提示: 使用编辑器内置的 Ctrl+H 可进行高级查找替换</span>
       </div>
     </div>
   );

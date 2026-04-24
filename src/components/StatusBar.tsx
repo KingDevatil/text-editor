@@ -73,43 +73,42 @@ const StatusBar: React.FC<StatusBarProps> = ({ activeTab, theme, onEncodingChang
   useClickOutside(encRef, () => setEncOpen(false));
   useClickOutside(langRef, () => setLangOpen(false));
 
-  const menuStyle = {
-    backgroundColor: isDark ? '#1f2937' : '#ffffff',
-    borderColor: isDark ? '#374151' : '#e5e7eb',
-  };
-
   const itemClass = (isActive: boolean) =>
-    `block w-full text-left px-3 py-1 text-xs hover:bg-gray-200 dark:hover:bg-gray-600 ${
-      isActive ? 'text-blue-500 font-medium' : isDark ? 'text-gray-200' : 'text-gray-700'
+    `block w-full text-left px-3 py-1.5 text-xs rounded transition-colors ${
+      isActive
+        ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 font-medium'
+        : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
     }`;
 
   return (
     <div
-      className="flex items-center justify-between px-3 h-6 text-xs select-none relative"
-      style={{
-        backgroundColor: isDark ? '#030710' : '#f9fafb',
-        color: isDark ? '#ffffff' : '#374151',
-        borderTop: `1px solid ${isDark ? '#1f2937' : '#e5e7eb'}`,
-      }}
+      className={`flex items-center justify-between px-3 h-7 text-xs select-none relative border-t ${
+        isDark
+          ? 'bg-gray-900 border-gray-700 text-gray-300'
+          : 'bg-gray-50 border-gray-200 text-gray-600'
+      }`}
     >
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         {activeTab && (
           <>
             {/* Language Mode Switcher */}
             <div className="relative" ref={langRef}>
               <button
                 onClick={() => { setLangOpen(!langOpen); setEncOpen(false); }}
-                className="flex items-center gap-0.5 hover:opacity-80 cursor-pointer"
+                className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
+                  isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-200'
+                }`}
                 title="点击切换语言模式"
               >
                 <FileType size={12} />
-                {activeTab.language.toUpperCase()}
+                <span className="font-medium">{activeTab.language.toUpperCase()}</span>
                 <ChevronUp size={10} className={`transition-transform ${langOpen ? 'rotate-180' : ''}`} />
               </button>
               {langOpen && (
                 <div
-                  className="absolute bottom-full left-0 mb-1 py-1 rounded shadow-lg border z-50 min-w-[140px] max-h-64 overflow-auto"
-                  style={menuStyle}
+                  className={`absolute bottom-full left-0 mb-1 py-1.5 rounded-lg shadow-xl border z-50 min-w-[150px] max-h-64 overflow-auto ${
+                    isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                  }`}
                 >
                   {LANGUAGES.map((lang) => (
                     <button
@@ -123,32 +122,41 @@ const StatusBar: React.FC<StatusBarProps> = ({ activeTab, theme, onEncodingChang
                 </div>
               )}
             </div>
-            <span>{activeTab.isDirty ? '已修改' : '已保存'}</span>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+              activeTab.isDirty
+                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+            }`}>
+              {activeTab.isDirty ? '已修改' : '已保存'}
+            </span>
           </>
         )}
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         {activeTab && (
           <>
-            <span>行: {lineCount}</span>
-            <span>字符: {charCount}</span>
-            <span>单词: {wordCount}</span>
+            <span className="tabular-nums">行 {lineCount}</span>
+            <span className="tabular-nums">字符 {charCount}</span>
+            <span className="tabular-nums">单词 {wordCount}</span>
           </>
         )}
         {/* Encoding Switcher */}
         <div className="relative" ref={encRef}>
           <button
             onClick={() => { setEncOpen(!encOpen); setLangOpen(false); }}
-            className="flex items-center gap-0.5 hover:opacity-80 cursor-pointer"
+            className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
+              isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-200'
+            }`}
             title="点击切换编码"
           >
-            {activeTab?.encoding || 'UTF-8'}
+            <span className="font-medium">{activeTab?.encoding || 'UTF-8'}</span>
             <ChevronUp size={10} className={`transition-transform ${encOpen ? 'rotate-180' : ''}`} />
           </button>
           {encOpen && (
             <div
-              className="absolute bottom-full right-0 mb-1 py-1 rounded shadow-lg border z-50 min-w-[140px]"
-              style={menuStyle}
+              className={`absolute bottom-full right-0 mb-1 py-1.5 rounded-lg shadow-xl border z-50 min-w-[150px] ${
+                isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+              }`}
             >
               {ENCODINGS.map((enc) => (
                 <button

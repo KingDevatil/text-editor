@@ -341,44 +341,50 @@ function App() {
         <div className="flex flex-1 overflow-hidden">
           {group1Tab ? (
             <>
-              <div className={`h-full ${store.splitMode || (store.previewVisible && canPreview) ? 'w-1/2' : 'w-full'}`}>
-                <MonacoEditor
-                  content={group1Tab.content}
-                  language={group1Tab.language}
-                  theme={store.theme}
-                  onChange={handleEditorChange(group1Tab.id)}
-                  editorRef={editorInstanceRef}
-                  unicodeHighlight={store.unicodeHighlight}
-                  fontSize={store.fontSize}
-                />
+              <div className={`h-full p-1 ${store.splitMode || (store.previewVisible && canPreview) ? 'w-1/2' : 'w-full'}`}>
+                <div className="w-full h-full rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700/60 shadow-sm">
+                  <MonacoEditor
+                    content={group1Tab.content}
+                    language={group1Tab.language}
+                    theme={store.theme}
+                    onChange={handleEditorChange(group1Tab.id)}
+                    editorRef={editorInstanceRef}
+                    unicodeHighlight={store.unicodeHighlight}
+                    fontSize={store.fontSize}
+                  />
+                </div>
               </div>
               {store.splitMode && (
                 <>
-                  <div className="w-px bg-gray-200 dark:bg-gray-700" />
-                  <div className="w-1/2 h-full">
-                    {store.activeGroup2TabId ? (
-                      <MonacoEditor
-                        content={store.tabs.find((t) => t.id === store.activeGroup2TabId)?.content || ''}
-                        language={store.tabs.find((t) => t.id === store.activeGroup2TabId)?.language || 'plaintext'}
-                        theme={store.theme}
-                        onChange={handleEditorChange(store.activeGroup2TabId)}
-                        editorRef={secondaryEditorInstanceRef}
-                        unicodeHighlight={store.unicodeHighlight}
-                        fontSize={store.fontSize}
-                      />
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-600 bg-white dark:bg-gray-900">
-                        <p className="text-sm">选择标签页开始编辑</p>
-                      </div>
-                    )}
+                  <div className="w-px bg-gradient-to-b from-transparent via-gray-300 dark:via-gray-600 to-transparent self-stretch my-1" />
+                  <div className="w-1/2 h-full p-1">
+                    <div className="w-full h-full rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700/60 shadow-sm">
+                      {store.activeGroup2TabId ? (
+                        <MonacoEditor
+                          content={store.tabs.find((t) => t.id === store.activeGroup2TabId)?.content || ''}
+                          language={store.tabs.find((t) => t.id === store.activeGroup2TabId)?.language || 'plaintext'}
+                          theme={store.theme}
+                          onChange={handleEditorChange(store.activeGroup2TabId)}
+                          editorRef={secondaryEditorInstanceRef}
+                          unicodeHighlight={store.unicodeHighlight}
+                          fontSize={store.fontSize}
+                        />
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-600 bg-white dark:bg-gray-900">
+                          <p className="text-sm">选择标签页开始编辑</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </>
               )}
               {store.previewVisible && canPreview && (
                 <>
-                  <div className="w-px bg-gray-200 dark:bg-gray-700" />
-                  <div className="w-1/2 h-full">
-                    <MarkdownPreview content={group1Tab.content} theme={store.theme} />
+                  <div className="w-px bg-gradient-to-b from-transparent via-gray-300 dark:via-gray-600 to-transparent self-stretch my-1" />
+                  <div className="w-1/2 h-full p-1">
+                    <div className="w-full h-full rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700/60 shadow-sm">
+                      <MarkdownPreview content={group1Tab.content} theme={store.theme} />
+                    </div>
                   </div>
                 </>
               )}
