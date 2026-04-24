@@ -1,7 +1,7 @@
 use tauri::Manager;
 use std::fs;
 use std::path::Path;
-use encoding_rs::{Encoding, UTF_8, GBK, BIG5, SHIFT_JIS, EUC_KR, WINDOWS_1252, ISO_8859_1};
+use encoding_rs::{Encoding, UTF_8, GBK, BIG5, SHIFT_JIS, EUC_KR, WINDOWS_1252};
 
 fn get_encoding(name: &str) -> Result<&'static Encoding, String> {
     match name.to_lowercase().as_str() {
@@ -11,7 +11,7 @@ fn get_encoding(name: &str) -> Result<&'static Encoding, String> {
         "shift-jis" | "shift_jis" | "sjis" => Ok(SHIFT_JIS),
         "euc-kr" | "euc_kr" => Ok(EUC_KR),
         "windows-1252" | "cp1252" => Ok(WINDOWS_1252),
-        "iso-8859-1" | "latin1" => Ok(ISO_8859_1),
+        "iso-8859-1" | "latin1" => Ok(WINDOWS_1252),
         _ => Err(format!("Unsupported encoding: {}", name)),
     }
 }
