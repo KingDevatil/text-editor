@@ -231,8 +231,8 @@ const TabBar: React.FC<TabBarProps> = ({
           {/* Tabs area - mirrors the editor pane layout below */}
           <div className="flex flex-1 overflow-hidden">
             {/* Group 1 tabs */}
-            <div className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
-              <div ref={group1Ref} className="flex overflow-hidden flex-1">
+            <div className="w-1/2 flex flex-shrink-0 pt-[2px]">
+              <div ref={group1Ref} className="flex overflow-hidden flex-1" onDoubleClick={handleBlankDoubleClick}>
                 {group1Tabs.map((tab) => renderTab(tab, 1))}
               </div>
               {!g1Overflow && (
@@ -246,8 +246,8 @@ const TabBar: React.FC<TabBarProps> = ({
             )}
             {/* Group 2 tabs */}
             {group2Tabs.length > 0 && (
-              <div className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
-                <div ref={group2Ref} className="flex overflow-hidden flex-1">
+              <div className="w-1/2 flex flex-shrink-0 pt-[2px]">
+                <div ref={group2Ref} className="flex overflow-hidden flex-1" onDoubleClick={handleBlankDoubleClick}>
                   {group2Tabs.map((tab) => renderTab(tab, 2))}
                 </div>
                 {!g2Overflow && (
@@ -261,8 +261,8 @@ const TabBar: React.FC<TabBarProps> = ({
       ) : (
         <>
           {/* Group 1 tabs */}
-          <div className="flex-1 flex overflow-hidden flex-shrink-0 pt-[2px]">
-            <div ref={group1Ref} className="flex overflow-hidden flex-1">
+          <div className="flex-1 flex flex-shrink-0 pt-[2px]">
+            <div ref={group1Ref} className="flex overflow-hidden flex-1" onDoubleClick={handleBlankDoubleClick}>
               {group1Tabs.map((tab) => renderTab(tab, 1))}
             </div>
             {!g1Overflow && (
