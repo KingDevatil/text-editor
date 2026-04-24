@@ -148,7 +148,7 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
       wrappingIndent: 'indent',
       folding: true,
       foldingHighlight: true,
-      showFoldingControls: 'always',
+      showFoldingControls: 'mouseover',
       bracketPairColorization: { enabled: true },
       guides: {
         bracketPairs: true,
