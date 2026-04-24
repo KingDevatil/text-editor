@@ -28,15 +28,19 @@ const TabBar: React.FC<TabBarProps> = ({
   onNewFile,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const group1Ref = useRef<HTMLDivElement>(null);
+  const group2Ref = useRef<HTMLDivElement>(null);
   const [overflow, setOverflow] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Detect overflow
+  // Detect overflow per group
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const check = () => setOverflow(el.scrollWidth > el.clientWidth);
+    const check = () => {
+      const g1Overflow = group1Ref.current ? group1Ref.current.scrollWidth > group1Ref.current.clientWidth : false;
+      const g2Overflow = group2Ref.current ? group2Ref.current.scrollWidth > group2Ref.current.clientWidth : false;
+      setOverflow(g1Overflow || g2Overflow);
+    };
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
@@ -167,8 +171,9 @@ const TabBar: React.FC<TabBarProps> = ({
           {/* Tabs area - mirrors the editor pane layout below */}
           <div className="flex flex-1 overflow-hidden">
             {/* Group 1 tabs */}
-            <div className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
+            <div ref={group1Ref} className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
               {group1Tabs.map((tab) => renderTab(tab, 1))}
+              <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
             </div>
             {/* Split divider */}
             {group2Tabs.length > 0 && (
@@ -176,8 +181,9 @@ const TabBar: React.FC<TabBarProps> = ({
             )}
             {/* Group 2 tabs */}
             {group2Tabs.length > 0 && (
-              <div className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
+              <div ref={group2Ref} className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
                 {group2Tabs.map((tab) => renderTab(tab, 2))}
+                <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
               </div>
             )}
           </div>
