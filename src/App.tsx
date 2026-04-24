@@ -316,6 +316,8 @@ function App() {
         activeGroup1TabId={store.activeGroup1TabId}
         activeGroup2TabId={store.activeGroup2TabId}
         splitMode={store.splitMode}
+        sidebarVisible={store.sidebarVisible}
+        sidebarWidth={sidebarWidth}
         onTabClick={handleTabClick}
         onTabClose={store.closeTab}
         onNewFile={handleNewFile}

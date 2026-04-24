@@ -8,6 +8,8 @@ interface TabBarProps {
   activeGroup1TabId: string | null;
   activeGroup2TabId: string | null;
   splitMode: boolean;
+  sidebarVisible: boolean;
+  sidebarWidth: number;
   onTabClick: (id: string, group: 1 | 2) => void;
   onTabClose: (id: string) => void;
   onNewFile?: () => void;
@@ -19,6 +21,8 @@ const TabBar: React.FC<TabBarProps> = ({
   activeGroup1TabId,
   activeGroup2TabId,
   splitMode,
+  sidebarVisible,
+  sidebarWidth,
   onTabClick,
   onTabClose,
   onNewFile,
@@ -135,18 +139,27 @@ const TabBar: React.FC<TabBarProps> = ({
       ref={containerRef}
       className="relative flex h-9 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden"
     >
-      <div className={`flex overflow-hidden ${splitMode ? 'w-1/2' : 'flex-1'}`}>
-        {group1Tabs.map((tab) => renderTab(tab, 1))}
-        {!splitMode && (
-          <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
+      {/* Sidebar spacer to align with editor layout below */}
+      <div
+        className="flex-shrink-0"
+        style={{ width: sidebarVisible ? sidebarWidth : 0 }}
+      />
+
+      {/* Editor area tabs */}
+      <div className="flex flex-1 overflow-hidden">
+        <div className={`flex overflow-hidden ${splitMode ? 'w-1/2' : 'flex-1'}`}>
+          {group1Tabs.map((tab) => renderTab(tab, 1))}
+          {!splitMode && (
+            <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
+          )}
+        </div>
+
+        {splitMode && group2Tabs.length > 0 && (
+          <div className="w-1/2 flex overflow-hidden">
+            {group2Tabs.map((tab) => renderTab(tab, 2))}
+          </div>
         )}
       </div>
-
-      {splitMode && group2Tabs.length > 0 && (
-        <div className="w-1/2 flex overflow-hidden">
-          {group2Tabs.map((tab) => renderTab(tab, 2))}
-        </div>
-      )}
 
       {/* Overflow dropdown button */}
       {overflow && (
