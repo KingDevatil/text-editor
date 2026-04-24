@@ -66,8 +66,13 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [store.activeTab, store.findReplaceVisible]);
 
-  const handleNewFile = useCallback((group: 1 | 2 = 1) => {
-    store.createTab(undefined, undefined, undefined, undefined, group);
+  const handleNewFile = useCallback(() => {
+    const group = store.activeTab?.group || 1;
+    store.createTab('Untitled', '', undefined, undefined, group);
+  }, [store.createTab, store.activeTab]);
+
+  const handleNewFileInGroup = useCallback((group: 1 | 2) => {
+    store.createTab('Untitled', '', undefined, undefined, group);
   }, [store.createTab]);
 
   const handleOpenFile = useCallback(() => {
@@ -330,6 +335,7 @@ function App() {
             onTabClick={handleTabClick}
             onTabClose={store.closeTab}
             onNewFile={handleNewFile}
+            onNewFileInGroup={handleNewFileInGroup}
           />
 
           <FindReplace

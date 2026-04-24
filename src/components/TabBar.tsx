@@ -10,7 +10,8 @@ interface TabBarProps {
   splitMode: boolean;
   onTabClick: (id: string, group: 1 | 2) => void;
   onTabClose: (id: string) => void;
-  onNewFile?: (group?: 1 | 2) => void;
+  onNewFile?: () => void;
+  onNewFileInGroup?: (group: 1 | 2) => void;
 }
 
 interface ScrollState {
@@ -30,6 +31,7 @@ const TabBar: React.FC<TabBarProps> = ({
   onTabClick,
   onTabClose,
   onNewFile,
+  onNewFileInGroup,
 }) => {
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const g1ScrollRef = useRef<HTMLDivElement>(null);
@@ -85,8 +87,8 @@ const TabBar: React.FC<TabBarProps> = ({
   }, [handleTabActivate]);
 
   const handleBlankDoubleClick = useCallback((group: 1 | 2) => {
-    onNewFile?.(group);
-  }, [onNewFile]);
+    onNewFileInGroup?.(group);
+  }, [onNewFileInGroup]);
 
   const group1Tabs = tabs.filter((t) => t.group === 1 || !t.group);
   const group2Tabs = tabs.filter((t) => t.group === 2);
@@ -189,7 +191,7 @@ const TabBar: React.FC<TabBarProps> = ({
     return (
       <div
         className="h-9 border-b border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900 flex items-center px-4 text-sm text-gray-400 dark:text-gray-500 cursor-pointer hover:text-gray-500 dark:hover:text-gray-400 transition-colors"
-        onDoubleClick={() => handleBlankDoubleClick(1)}
+        onDoubleClick={() => onNewFile?.()}
       >
         <span className="flex-1">双击新建文件</span>
       </div>
