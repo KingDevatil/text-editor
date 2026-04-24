@@ -102,6 +102,15 @@ input[type="range"]::-webkit-slider-thumb {
   outline: none !important;
 }
 
+/* Subtle divider between line numbers and editor content */
+.monaco-editor .margin {
+  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.08) !important;
+}
+
+.dark .monaco-editor .margin {
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.08) !important;
+}
+
 /* Tab dropdown animation */
 @keyframes tabDropdownIn {
   from {
