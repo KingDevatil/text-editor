@@ -354,7 +354,7 @@ function App() {
               </div>
               {store.splitMode && (
                 <>
-                  <div className="w-px bg-gradient-to-b from-transparent via-gray-300 dark:via-gray-600 to-transparent self-stretch" />
+                  <div className="w-px bg-gray-200 dark:bg-gray-800 self-stretch" />
                   <div className="w-1/2 h-full">
                     {store.activeGroup2TabId ? (
                       <MonacoEditor
@@ -376,7 +376,7 @@ function App() {
               )}
               {store.previewVisible && canPreview && (
                 <>
-                  <div className="w-px bg-gradient-to-b from-transparent via-gray-300 dark:via-gray-600 to-transparent self-stretch" />
+                  <div className="w-px bg-gray-200 dark:bg-gray-800 self-stretch" />
                   <div className="w-1/2 h-full">
                     <MarkdownPreview content={group1Tab.content} theme={store.theme} />
                   </div>

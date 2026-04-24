@@ -70,7 +70,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
   })();
 
   return (
-    <div className="flex items-center gap-1 px-3 h-11 border-b border-gray-200 dark:border-gray-700/80 bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-sm">
+    <div className="flex items-center gap-1 px-3 h-11 border-b border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900">
       {/* 最左侧：切换侧边栏 */}
       <div className="flex items-center gap-1">
         <button className={btnClass} onClick={onToggleSidebar} title="切换侧边栏">

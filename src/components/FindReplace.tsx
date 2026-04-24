@@ -29,7 +29,7 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
     'p-1.5 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-700/80 text-gray-500 dark:text-gray-400 transition-colors active:scale-95';
 
   return (
-    <div className="flex flex-col gap-2.5 px-4 py-3 border-b border-gray-200 dark:border-gray-700/80 bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-sm shadow-sm">
+    <div className="flex flex-col gap-2.5 px-4 py-3 border-b border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900 shadow-sm">
       <div className="flex items-center gap-2">
         <div className="flex-1 flex items-center gap-2">
           <div className="relative flex-1">

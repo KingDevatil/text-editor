@@ -31,7 +31,7 @@ const Sidebar: React.FC<SidebarProps> = ({ visible, width, unicodeHighlight, onT
 
   return (
     <div
-      className="flex flex-col border-r border-gray-200 dark:border-gray-700/80 bg-gray-50/60 dark:bg-gray-900/60"
+      className="flex flex-col border-r border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900"
       style={{ width: `${width}px`, minWidth: `${width}px` }}
     >
       <div className="flex items-center border-b border-gray-200 dark:border-gray-700/80 relative">
