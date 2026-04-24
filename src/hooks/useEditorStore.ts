@@ -101,11 +101,9 @@ export function useEditorStore() {
       prev.map((tab) => {
         if (tab.id !== tabId) return tab;
         let newTitle = tab.title;
-        if (tab.title === 'Untitled') {
+        if (!tab.filePath) {
           const firstLine = content.split('\n').find((line) => line.trim())?.trim() || '';
-          if (firstLine) {
-            newTitle = firstLine.length > 20 ? firstLine.slice(0, 20) + '...' : firstLine;
-          }
+          newTitle = firstLine ? (firstLine.length > 20 ? firstLine.slice(0, 20) + '...' : firstLine) : 'Untitled';
         }
         return { ...tab, content, isDirty: true, ...(newTitle !== tab.title ? { title: newTitle } : {}) };
       })
