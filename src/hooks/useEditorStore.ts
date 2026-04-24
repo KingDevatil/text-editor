@@ -69,6 +69,8 @@ export function useEditorStore() {
   const [unicodeHighlight, setUnicodeHighlight] = useState(false);
   const [fontSize, setFontSize] = useState(14);
   const [previewVisible, setPreviewVisible] = useState(false);
+  const [splitMode, setSplitModeState] = useState(false);
+  const [secondaryActiveTabId, setSecondaryActiveTabId] = useState<string | null>(null);
 
   const createTab = useCallback((title = 'Untitled', content = '', language?: Language, filePath?: string) => {
     const lang = language || getLanguageFromFileName(title);
@@ -96,20 +98,35 @@ export function useEditorStore() {
   }, []);
 
   const closeTab = useCallback((tabId: string) => {
+    let newTabs: EditorTab[] = [];
+    let closedIndex = 0;
     setTabs((prev) => {
-      const index = prev.findIndex((t) => t.id === tabId);
-      const newTabs = prev.filter((t) => t.id !== tabId);
-      if (activeTabId === tabId) {
-        const newActive = newTabs[Math.min(index, newTabs.length - 1)];
-        setActiveTabId(newActive?.id || null);
-      }
+      closedIndex = prev.findIndex((t) => t.id === tabId);
+      newTabs = prev.filter((t) => t.id !== tabId);
       return newTabs;
+    });
+    setActiveTabId((current) => {
+      if (current === tabId) {
+        return newTabs[Math.min(closedIndex, newTabs.length - 1)]?.id || null;
+      }
+      return current;
+    });
+    setSecondaryActiveTabId((current) => {
+      if (current === tabId) {
+        const active = activeTabId === tabId ? null : activeTabId;
+        const candidates = newTabs.filter((t) => t.id !== active);
+        return candidates[0]?.id || null;
+      }
+      return current;
     });
   }, [activeTabId]);
 
   const closeAllTabs = useCallback(() => {
     setTabs([]);
     setActiveTabId(null);
+    setSecondaryActiveTabId(null);
+    setSplitModeState(false);
+    setPreviewVisible(false);
   }, []);
 
   const markTabSaved = useCallback((tabId: string) => {
@@ -147,7 +164,22 @@ export function useEditorStore() {
     );
   }, []);
 
+  const setSplitMode = useCallback((mode: boolean) => {
+    setSplitModeState(mode);
+    if (mode) {
+      setPreviewVisible(false);
+      setSecondaryActiveTabId((current) => {
+        if (current) return current;
+        const candidate = tabs.find((t) => t.id !== activeTabId);
+        return candidate?.id || tabs[0]?.id || null;
+      });
+    } else {
+      setSecondaryActiveTabId(null);
+    }
+  }, [tabs, activeTabId]);
+
   const activeTab = tabs.find((t) => t.id === activeTabId) || null;
+  const secondaryActiveTab = tabs.find((t) => t.id === secondaryActiveTabId) || null;
 
   return {
     tabs,
@@ -168,6 +200,11 @@ export function useEditorStore() {
     setTabLanguage,
     previewVisible,
     setPreviewVisible,
+    splitMode,
+    setSplitMode,
+    secondaryActiveTabId,
+    setSecondaryActiveTabId,
+    secondaryActiveTab,
     createTab,
     updateTabContent,
     closeTab,

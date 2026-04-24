@@ -17,7 +17,15 @@ function App() {
   const store = useEditorStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const secondaryEditorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const [sidebarWidth] = useState(220);
+
+  // Auto-disable split when less than 2 tabs
+  useEffect(() => {
+    if (store.splitMode && store.tabs.length < 2) {
+      store.setSplitMode(false);
+    }
+  }, [store.tabs.length, store.splitMode]);
 
   // Initialize with a default tab
   useEffect(() => {
@@ -167,6 +175,11 @@ function App() {
     : false;
 
   const canPreview = store.activeTab?.language === 'markdown';
+  const canSplit = store.tabs.length >= 2;
+
+  const handleToggleSplit = useCallback(() => {
+    store.setSplitMode(!store.splitMode);
+  }, [store.splitMode, store.setSplitMode]);
 
   const handleToggleTheme = useCallback(() => {
     store.setTheme((prev) => {
@@ -271,9 +284,12 @@ function App() {
         onToggleSidebar={() => store.setSidebarVisible(!store.sidebarVisible)}
         onFormat={handleFormat}
         onTogglePreview={() => store.setPreviewVisible(!store.previewVisible)}
+        onToggleSplit={handleToggleSplit}
         canFormat={canFormat}
         canPreview={canPreview}
         previewActive={store.previewVisible}
+        canSplit={canSplit}
+        splitActive={store.splitMode}
         theme={store.theme}
       />
 
@@ -302,7 +318,7 @@ function App() {
         <div className="flex flex-1 overflow-hidden">
           {store.activeTab ? (
             <>
-              <div className={`h-full ${store.previewVisible && canPreview ? 'w-1/2' : 'w-full'}`}>
+              <div className={`h-full ${store.splitMode || (store.previewVisible && canPreview) ? 'w-1/2' : 'w-full'}`}>
                 <MonacoEditor
                   content={store.activeTab.content}
                   language={store.activeTab.language}
@@ -313,6 +329,66 @@ function App() {
                   fontSize={store.fontSize}
                 />
               </div>
+              {store.splitMode && (
+                <>
+                  <div className="w-px bg-gray-200 dark:bg-gray-700" />
+                  <div className="w-1/2 h-full flex flex-col">
+                    {/* Secondary mini tab bar */}
+                    <div className="flex h-8 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-x-auto">
+                      {store.tabs.map((tab) => {
+                        const isActive = tab.id === store.secondaryActiveTabId;
+                        return (
+                          <div
+                            key={tab.id}
+                            onClick={() => store.setSecondaryActiveTabId(tab.id)}
+                            className={`
+                              group flex items-center gap-1.5 px-2 min-w-[80px] max-w-[160px] cursor-pointer select-none
+                              border-r border-gray-200 dark:border-gray-700 text-xs
+                              transition-colors
+                              ${isActive
+                                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-b-2 border-b-blue-500'
+                                : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                              }
+                            `}
+                          >
+                            <span className="truncate flex-1">
+                              {tab.isDirty && <span className="text-blue-500 mr-1">●</span>}
+                              {tab.title}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                store.closeTab(tab.id);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-opacity"
+                              title="关闭"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex-1">
+                      {store.secondaryActiveTab ? (
+                        <MonacoEditor
+                          content={store.secondaryActiveTab.content}
+                          language={store.secondaryActiveTab.language}
+                          theme={store.theme}
+                          onChange={handleEditorChange(store.secondaryActiveTab.id)}
+                          editorRef={secondaryEditorInstanceRef}
+                          unicodeHighlight={store.unicodeHighlight}
+                          fontSize={store.fontSize}
+                        />
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-600 bg-white dark:bg-gray-900">
+                          <p className="text-sm">选择标签页开始编辑</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
               {store.previewVisible && canPreview && (
                 <>
                   <div className="w-px bg-gray-200 dark:bg-gray-700" />

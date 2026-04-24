@@ -10,6 +10,7 @@ import {
   PanelLeft,
   Braces,
   BookOpen,
+  Columns2,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -21,9 +22,12 @@ interface ToolbarProps {
   onToggleSidebar: () => void;
   onFormat: () => void;
   onTogglePreview: () => void;
+  onToggleSplit: () => void;
   canFormat: boolean;
   canPreview: boolean;
   previewActive: boolean;
+  canSplit: boolean;
+  splitActive: boolean;
   theme: string;
 }
 
@@ -36,9 +40,12 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onToggleSidebar,
   onFormat,
   onTogglePreview,
+  onToggleSplit,
   canFormat,
   canPreview,
   previewActive,
+  canSplit,
+  splitActive,
   theme,
 }) => {
   const btnClass =
@@ -107,13 +114,22 @@ const Toolbar: React.FC<ToolbarProps> = ({
       {/* 右侧：预览 + 主题切换 */}
       <div className="flex items-center gap-1">
         <button
-          className={`${btnClass} ${!canPreview ? 'opacity-40 cursor-not-allowed' : ''} ${previewActive ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300' : ''}`}
+          className={`${btnClass} ${!canPreview || splitActive ? 'opacity-40 cursor-not-allowed' : ''} ${previewActive ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300' : ''}`}
           onClick={onTogglePreview}
-          disabled={!canPreview}
+          disabled={!canPreview || splitActive}
           title="Markdown 预览"
         >
           <BookOpen size={16} />
           <span className="hidden sm:inline">预览</span>
+        </button>
+        <button
+          className={`${btnClass} ${!canSplit || previewActive ? 'opacity-40 cursor-not-allowed' : ''} ${splitActive ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300' : ''}`}
+          onClick={onToggleSplit}
+          disabled={!canSplit || previewActive}
+          title="分屏编辑"
+        >
+          <Columns2 size={16} />
+          <span className="hidden sm:inline">分屏</span>
         </button>
         <button className={btnClass} onClick={onToggleTheme} title={nextThemeLabel}>
           {nextThemeIcon}
