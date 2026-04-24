@@ -337,6 +337,7 @@ function App() {
             onNewFile={handleNewFile}
             onNewFileInGroup={handleNewFileInGroup}
             onMoveTabToGroup={store.moveTabToGroup}
+            onCloseTabs={store.closeTabs}
           />
 
           <FindReplace

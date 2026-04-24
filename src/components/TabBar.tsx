@@ -13,6 +13,7 @@ interface TabBarProps {
   onNewFile?: () => void;
   onNewFileInGroup?: (group: 1 | 2) => void;
   onMoveTabToGroup?: (tabId: string, group: 1 | 2) => void;
+  onCloseTabs?: (tabIds: string[]) => void;
 }
 
 interface ScrollState {
@@ -34,6 +35,7 @@ const TabBar: React.FC<TabBarProps> = ({
   onNewFile,
   onNewFileInGroup,
   onMoveTabToGroup,
+  onCloseTabs,
 }) => {
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const g1ScrollRef = useRef<HTMLDivElement>(null);
@@ -41,6 +43,13 @@ const TabBar: React.FC<TabBarProps> = ({
   const [g1Scroll, setG1Scroll] = useState<ScrollState>({ canLeft: false, canRight: false });
   const [g2Scroll, setG2Scroll] = useState<ScrollState>({ canLeft: false, canRight: false });
   const [dragOverGroup, setDragOverGroup] = useState<1 | 2 | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    tabId: string;
+    group: 1 | 2;
+  } | null>(null);
 
   const checkScroll = useCallback((el: HTMLDivElement | null, setter: React.Dispatch<React.SetStateAction<ScrollState>>) => {
     if (!el) return;
@@ -122,6 +131,75 @@ const TabBar: React.FC<TabBarProps> = ({
     }
   }, [onMoveTabToGroup]);
 
+  const handleContextMenu = useCallback((e: React.MouseEvent, tabId: string, group: 1 | 2) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ visible: true, x: e.clientX, y: e.clientY, tabId, group });
+  }, []);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  const handleMenuClose = useCallback(() => {
+    if (contextMenu) {
+      onTabClose(contextMenu.tabId);
+      closeContextMenu();
+    }
+  }, [contextMenu, onTabClose, closeContextMenu]);
+
+  const handleMenuCloseOthers = useCallback(() => {
+    if (!contextMenu || !onCloseTabs) return;
+    const groupTabs = contextMenu.group === 1
+      ? tabs.filter((t) => t.group === 1 || !t.group)
+      : tabs.filter((t) => t.group === 2);
+    const idsToClose = groupTabs.filter((t) => t.id !== contextMenu.tabId).map((t) => t.id);
+    if (idsToClose.length > 0) {
+      onCloseTabs(idsToClose);
+    }
+    closeContextMenu();
+  }, [contextMenu, tabs, onCloseTabs, closeContextMenu]);
+
+  const handleMenuCloseLeft = useCallback(() => {
+    if (!contextMenu || !onCloseTabs) return;
+    const groupTabs = contextMenu.group === 1
+      ? tabs.filter((t) => t.group === 1 || !t.group)
+      : tabs.filter((t) => t.group === 2);
+    const index = groupTabs.findIndex((t) => t.id === contextMenu.tabId);
+    if (index > 0) {
+      const idsToClose = groupTabs.slice(0, index).map((t) => t.id);
+      onCloseTabs(idsToClose);
+    }
+    closeContextMenu();
+  }, [contextMenu, tabs, onCloseTabs, closeContextMenu]);
+
+  const handleMenuCloseRight = useCallback(() => {
+    if (!contextMenu || !onCloseTabs) return;
+    const groupTabs = contextMenu.group === 1
+      ? tabs.filter((t) => t.group === 1 || !t.group)
+      : tabs.filter((t) => t.group === 2);
+    const index = groupTabs.findIndex((t) => t.id === contextMenu.tabId);
+    if (index >= 0 && index < groupTabs.length - 1) {
+      const idsToClose = groupTabs.slice(index + 1).map((t) => t.id);
+      onCloseTabs(idsToClose);
+    }
+    closeContextMenu();
+  }, [contextMenu, tabs, onCloseTabs, closeContextMenu]);
+
+  useEffect(() => {
+    if (!contextMenu?.visible) return;
+    const handleClick = () => closeContextMenu();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeContextMenu();
+    };
+    window.addEventListener('click', handleClick);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('click', handleClick);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu?.visible, closeContextMenu]);
+
   const group1Tabs = tabs.filter((t) => t.group === 1 || !t.group);
   const group2Tabs = tabs.filter((t) => t.group === 2);
 
@@ -136,6 +214,7 @@ const TabBar: React.FC<TabBarProps> = ({
         draggable
         onDragStart={(e) => handleDragStart(e, tab.id)}
         onClick={() => handleTabClick(tab.id, group)}
+        onContextMenu={(e) => handleContextMenu(e, tab.id, group)}
         onDoubleClick={(e) => {
           e.stopPropagation();
           handleTabDoubleClick(tab.id);
@@ -253,6 +332,54 @@ const TabBar: React.FC<TabBarProps> = ({
         <>
           {renderScrollArea(group1Tabs, 1, g1ScrollRef, g1Scroll, setG1Scroll)}
         </>
+      )}
+
+      {contextMenu?.visible && (
+        <div
+          className="fixed z-50 min-w-[180px] rounded-lg border border-gray-200 dark:border-gray-700 shadow-xl bg-white dark:bg-gray-800 py-1 text-sm"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="w-full text-left px-3 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors"
+            onClick={handleMenuClose}
+          >
+            关闭
+          </button>
+          <button
+            className="w-full text-left px-3 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors"
+            onClick={handleMenuCloseOthers}
+          >
+            关闭其他页签
+          </button>
+          <div className="my-1 border-t border-gray-100 dark:border-gray-700" />
+          <button
+            className="w-full text-left px-3 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={handleMenuCloseLeft}
+            disabled={(() => {
+              const groupTabs = contextMenu.group === 1
+                ? tabs.filter((t) => t.group === 1 || !t.group)
+                : tabs.filter((t) => t.group === 2);
+              const index = groupTabs.findIndex((t) => t.id === contextMenu.tabId);
+              return index <= 0;
+            })()}
+          >
+            关闭左侧页签
+          </button>
+          <button
+            className="w-full text-left px-3 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={handleMenuCloseRight}
+            disabled={(() => {
+              const groupTabs = contextMenu.group === 1
+                ? tabs.filter((t) => t.group === 1 || !t.group)
+                : tabs.filter((t) => t.group === 2);
+              const index = groupTabs.findIndex((t) => t.id === contextMenu.tabId);
+              return index < 0 || index >= groupTabs.length - 1;
+            })()}
+          >
+            关闭右侧页签
+          </button>
+        </div>
       )}
     </div>
   );

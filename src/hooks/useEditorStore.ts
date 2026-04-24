@@ -145,6 +145,33 @@ export function useEditorStore() {
     });
   }, []);
 
+  const closeTabs = useCallback((idsToClose: string[]) => {
+    if (idsToClose.length === 0) return;
+    const newTabs = tabs.filter((t) => !idsToClose.includes(t.id));
+    setTabs(newTabs);
+
+    const g1Tabs = newTabs.filter((t) => t.group === 1 || !t.group);
+    const g2Tabs = newTabs.filter((t) => t.group === 2);
+
+    setActiveGroup1TabId((current) => {
+      if (current && !idsToClose.includes(current)) return current;
+      return g1Tabs[g1Tabs.length - 1]?.id || null;
+    });
+    setActiveGroup2TabId((current) => {
+      if (current && !idsToClose.includes(current)) return current;
+      return g2Tabs[g2Tabs.length - 1]?.id || null;
+    });
+    setActiveTabId((current) => {
+      if (current && !idsToClose.includes(current)) return current;
+      if (g2Tabs.length > 0) return g2Tabs[g2Tabs.length - 1].id;
+      return g1Tabs[g1Tabs.length - 1]?.id || null;
+    });
+
+    if (newTabs.length < 2) {
+      setSplitModeState(false);
+    }
+  }, [tabs]);
+
   const closeAllTabs = useCallback(() => {
     setTabs([]);
     setActiveTabId(null);
@@ -266,6 +293,7 @@ export function useEditorStore() {
     createTab,
     updateTabContent,
     closeTab,
+    closeTabs,
     closeAllTabs,
     markTabSaved,
     renameTab,
