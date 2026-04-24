@@ -139,11 +139,13 @@ const TabBar: React.FC<TabBarProps> = ({
       ref={containerRef}
       className="relative flex h-9 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden"
     >
-      {/* Sidebar spacer to align with editor layout below */}
-      <div
-        className="flex-shrink-0"
-        style={{ width: sidebarVisible ? sidebarWidth : 0 }}
-      />
+      {/* Sidebar spacer to align with editor layout below (only in split mode) */}
+      {splitMode && (
+        <div
+          className="flex-shrink-0"
+          style={{ width: sidebarVisible ? sidebarWidth : 0 }}
+        />
+      )}
 
       {/* Editor area tabs */}
       <div className="flex flex-1 overflow-hidden">
