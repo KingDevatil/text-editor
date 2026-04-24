@@ -6,6 +6,7 @@ export interface EditorTab {
   isDirty: boolean;
   filePath?: string;
   encoding: Encoding;
+  group?: 1 | 2;
 }
 
 export type Encoding =

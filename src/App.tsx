@@ -165,24 +165,35 @@ function App() {
   }, [store.activeTab]);
 
   const handleFormat = useCallback(() => {
-    const editor = editorInstanceRef.current;
+    const group = store.activeTab?.group || 1;
+    const editor = group === 1 ? editorInstanceRef.current : secondaryEditorInstanceRef.current;
     if (!editor) return;
     const action = editor.getAction('editor.action.formatDocument');
     if (action) {
       action.run();
     }
-  }, []);
+  }, [store.activeTab]);
 
   const canFormat = store.activeTab
     ? ['json', 'xml', 'html', 'css', 'javascript', 'typescript', 'markdown', 'sql', 'yaml', 'ini'].includes(store.activeTab.language)
     : false;
 
-  const canPreview = store.activeTab?.language === 'markdown';
+  const group1Tab = store.tabs.find((t) => t.id === store.activeGroup1TabId);
+  const canPreview = group1Tab?.language === 'markdown';
   const canSplit = store.tabs.length >= 2;
 
   const handleToggleSplit = useCallback(() => {
     store.setSplitMode(!store.splitMode);
   }, [store.splitMode, store.setSplitMode]);
+
+  const handleTabClick = useCallback((id: string, group: 1 | 2) => {
+    if (group === 1) {
+      store.setActiveGroup1TabId(id);
+    } else {
+      store.setActiveGroup2TabId(id);
+    }
+    store.setActiveTabId(id);
+  }, [store]);
 
   const handleToggleTheme = useCallback(() => {
     store.setTheme((prev) => {
@@ -302,7 +313,10 @@ function App() {
       <TabBar
         tabs={store.tabs}
         activeTabId={store.activeTabId}
-        onTabClick={store.setActiveTabId}
+        activeGroup1TabId={store.activeGroup1TabId}
+        activeGroup2TabId={store.activeGroup2TabId}
+        splitMode={store.splitMode}
+        onTabClick={handleTabClick}
         onTabClose={store.closeTab}
       />
 
@@ -322,14 +336,14 @@ function App() {
         />
 
         <div className="flex flex-1 overflow-hidden">
-          {store.activeTab ? (
+          {group1Tab ? (
             <>
               <div className={`h-full ${store.splitMode || (store.previewVisible && canPreview) ? 'w-1/2' : 'w-full'}`}>
                 <MonacoEditor
-                  content={store.activeTab.content}
-                  language={store.activeTab.language}
+                  content={group1Tab.content}
+                  language={group1Tab.language}
                   theme={store.theme}
-                  onChange={handleEditorChange(store.activeTab.id)}
+                  onChange={handleEditorChange(group1Tab.id)}
                   editorRef={editorInstanceRef}
                   unicodeHighlight={store.unicodeHighlight}
                   fontSize={store.fontSize}
@@ -338,60 +352,22 @@ function App() {
               {store.splitMode && (
                 <>
                   <div className="w-px bg-gray-200 dark:bg-gray-700" />
-                  <div className="w-1/2 h-full flex flex-col">
-                    {/* Secondary mini tab bar */}
-                    <div className="flex h-8 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-x-auto">
-                      {store.tabs.map((tab) => {
-                        const isActive = tab.id === store.secondaryActiveTabId;
-                        return (
-                          <div
-                            key={tab.id}
-                            onClick={() => store.setSecondaryActiveTabId(tab.id)}
-                            className={`
-                              group flex items-center gap-1.5 px-2 min-w-[80px] max-w-[160px] cursor-pointer select-none
-                              border-r border-gray-200 dark:border-gray-700 text-xs
-                              transition-colors
-                              ${isActive
-                                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-b-2 border-b-blue-500'
-                                : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                              }
-                            `}
-                          >
-                            <span className="truncate flex-1">
-                              {tab.isDirty && <span className="text-blue-500 mr-1">●</span>}
-                              {tab.title}
-                            </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                store.closeTab(tab.id);
-                              }}
-                              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-opacity"
-                              title="关闭"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="flex-1">
-                      {store.secondaryActiveTab ? (
-                        <MonacoEditor
-                          content={store.secondaryActiveTab.content}
-                          language={store.secondaryActiveTab.language}
-                          theme={store.theme}
-                          onChange={handleEditorChange(store.secondaryActiveTab.id)}
-                          editorRef={secondaryEditorInstanceRef}
-                          unicodeHighlight={store.unicodeHighlight}
-                          fontSize={store.fontSize}
-                        />
-                      ) : (
-                        <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-600 bg-white dark:bg-gray-900">
-                          <p className="text-sm">选择标签页开始编辑</p>
-                        </div>
-                      )}
-                    </div>
+                  <div className="w-1/2 h-full">
+                    {store.activeGroup2TabId ? (
+                      <MonacoEditor
+                        content={store.tabs.find((t) => t.id === store.activeGroup2TabId)?.content || ''}
+                        language={store.tabs.find((t) => t.id === store.activeGroup2TabId)?.language || 'plaintext'}
+                        theme={store.theme}
+                        onChange={handleEditorChange(store.activeGroup2TabId)}
+                        editorRef={secondaryEditorInstanceRef}
+                        unicodeHighlight={store.unicodeHighlight}
+                        fontSize={store.fontSize}
+                      />
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-600 bg-white dark:bg-gray-900">
+                        <p className="text-sm">选择标签页开始编辑</p>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -399,7 +375,7 @@ function App() {
                 <>
                   <div className="w-px bg-gray-200 dark:bg-gray-700" />
                   <div className="w-1/2 h-full">
-                    <MarkdownPreview content={store.activeTab.content} theme={store.theme} />
+                    <MarkdownPreview content={group1Tab.content} theme={store.theme} />
                   </div>
                 </>
               )}

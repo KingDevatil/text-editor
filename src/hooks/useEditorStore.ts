@@ -63,6 +63,8 @@ fn main() {
 export function useEditorStore() {
   const [tabs, setTabs] = useState<EditorTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [activeGroup1TabId, setActiveGroup1TabId] = useState<string | null>(null);
+  const [activeGroup2TabId, setActiveGroup2TabId] = useState<string | null>(null);
   const [theme, setTheme] = useState<'vs' | 'vs-dark' | 'hc-black'>('vs-dark');
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [findReplaceVisible, setFindReplaceVisible] = useState(false);
@@ -70,9 +72,8 @@ export function useEditorStore() {
   const [fontSize, setFontSize] = useState(14);
   const [previewVisible, setPreviewVisible] = useState(false);
   const [splitMode, setSplitModeState] = useState(false);
-  const [secondaryActiveTabId, setSecondaryActiveTabId] = useState<string | null>(null);
 
-  const createTab = useCallback((title = 'Untitled', content = '', language?: Language, filePath?: string) => {
+  const createTab = useCallback((title = 'Untitled', content = '', language?: Language, filePath?: string, group: 1 | 2 = 1) => {
     const lang = language || getLanguageFromFileName(title);
     const actualContent = content || getDefaultContent(lang);
     const newTab: EditorTab = {
@@ -83,8 +84,14 @@ export function useEditorStore() {
       isDirty: false,
       filePath,
       encoding: 'UTF-8',
+      group,
     };
     setTabs((prev) => [...prev, newTab]);
+    if (group === 1) {
+      setActiveGroup1TabId(newTab.id);
+    } else {
+      setActiveGroup2TabId(newTab.id);
+    }
     setActiveTabId(newTab.id);
     return newTab.id;
   }, []);
@@ -98,33 +105,51 @@ export function useEditorStore() {
   }, []);
 
   const closeTab = useCallback((tabId: string) => {
+    let closedGroup: 1 | 2 = 1;
     let newTabs: EditorTab[] = [];
-    let closedIndex = 0;
     setTabs((prev) => {
-      closedIndex = prev.findIndex((t) => t.id === tabId);
+      const tab = prev.find((t) => t.id === tabId);
+      closedGroup = tab?.group || 1;
       newTabs = prev.filter((t) => t.id !== tabId);
       return newTabs;
     });
+
+    setActiveGroup1TabId((current) => {
+      if (current === tabId) {
+        const group1Tabs = newTabs.filter((t) => t.group === 1 || !t.group);
+        return group1Tabs[group1Tabs.length - 1]?.id || null;
+      }
+      return current;
+    });
+
+    setActiveGroup2TabId((current) => {
+      if (current === tabId) {
+        const group2Tabs = newTabs.filter((t) => t.group === 2);
+        return group2Tabs[group2Tabs.length - 1]?.id || null;
+      }
+      return current;
+    });
+
     setActiveTabId((current) => {
       if (current === tabId) {
-        return newTabs[Math.min(closedIndex, newTabs.length - 1)]?.id || null;
+        if (closedGroup === 1) {
+          const group1Tabs = newTabs.filter((t) => t.group === 1 || !t.group);
+          if (group1Tabs.length > 0) return group1Tabs[group1Tabs.length - 1].id;
+        }
+        const group2Tabs = newTabs.filter((t) => t.group === 2);
+        if (group2Tabs.length > 0) return group2Tabs[group2Tabs.length - 1].id;
+        const group1Tabs = newTabs.filter((t) => t.group === 1 || !t.group);
+        return group1Tabs[group1Tabs.length - 1]?.id || null;
       }
       return current;
     });
-    setSecondaryActiveTabId((current) => {
-      if (current === tabId) {
-        const active = activeTabId === tabId ? null : activeTabId;
-        const candidates = newTabs.filter((t) => t.id !== active);
-        return candidates[0]?.id || null;
-      }
-      return current;
-    });
-  }, [activeTabId]);
+  }, []);
 
   const closeAllTabs = useCallback(() => {
     setTabs([]);
     setActiveTabId(null);
-    setSecondaryActiveTabId(null);
+    setActiveGroup1TabId(null);
+    setActiveGroup2TabId(null);
     setSplitModeState(false);
     setPreviewVisible(false);
   }, []);
@@ -164,33 +189,61 @@ export function useEditorStore() {
     );
   }, []);
 
+  const moveTabToGroup = useCallback((tabId: string, group: 1 | 2) => {
+    setTabs((prev) =>
+      prev.map((tab) =>
+        tab.id === tabId ? { ...tab, group } : tab
+      )
+    );
+    if (group === 1) {
+      setActiveGroup1TabId(tabId);
+    } else {
+      setActiveGroup2TabId(tabId);
+    }
+    setActiveTabId(tabId);
+  }, []);
+
   const setSplitMode = useCallback((mode: boolean) => {
     setSplitModeState(mode);
     if (mode) {
       setPreviewVisible(false);
-      setSecondaryActiveTabId((current) => {
+      setTabs((prev) => {
+        const hasGroup2 = prev.some((t) => t.group === 2);
+        if (!hasGroup2 && prev.length >= 2) {
+          const activeG1 = prev.find((t) => t.id === activeGroup1TabId)?.id || prev[0].id;
+          const nonActive = prev.find((t) => t.id !== activeG1);
+          if (nonActive) {
+            return prev.map((t) => (t.id === nonActive.id ? { ...t, group: 2 as 2 } : t));
+          }
+        }
+        return prev;
+      });
+      setActiveGroup2TabId((current) => {
         if (current) return current;
-        const candidate = tabs.find((t) => t.id !== activeTabId);
-        return candidate?.id || tabs[0]?.id || null;
+        return tabs.find((t) => t.group === 2)?.id || null;
       });
     } else {
-      setSecondaryActiveTabId(null);
+      setTabs((prev) => prev.map((t) => ({ ...t, group: 1 as 1 })));
+      setActiveGroup2TabId(null);
     }
-  }, [tabs, activeTabId]);
+  }, [tabs, activeGroup1TabId]);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || null;
-  const secondaryActiveTab = tabs.find((t) => t.id === secondaryActiveTabId) || null;
 
   return {
     tabs,
     activeTabId,
     activeTab,
+    activeGroup1TabId,
+    activeGroup2TabId,
     theme,
     sidebarVisible,
     findReplaceVisible,
     unicodeHighlight,
     fontSize,
     setActiveTabId,
+    setActiveGroup1TabId,
+    setActiveGroup2TabId,
     setTheme,
     setSidebarVisible,
     setFindReplaceVisible,
@@ -202,9 +255,7 @@ export function useEditorStore() {
     setPreviewVisible,
     splitMode,
     setSplitMode,
-    secondaryActiveTabId,
-    setSecondaryActiveTabId,
-    secondaryActiveTab,
+    moveTabToGroup,
     createTab,
     updateTabContent,
     closeTab,
