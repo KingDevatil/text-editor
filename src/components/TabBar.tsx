@@ -100,7 +100,10 @@ const TabBar: React.FC<TabBarProps> = ({
       <div
         key={tab.id}
         onClick={() => handleTabClick(tab.id, group)}
-        onDoubleClick={() => handleTabDoubleClick(tab.id)}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          handleTabDoubleClick(tab.id);
+        }}
         className={`
           group relative flex items-center gap-2 px-3.5 min-w-[120px] max-w-[220px] cursor-pointer select-none flex-shrink-0
           text-sm transition-all duration-100
@@ -200,14 +203,10 @@ const TabBar: React.FC<TabBarProps> = ({
             <div className="w-1/2 flex flex-shrink-0 overflow-hidden">
               {renderScrollArea(group1Tabs, 1, g1ScrollRef, g1Scroll, setG1Scroll)}
             </div>
-            {group2Tabs.length > 0 && (
-              <div className="flex-shrink-0 w-px bg-gray-200 dark:bg-gray-800 self-stretch" />
-            )}
-            {group2Tabs.length > 0 && (
-              <div className="w-1/2 flex flex-shrink-0 overflow-hidden">
-                {renderScrollArea(group2Tabs, 2, g2ScrollRef, g2Scroll, setG2Scroll)}
-              </div>
-            )}
+            <div className="flex-shrink-0 w-px bg-gray-200 dark:bg-gray-800 self-stretch" />
+            <div className="w-1/2 flex flex-shrink-0 overflow-hidden">
+              {renderScrollArea(group2Tabs, 2, g2ScrollRef, g2Scroll, setG2Scroll)}
+            </div>
           </div>
         ) : (
         <>
