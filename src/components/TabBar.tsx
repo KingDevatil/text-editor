@@ -157,32 +157,39 @@ const TabBar: React.FC<TabBarProps> = ({
       ref={containerRef}
       className="relative flex h-9 border-b border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900 overflow-hidden"
     >
-      {/* Sidebar spacer to align with editor layout below (only in split mode) */}
-      {splitMode && (
-        <div
-          className="flex-shrink-0"
-          style={{ width: sidebarVisible ? sidebarWidth : 0 }}
-        />
-      )}
-
-      {/* Group 1 tabs */}
-      <div className={`flex overflow-hidden flex-shrink-0 pt-[2px] ${splitMode ? 'w-1/2' : 'flex-1'}`}>
-        {group1Tabs.map((tab) => renderTab(tab, 1))}
-        {!splitMode && (
-          <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
-        )}
-      </div>
-
-      {/* Split divider */}
-      {splitMode && group2Tabs.length > 0 && (
-        <div className="flex-shrink-0 w-px bg-gradient-to-b from-transparent via-gray-300 dark:via-gray-600 to-transparent self-stretch mx-0.5" />
-      )}
-
-      {/* Group 2 tabs */}
-      {splitMode && group2Tabs.length > 0 && (
-        <div className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
-          {group2Tabs.map((tab) => renderTab(tab, 2))}
-        </div>
+      {splitMode ? (
+        <>
+          {/* Sidebar spacer - mirrors the Sidebar width in App.tsx */}
+          <div
+            className="flex-shrink-0"
+            style={{ width: sidebarVisible ? sidebarWidth : 0 }}
+          />
+          {/* Tabs area - mirrors the editor pane layout below */}
+          <div className="flex flex-1 overflow-hidden">
+            {/* Group 1 tabs */}
+            <div className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
+              {group1Tabs.map((tab) => renderTab(tab, 1))}
+            </div>
+            {/* Split divider */}
+            {group2Tabs.length > 0 && (
+              <div className="flex-shrink-0 w-px bg-gray-200 dark:bg-gray-800 self-stretch" />
+            )}
+            {/* Group 2 tabs */}
+            {group2Tabs.length > 0 && (
+              <div className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
+                {group2Tabs.map((tab) => renderTab(tab, 2))}
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Group 1 tabs */}
+          <div className="flex-1 flex overflow-hidden flex-shrink-0 pt-[2px]">
+            {group1Tabs.map((tab) => renderTab(tab, 1))}
+            <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
+          </div>
+        </>
       )}
 
       {/* Overflow dropdown button */}
