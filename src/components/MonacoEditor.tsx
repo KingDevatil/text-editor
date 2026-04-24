@@ -137,6 +137,7 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', 'Source Han Sans SC', 'monospace'",
       lineNumbers: 'on',
       lineNumbersMinChars: 3,
+      lineDecorationsWidth: 5,
       roundedSelection: false,
       scrollBeyondLastLine: false,
       automaticLayout: true,
