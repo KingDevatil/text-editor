@@ -30,8 +30,10 @@ const TabBar: React.FC<TabBarProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const group1Ref = useRef<HTMLDivElement>(null);
   const group2Ref = useRef<HTMLDivElement>(null);
-  const [overflow, setOverflow] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [g1Overflow, setG1Overflow] = useState(false);
+  const [g2Overflow, setG2Overflow] = useState(false);
+  const [g1MenuOpen, setG1MenuOpen] = useState(false);
+  const [g2MenuOpen, setG2MenuOpen] = useState(false);
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Detect overflow per group
@@ -39,24 +41,26 @@ const TabBar: React.FC<TabBarProps> = ({
     const check = () => {
       const g1Overflow = group1Ref.current ? group1Ref.current.scrollWidth > group1Ref.current.clientWidth : false;
       const g2Overflow = group2Ref.current ? group2Ref.current.scrollWidth > group2Ref.current.clientWidth : false;
-      setOverflow(g1Overflow || g2Overflow);
+      setG1Overflow(g1Overflow);
+      setG2Overflow(g2Overflow);
     };
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, [tabs, splitMode]);
 
-  // Close menu on outside click
+  // Close menus on outside click
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!g1MenuOpen && !g2MenuOpen) return;
     const handle = (e: MouseEvent) => {
       if (!containerRef.current?.contains(e.target as Node)) {
-        setMenuOpen(false);
+        setG1MenuOpen(false);
+        setG2MenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
-  }, [menuOpen]);
+  }, [g1MenuOpen, g2MenuOpen]);
 
   const handleTabActivate = useCallback((tabId: string, group: 1 | 2) => {
     onTabClick(tabId, group);
@@ -145,6 +149,62 @@ const TabBar: React.FC<TabBarProps> = ({
     );
   };
 
+  const renderDropdown = (
+    groupTabs: EditorTab[],
+    group: 1 | 2,
+    menuOpen: boolean,
+    setMenuOpen: React.Dispatch<React.SetStateAction<boolean>>
+  ) => (
+    <div className="relative flex items-center flex-shrink-0">
+      <button
+        onClick={() => setMenuOpen((v) => !v)}
+        className="px-2.5 h-full hover:bg-gray-200/70 dark:hover:bg-gray-700/70 text-gray-500 dark:text-gray-400 transition-colors"
+        title="更多标签"
+      >
+        <ChevronDown size={16} />
+      </button>
+      {menuOpen && (
+        <div className="tab-dropdown-animate absolute top-full right-0 z-50 w-60 max-h-80 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-xl rounded-xl py-1">
+          {groupTabs.map((tab) => {
+            const isActive = tab.id === activeTabId;
+            return (
+              <div
+                key={tab.id}
+                onClick={() => {
+                  onTabClick(tab.id, group);
+                  setMenuOpen(false);
+                }}
+                className={`
+                  flex items-center gap-2 px-3 py-2 text-sm cursor-pointer select-none mx-1 rounded-lg transition-colors
+                  ${isActive
+                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }
+                `}
+              >
+                <span className="truncate flex-1">
+                  {tab.isDirty && <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5 align-middle" />}
+                  {tab.title}
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTabClose(tab.id);
+                    if (groupTabs.length <= 1) setMenuOpen(false);
+                  }}
+                  className="p-0.5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                  title="关闭"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
   if (tabs.length === 0) {
     return (
       <div
@@ -172,10 +232,13 @@ const TabBar: React.FC<TabBarProps> = ({
           <div className="flex flex-1 overflow-hidden">
             {/* Group 1 tabs */}
             <div className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
-              <div ref={group1Ref} className="flex overflow-hidden">
+              <div ref={group1Ref} className="flex overflow-hidden flex-1">
                 {group1Tabs.map((tab) => renderTab(tab, 1))}
               </div>
-              <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
+              {!g1Overflow && (
+                <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
+              )}
+              {g1Overflow && renderDropdown(group1Tabs, 1, g1MenuOpen, setG1MenuOpen)}
             </div>
             {/* Split divider */}
             {group2Tabs.length > 0 && (
@@ -184,10 +247,13 @@ const TabBar: React.FC<TabBarProps> = ({
             {/* Group 2 tabs */}
             {group2Tabs.length > 0 && (
               <div className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
-                <div ref={group2Ref} className="flex overflow-hidden">
+                <div ref={group2Ref} className="flex overflow-hidden flex-1">
                   {group2Tabs.map((tab) => renderTab(tab, 2))}
                 </div>
-                <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
+                {!g2Overflow && (
+                  <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
+                )}
+                {g2Overflow && renderDropdown(group2Tabs, 2, g2MenuOpen, setG2MenuOpen)}
               </div>
             )}
           </div>
@@ -196,65 +262,15 @@ const TabBar: React.FC<TabBarProps> = ({
         <>
           {/* Group 1 tabs */}
           <div className="flex-1 flex overflow-hidden flex-shrink-0 pt-[2px]">
-            <div ref={group1Ref} className="flex overflow-hidden">
+            <div ref={group1Ref} className="flex overflow-hidden flex-1">
               {group1Tabs.map((tab) => renderTab(tab, 1))}
             </div>
-            <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
+            {!g1Overflow && (
+              <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
+            )}
+            {g1Overflow && renderDropdown(group1Tabs, 1, g1MenuOpen, setG1MenuOpen)}
           </div>
         </>
-      )}
-
-      {/* Overflow dropdown button */}
-      {overflow && (
-        <div className="relative flex items-center flex-shrink-0">
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="px-2.5 h-full hover:bg-gray-200/70 dark:hover:bg-gray-700/70 text-gray-500 dark:text-gray-400 transition-colors"
-            title="更多标签"
-          >
-            <ChevronDown size={16} />
-          </button>
-          {menuOpen && (
-            <div className="tab-dropdown-animate absolute top-full right-0 z-50 w-60 max-h-80 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-xl rounded-xl py-1">
-              {tabs.map((tab) => {
-                const group = tab.group || 1;
-                const isActive = tab.id === activeTabId;
-                return (
-                  <div
-                    key={tab.id}
-                    onClick={() => {
-                      onTabClick(tab.id, group as 1 | 2);
-                      setMenuOpen(false);
-                    }}
-                    className={`
-                      flex items-center gap-2 px-3 py-2 text-sm cursor-pointer select-none mx-1 rounded-lg transition-colors
-                      ${isActive
-                        ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                      }
-                    `}
-                  >
-                    <span className="truncate flex-1">
-                      {tab.isDirty && <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5 align-middle" />}
-                      {tab.title}
-                    </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onTabClose(tab.id);
-                        if (tabs.length <= 1) setMenuOpen(false);
-                      }}
-                      className="p-0.5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
-                      title="关闭"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
       )}
     </div>
   );
