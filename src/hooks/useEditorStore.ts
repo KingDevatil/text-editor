@@ -98,9 +98,17 @@ export function useEditorStore() {
 
   const updateTabContent = useCallback((tabId: string, content: string) => {
     setTabs((prev) =>
-      prev.map((tab) =>
-        tab.id === tabId ? { ...tab, content, isDirty: true } : tab
-      )
+      prev.map((tab) => {
+        if (tab.id !== tabId) return tab;
+        let newTitle = tab.title;
+        if (tab.title === 'Untitled') {
+          const firstLine = content.split('\n').find((line) => line.trim())?.trim() || '';
+          if (firstLine) {
+            newTitle = firstLine.length > 20 ? firstLine.slice(0, 20) + '...' : firstLine;
+          }
+        }
+        return { ...tab, content, isDirty: true, ...(newTitle !== tab.title ? { title: newTitle } : {}) };
+      })
     );
   }, []);
 

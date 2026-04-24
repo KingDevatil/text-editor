@@ -122,6 +122,8 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const valueRef = useRef(content);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   // Initialize editor
   useEffect(() => {
@@ -253,7 +255,7 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
     const disposable = editor.onDidChangeModelContent(() => {
       const newValue = editor.getValue();
       valueRef.current = newValue;
-      onChange(newValue);
+      onChangeRef.current(newValue);
     });
 
     editor.focus();
