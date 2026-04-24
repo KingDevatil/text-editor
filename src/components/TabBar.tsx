@@ -135,15 +135,8 @@ const TabBar: React.FC<TabBarProps> = ({
       ref={containerRef}
       className="relative flex h-9 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden"
     >
-      <div className="flex overflow-hidden">
+      <div className="flex overflow-hidden flex-shrink-0">
         {group1Tabs.map((tab) => renderTab(tab, 1))}
-
-        {splitMode && group2Tabs.length > 0 && (
-          <>
-            <div className="w-px bg-gray-300 dark:bg-gray-600 self-stretch mx-1" />
-            {group2Tabs.map((tab) => renderTab(tab, 2))}
-          </>
-        )}
       </div>
 
       {/* Blank area: double-click to create new file */}
@@ -151,6 +144,12 @@ const TabBar: React.FC<TabBarProps> = ({
         className="flex-1 min-w-[40px]"
         onDoubleClick={handleBlankDoubleClick}
       />
+
+      {splitMode && group2Tabs.length > 0 && (
+        <div className="flex overflow-hidden flex-shrink-0">
+          {group2Tabs.map((tab) => renderTab(tab, 2))}
+        </div>
+      )}
 
       {/* Overflow dropdown button */}
       {overflow && (
