@@ -159,7 +159,7 @@ const TabBar: React.FC<TabBarProps> = ({
   return (
     <div
       ref={containerRef}
-      className="relative flex h-9 border-b border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900 overflow-hidden"
+      className="relative flex h-9 border-b border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900"
     >
       {splitMode ? (
         <>
@@ -171,8 +171,10 @@ const TabBar: React.FC<TabBarProps> = ({
           {/* Tabs area - mirrors the editor pane layout below */}
           <div className="flex flex-1 overflow-hidden">
             {/* Group 1 tabs */}
-            <div ref={group1Ref} className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
-              {group1Tabs.map((tab) => renderTab(tab, 1))}
+            <div className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
+              <div ref={group1Ref} className="flex overflow-hidden">
+                {group1Tabs.map((tab) => renderTab(tab, 1))}
+              </div>
               <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
             </div>
             {/* Split divider */}
@@ -181,8 +183,10 @@ const TabBar: React.FC<TabBarProps> = ({
             )}
             {/* Group 2 tabs */}
             {group2Tabs.length > 0 && (
-              <div ref={group2Ref} className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
-                {group2Tabs.map((tab) => renderTab(tab, 2))}
+              <div className="w-1/2 flex overflow-hidden flex-shrink-0 pt-[2px]">
+                <div ref={group2Ref} className="flex overflow-hidden">
+                  {group2Tabs.map((tab) => renderTab(tab, 2))}
+                </div>
                 <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
               </div>
             )}
@@ -192,7 +196,9 @@ const TabBar: React.FC<TabBarProps> = ({
         <>
           {/* Group 1 tabs */}
           <div className="flex-1 flex overflow-hidden flex-shrink-0 pt-[2px]">
-            {group1Tabs.map((tab) => renderTab(tab, 1))}
+            <div ref={group1Ref} className="flex overflow-hidden">
+              {group1Tabs.map((tab) => renderTab(tab, 1))}
+            </div>
             <div className="flex-1 min-w-[40px]" onDoubleClick={handleBlankDoubleClick} />
           </div>
         </>
