@@ -231,6 +231,7 @@ export function useEditorStore() {
     } else {
       setTabs((prev) => prev.map((t) => ({ ...t, group: 1 as 1 })));
       setActiveGroup2TabId(null);
+      setActiveGroup1TabId(activeTabId);
     }
   }, [tabs, activeTabId]);
 
