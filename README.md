@@ -2,6 +2,8 @@
 
 一款基于 Tauri + React + Monaco Editor 的跨平台文本编辑器，支持多标签页、语法高亮、Markdown 实时预览、分屏编辑、多编码读写等功能。
 
+> **构建状态**：✅ 已验证可在 Windows 11 + Tauri v2 环境下成功打包
+
 ## 功能特性
 
 ### 编辑核心
@@ -48,6 +50,7 @@
 
 - **Node.js**：v20 LTS 或更高版本（推荐 v24 LTS）
 - **Rust**：通过 [rustup](https://rustup.rs/) 安装
+- **Tauri CLI**：随项目依赖自动安装
 
 ### 平台特定依赖
 
@@ -57,10 +60,30 @@
 | **macOS** | Xcode Command Line Tools（`xcode-select --install`） |
 | **Linux** | 参见 [Tauri 官方文档](https://tauri.app/start/prerequisites/#linux) |
 
-> Windows 可通过 winget 一键安装 VS Build Tools：
+> **Windows 说明**：VS Build Tools 2022/2026 均可。通过 winget 安装：
 > ```powershell
-> winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+> winget install Microsoft.VisualStudio.BuildTools --override "--wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
 > ```
+
+## 国内网络加速（推荐）
+
+如果你的网络访问 Rust / Cargo 官方源较慢，建议配置国内镜像：
+
+**Rustup 镜像（中科大）**：
+```powershell
+$env:RUSTUP_DIST_SERVER = "https://mirrors.ustc.edu.cn/rust-static"
+$env:RUSTUP_UPDATE_ROOT = "https://mirrors.ustc.edu.cn/rust-static/rustup"
+```
+
+**Cargo 镜像（中科大 sparse 索引）**：
+在项目根目录或 `%USERPROFILE%\.cargo\config.toml` 中添加：
+```toml
+[source.crates-io]
+replace-with = 'ustc'
+
+[source.ustc]
+registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"
+```
 
 ## 开发
 
@@ -77,6 +100,8 @@ npm run dev
 ```
 
 浏览器将自动打开 `http://localhost:1420`。
+
+> **注意**：浏览器环境下文件读写使用浏览器 File API，部分功能受浏览器安全策略限制。
 
 ### 桌面端开发模式
 
@@ -110,11 +135,58 @@ npm run tauri build
 | **macOS** | `.dmg`、`.app` |
 | **Linux** | `.AppImage`、`.deb`、`.rpm` |
 
-### 打包注意事项
+### 打包常见问题（Windows）
 
-- 首次构建需要下载编译 Rust 依赖，耗时约 5~15 分钟，取决于网络环境
-- 构建前会自动执行 `npm run build` 生成前端资源
-- 可通过 `src-tauri/tauri.conf.json` 修改应用名称、版本、窗口大小等配置
+#### 1. `dlltool.exe: program not found`
+
+**原因**：Tauri v2 依赖的 `windows-sys` 等 crate 使用了 `raw-dylib`，在某些 Windows 环境下 rustc 会尝试调用 `dlltool.exe`。
+
+**解决方案**：
+- 安装 MinGW-w64 工具链（包含 `dlltool.exe`）：
+  ```powershell
+  choco install mingw -y
+  ```
+- 确保 `C:\ProgramData\mingw64\mingw64\bin` 在系统 PATH 中
+- 或在打包前设置环境变量：
+  ```powershell
+  $env:DLLTOOL = "$env:USERPROFILE\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\dlltool.exe"
+  ```
+
+#### 2. `lib.exe` 或 MSVC 工具找不到
+
+**原因**：VS Build Tools 的 `lib.exe` 路径未加入 PATH。
+
+**解决方案**：将 VS Build Tools 的 Hostx64\x64 目录加入 PATH：
+```powershell
+# 示例路径（版本号可能不同）
+C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\bin\Hostx64\x64
+```
+
+#### 3. 首次构建耗时较长
+
+首次构建需要下载编译 Rust 依赖，耗时约 **5~15 分钟**，取决于网络环境。建议配置国内镜像加速。
+
+## 应用图标
+
+应用图标位于 `src-tauri/icons/` 目录。Tauri 打包时需要以下图标文件：
+
+- `icon.ico` — Windows 主图标（多尺寸 ICO）
+- `32x32.png`
+- `128x128.png`
+- `128x128@2x.png`
+
+如需更换图标，可使用 Tauri CLI 自动生成全套尺寸：
+```bash
+npx tauri icon /path/to/source-icon.png
+```
+
+## 配置
+
+可通过 `src-tauri/tauri.conf.json` 修改：
+- 应用名称、版本、窗口大小
+- 应用标识符（bundle identifier）
+- 安全策略（CSP）
+- 打包目标平台
 
 ## 已知限制
 
