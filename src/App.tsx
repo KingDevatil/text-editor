@@ -98,7 +98,10 @@ function App() {
 
         try {
           const text = await readFile(file, filePath);
-          const existing = store.tabs.find((t) => t.filePath === filePath || t.filePath === fileName);
+          const existing = store.tabs.find((t) => {
+            if (filePath) return t.filePath === filePath;
+            return t.title === fileName;
+          });
           if (existing) {
             store.setActiveTabId(existing.id);
             store.updateTabContent(existing.id, text);
@@ -243,7 +246,10 @@ function App() {
 
         try {
           const text = await readFile(file, filePath);
-          const existing = store.tabs.find((t) => t.filePath === filePath || t.filePath === fileName);
+          const existing = store.tabs.find((t) => {
+            if (filePath) return t.filePath === filePath;
+            return t.title === fileName;
+          });
           if (existing) {
             store.setActiveTabId(existing.id);
             store.updateTabContent(existing.id, text);
