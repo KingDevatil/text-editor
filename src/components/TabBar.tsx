@@ -1,5 +1,5 @@
-import React, { useRef, useCallback } from 'react';
-import { X } from 'lucide-react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { EditorTab } from '../types';
 
 interface TabBarProps {
@@ -15,6 +15,14 @@ interface TabBarProps {
   onNewFile?: () => void;
 }
 
+interface ScrollState {
+  canLeft: boolean;
+  canRight: boolean;
+}
+
+const arrowBtnClass =
+  'absolute top-0 bottom-0 z-10 flex items-center justify-center w-7 h-9 bg-gray-50/90 dark:bg-gray-900/90 backdrop-blur-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors cursor-pointer';
+
 const TabBar: React.FC<TabBarProps> = ({
   tabs,
   activeTabId,
@@ -28,6 +36,34 @@ const TabBar: React.FC<TabBarProps> = ({
   onNewFile,
 }) => {
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const g1ScrollRef = useRef<HTMLDivElement>(null);
+  const g2ScrollRef = useRef<HTMLDivElement>(null);
+  const [g1Scroll, setG1Scroll] = useState<ScrollState>({ canLeft: false, canRight: false });
+  const [g2Scroll, setG2Scroll] = useState<ScrollState>({ canLeft: false, canRight: false });
+
+  const checkScroll = useCallback((el: HTMLDivElement | null, setter: React.Dispatch<React.SetStateAction<ScrollState>>) => {
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setter({
+      canLeft: scrollLeft > 1,
+      canRight: scrollLeft + clientWidth < scrollWidth - 1,
+    });
+  }, []);
+
+  useEffect(() => {
+    const handle = () => {
+      checkScroll(g1ScrollRef.current, setG1Scroll);
+      checkScroll(g2ScrollRef.current, setG2Scroll);
+    };
+    handle();
+    window.addEventListener('resize', handle);
+    return () => window.removeEventListener('resize', handle);
+  }, [tabs, splitMode, checkScroll]);
+
+  const scrollBy = (el: HTMLDivElement | null, delta: number) => {
+    if (!el) return;
+    el.scrollBy({ left: delta, behavior: 'smooth' });
+  };
 
   const handleTabActivate = useCallback((tabId: string, group: 1 | 2) => {
     onTabClick(tabId, group);
@@ -84,18 +120,15 @@ const TabBar: React.FC<TabBarProps> = ({
           marginRight: '2px',
         }}
       >
-        {/* Active top accent line */}
         {isActive && isGroupActive && (
           <div className="absolute top-0 left-2 right-2 h-[2px] bg-gradient-to-r from-blue-500 to-blue-400 rounded-full" />
         )}
-
         <span className={`truncate flex-1 ${isDirty ? 'italic' : ''}`}>
           {isDirty && (
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5 align-middle" />
           )}
           {tab.title}
         </span>
-
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -116,8 +149,42 @@ const TabBar: React.FC<TabBarProps> = ({
     );
   };
 
-  const scrollContainerClass =
-    'flex overflow-x-auto scrollbar-hide flex-1 pt-[2px]';
+  const renderScrollArea = (
+    groupTabs: EditorTab[],
+    group: 1 | 2,
+    scrollRef: React.RefObject<HTMLDivElement | null>,
+    scrollState: ScrollState,
+    setter: React.Dispatch<React.SetStateAction<ScrollState>>
+  ) => (
+    <div className="relative flex-1 flex flex-shrink-0 overflow-hidden">
+      {scrollState.canLeft && (
+        <button
+          className={`${arrowBtnClass} left-0`}
+          onClick={() => scrollBy(scrollRef.current, -200)}
+          title="向左滚动"
+        >
+          <ChevronLeft size={16} />
+        </button>
+      )}
+      <div
+        ref={scrollRef}
+        className="flex overflow-x-auto scrollbar-hide flex-1 pt-[2px]"
+        onScroll={(e) => checkScroll(e.currentTarget, setter)}
+        onDoubleClick={handleBlankDoubleClick}
+      >
+        {groupTabs.map((tab) => renderTab(tab, group))}
+      </div>
+      {scrollState.canRight && (
+        <button
+          className={`${arrowBtnClass} right-0`}
+          onClick={() => scrollBy(scrollRef.current, 200)}
+          title="向右滚动"
+        >
+          <ChevronRight size={16} />
+        </button>
+      )}
+    </div>
+  );
 
   if (tabs.length === 0) {
     return (
@@ -134,50 +201,27 @@ const TabBar: React.FC<TabBarProps> = ({
     <div className="relative flex h-9 border-b border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900 overflow-hidden">
       {splitMode ? (
         <>
-          {/* Sidebar spacer */}
           <div
             className="flex-shrink-0"
             style={{ width: sidebarVisible ? sidebarWidth : 0 }}
           />
-          {/* Tabs area */}
           <div className="flex flex-1 overflow-hidden">
-            {/* Group 1 tabs */}
             <div className="w-1/2 flex flex-shrink-0 overflow-hidden">
-              <div
-                className={scrollContainerClass}
-                onDoubleClick={handleBlankDoubleClick}
-              >
-                {group1Tabs.map((tab) => renderTab(tab, 1))}
-              </div>
+              {renderScrollArea(group1Tabs, 1, g1ScrollRef, g1Scroll, setG1Scroll)}
             </div>
-            {/* Split divider */}
             {group2Tabs.length > 0 && (
               <div className="flex-shrink-0 w-px bg-gray-200 dark:bg-gray-800 self-stretch" />
             )}
-            {/* Group 2 tabs */}
             {group2Tabs.length > 0 && (
               <div className="w-1/2 flex flex-shrink-0 overflow-hidden">
-                <div
-                  className={scrollContainerClass}
-                  onDoubleClick={handleBlankDoubleClick}
-                >
-                  {group2Tabs.map((tab) => renderTab(tab, 2))}
-                </div>
+                {renderScrollArea(group2Tabs, 2, g2ScrollRef, g2Scroll, setG2Scroll)}
               </div>
             )}
           </div>
         </>
       ) : (
         <>
-          {/* Group 1 tabs */}
-          <div className="flex-1 flex flex-shrink-0 overflow-hidden">
-            <div
-              className={scrollContainerClass}
-              onDoubleClick={handleBlankDoubleClick}
-            >
-              {group1Tabs.map((tab) => renderTab(tab, 1))}
-            </div>
-          </div>
+          {renderScrollArea(group1Tabs, 1, g1ScrollRef, g1Scroll, setG1Scroll)}
         </>
       )}
     </div>
