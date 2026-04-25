@@ -338,17 +338,14 @@ function App() {
   // Window close confirmation
   useEffect(() => {
     if (!isTauri()) return;
-    let shouldClose = false;
     const unlistenPromise = getCurrentWindow().onCloseRequested((event) => {
-      if (shouldClose) return;
       const dirtyTabs = storeRef.current.tabs.filter((t) => t.isDirty);
       if (dirtyTabs.length > 0) {
         const names = dirtyTabs.map((t) => `"${t.title}"`).join(', ');
         event.preventDefault();
         confirm(`${names} 有未保存的更改，确定要退出吗？`, { title: '未保存的更改' }).then((ok) => {
           if (ok) {
-            shouldClose = true;
-            getCurrentWindow().close();
+            getCurrentWindow().destroy();
           }
         }).catch(() => {});
       }
