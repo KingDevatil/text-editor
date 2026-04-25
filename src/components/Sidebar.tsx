@@ -10,8 +10,6 @@ interface SidebarProps {
   onToggleUnicodeHighlight: () => void;
   fontSize: number;
   onFontSizeChange: (size: number) => void;
-  largeFileOptimize: boolean;
-  onToggleLargeFileOptimize: () => void;
   projectPath: string | null;
   onProjectChange: (path: string | null) => void;
   onOpenFolder: () => void;
@@ -109,7 +107,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   fontSize,
   onFontSizeChange,
   largeFileOptimize,
-  onToggleLargeFileOptimize,
   projectPath,
   onProjectChange,
   onOpenFolder,

@@ -1,14 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, ChevronUp, X, Replace, ReplaceAll } from 'lucide-react';
-import * as monaco from 'monaco-editor';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 
 interface FindReplaceProps {
   visible: boolean;
   onClose: () => void;
-  editorRef?: React.MutableRefObject<monaco.editor.IStandaloneCodeEditor | null>;
 }
 
-const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, editorRef }) => {
+const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
   const [findText, setFindText] = useState('');
   const [replaceText, setReplaceText] = useState('');
   const [showReplace, setShowReplace] = useState(true);
@@ -21,35 +20,30 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, editorRef }
     }
   }, [visible]);
 
-  const handleReplace = () => {
-    const editor = editorRef?.current;
-    if (!editor || !findText) return;
-    const model = editor.getModel();
-    if (!model) return;
-    const matches = model.findMatches(findText, false, false, caseSensitive, null, true);
-    if (matches.length === 0) return;
-    // Replace first match
-    const edit: monaco.editor.IIdentifiedSingleEditOperation = {
-      range: matches[0].range,
-      text: replaceText,
-    };
-    editor.executeEdits('find-replace', [edit]);
-    editor.focus();
+  const handleReplace = async () => {
+    if (!isTauri() || !findText) return;
+    try {
+      await invoke('native_editor_replace', {
+        query: findText,
+        replace: replaceText,
+        all: false,
+      });
+    } catch (err) {
+      console.error('Replace failed:', err);
+    }
   };
 
-  const handleReplaceAll = () => {
-    const editor = editorRef?.current;
-    if (!editor || !findText) return;
-    const model = editor.getModel();
-    if (!model) return;
-    const matches = model.findMatches(findText, false, false, caseSensitive, null, true);
-    if (matches.length === 0) return;
-    const edits: monaco.editor.IIdentifiedSingleEditOperation[] = matches.map((m) => ({
-      range: m.range,
-      text: replaceText,
-    }));
-    editor.executeEdits('find-replace-all', edits);
-    editor.focus();
+  const handleReplaceAll = async () => {
+    if (!isTauri() || !findText) return;
+    try {
+      await invoke('native_editor_replace', {
+        query: findText,
+        replace: replaceText,
+        all: true,
+      });
+    } catch (err) {
+      console.error('Replace all failed:', err);
+    }
   };
 
   if (!visible) return null;

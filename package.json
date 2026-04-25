@@ -13,11 +13,9 @@
     "tauri-build": "tauri build"
   },
   "dependencies": {
-    "@monaco-editor/react": "^4.7.0",
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "lucide-react": "^1.8.0",
     "marked": "^18.0.2",
-    "monaco-editor": "^0.55.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
   },

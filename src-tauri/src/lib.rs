@@ -10,6 +10,14 @@ use encoding_rs::{
 use chardetng::EncodingDetector;
 use serde::Serialize;
 
+// Native editor modules
+mod core;
+mod editor;
+mod syntax;
+mod render;
+mod platform;
+mod ffi_export;
+
 fn get_encoding(name: &str) -> Result<&'static Encoding, String> {
     match name.to_lowercase().as_str() {
         "utf-8" | "utf8" | "utf-8 bom" => Ok(UTF_8),
@@ -202,7 +210,7 @@ pub fn run() {
             #[cfg(desktop)]
             {
                 let window = app.get_webview_window("main").unwrap();
-                let _ = window.set_title("Text Editor");
+                let _ = window.set_title("Text Editor v2");
             }
             Ok(())
         })
@@ -211,6 +219,10 @@ pub fn run() {
             read_file_auto_detect,
             list_directory,
             write_file_with_encoding,
+            ffi_export::native_editor_get_stats,
+            ffi_export::native_editor_resize,
+            ffi_export::native_editor_load_text,
+            ffi_export::native_editor_get_text,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

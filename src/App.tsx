@@ -1,5 +1,4 @@
 import React, { useRef, useCallback, useEffect } from 'react';
-import type { editor } from 'monaco-editor';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -8,7 +7,7 @@ import { useEditorStore } from './hooks/useEditorStore';
 import type { Encoding } from './types';
 import Toolbar from './components/Toolbar';
 import TabBar from './components/TabBar';
-import MonacoEditor from './components/MonacoEditor';
+import NativeEditorHost from './components/NativeEditorHost';
 import FindReplace from './components/FindReplace';
 import StatusBar from './components/StatusBar';
 import Sidebar from './components/Sidebar';
@@ -17,8 +16,6 @@ import MarkdownPreview from './components/MarkdownPreview';
 function App() {
   const store = useEditorStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null);
-  const secondaryEditorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const SIDEBAR_WIDTH = 220;
 
   // Auto-disable split when less than 2 tabs
@@ -31,7 +28,7 @@ function App() {
   // Initialize with a default tab
   useEffect(() => {
     if (store.tabs.length === 0) {
-      store.createTab('welcome.md', '# 欢迎使用多功能文本编辑器\n\n这是一个基于 **Tauri + React + Monaco Editor** 构建的桌面文本编辑器。\n\n## 功能特性\n\n- 📝 多标签页编辑\n- 🎨 语法高亮与主题切换\n- 🔍 查找替换\n- 📂 文件打开与保存\n- ⚡ 高性能代码编辑\n\n## 快捷键\n\n| 快捷键 | 功能 |\n|--------|------|\n| Ctrl+N | 新建文件 |\n| Ctrl+O | 打开文件 |\n| Ctrl+S | 保存文件 |\n| Ctrl+F | 查找替换 |\n', 'markdown');
+      store.createTab('welcome.md', '# 欢迎使用多功能文本编辑器\n\n这是一个基于 **Tauri + React + 原生渲染** 构建的桌面文本编辑器。\n\n## 功能特性\n\n- 📝 多标签页编辑\n- 🎨 语法高亮与主题切换\n- 🔍 查找替换\n- 📂 文件打开与保存\n- ⚡ 高性能原生渲染\n\n## 快捷键\n\n| 快捷键 | 功能 |\n|--------|------|\n| Ctrl+N | 新建文件 |\n| Ctrl+O | 打开文件 |\n| Ctrl+S | 保存文件 |\n| Ctrl+F | 查找替换 |\n', 'markdown');
     }
   }, []);
 
@@ -57,10 +54,6 @@ function App() {
             store.setFindReplaceVisible(!store.findReplaceVisible);
             break;
         }
-      }
-      if (e.shiftKey && e.altKey && e.key.toLowerCase() === 'f') {
-        e.preventDefault();
-        handleFormat();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -174,16 +167,6 @@ function App() {
       }
     } catch (err) {
       console.log('Save cancelled or failed', err);
-    }
-  }, [store.activeTab]);
-
-  const handleFormat = useCallback(() => {
-    const group = store.activeTab?.group || 1;
-    const editor = group === 1 ? editorInstanceRef.current : secondaryEditorInstanceRef.current;
-    if (!editor) return;
-    const action = editor.getAction('editor.action.formatDocument');
-    if (action) {
-      action.run();
     }
   }, [store.activeTab]);
 
@@ -419,7 +402,7 @@ function App() {
         onToggleFindReplace={() => store.setFindReplaceVisible(!store.findReplaceVisible)}
         onToggleTheme={handleToggleTheme}
         onToggleSidebar={() => store.setSidebarVisible(!store.sidebarVisible)}
-        onFormat={handleFormat}
+        onFormat={() => { /* TODO: native editor format */ }}
         onTogglePreview={() => store.setPreviewVisible(!store.previewVisible)}
         onToggleSplit={handleToggleSplit}
         canFormat={canFormat}
@@ -438,8 +421,6 @@ function App() {
           onToggleUnicodeHighlight={() => store.setUnicodeHighlight(!store.unicodeHighlight)}
           fontSize={store.fontSize}
           onFontSizeChange={store.setFontSize}
-          largeFileOptimize={store.largeFileOptimize}
-          onToggleLargeFileOptimize={() => store.setLargeFileOptimize(!store.largeFileOptimize)}
           projectPath={store.projectPath}
           onProjectChange={store.setProjectPath}
           onOpenFolder={handleOpenFolder}
@@ -465,21 +446,16 @@ function App() {
           <FindReplace
             visible={store.findReplaceVisible}
             onClose={() => store.setFindReplaceVisible(false)}
-            editorRef={editorInstanceRef}
           />
 
           <div className="flex flex-1 overflow-hidden">
             {group1Tab ? (
               <>
                 <div className={`h-full ${store.splitMode || (store.previewVisible && canPreview) ? 'w-1/2' : 'w-full'}`}>
-                  <MonacoEditor
+                  <NativeEditorHost
+                    tabId={group1Tab.id}
                     content={group1Tab.content}
-                    language={group1Tab.language}
                     theme={store.theme}
-                    onChange={handleEditorChange(group1Tab.id)}
-                    editorRef={editorInstanceRef}
-                    largeFileOptimize={store.largeFileOptimize}
-                    unicodeHighlight={store.unicodeHighlight}
                     fontSize={store.fontSize}
                   />
                 </div>
@@ -488,14 +464,10 @@ function App() {
                     <div className="w-px bg-gray-200 dark:bg-gray-800 self-stretch" />
                     <div className="w-1/2 h-full">
                       {store.activeGroup2TabId ? (
-                        <MonacoEditor
+                        <NativeEditorHost
+                          tabId={store.activeGroup2TabId}
                           content={store.tabs.find((t) => t.id === store.activeGroup2TabId)?.content || ''}
-                          language={store.tabs.find((t) => t.id === store.activeGroup2TabId)?.language || 'plaintext'}
                           theme={store.theme}
-                          onChange={handleEditorChange(store.activeGroup2TabId)}
-                          editorRef={secondaryEditorInstanceRef}
-                          largeFileOptimize={store.largeFileOptimize}
-                          unicodeHighlight={store.unicodeHighlight}
                           fontSize={store.fontSize}
                         />
                       ) : (
