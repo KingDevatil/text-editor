@@ -73,14 +73,16 @@ export function useEditorStore() {
   const [previewVisible, setPreviewVisible] = useState(false);
   const [splitMode, setSplitModeState] = useState(false);
   const [projectPath, setProjectPath] = useState<string | null>(null);
+  const [largeFileOptimize, setLargeFileOptimize] = useState(false);
 
   const createTab = useCallback((title = 'Untitled', content = '', language?: Language, filePath?: string, group: 1 | 2 = 1, encoding: Encoding = 'UTF-8') => {
     const lang = language || getLanguageFromFileName(title);
     const actualContent = content || getDefaultContent(lang);
+    const shouldOptimize = largeFileOptimize && actualContent.length > 200 * 1024;
     const newTab: EditorTab = {
       id: generateId(),
       title,
-      content: actualContent,
+      content: shouldOptimize ? '' : actualContent,
       language: lang,
       isDirty: false,
       filePath,
@@ -94,8 +96,14 @@ export function useEditorStore() {
       setActiveGroup2TabId(newTab.id);
     }
     setActiveTabId(newTab.id);
+    // Large file: defer content loading to avoid blocking UI
+    if (shouldOptimize) {
+      requestAnimationFrame(() => {
+        setTabs((prev) => prev.map((t) => (t.id === newTab.id ? { ...t, content: actualContent } : t)));
+      });
+    }
     return newTab.id;
-  }, []);
+  }, [largeFileOptimize]);
 
   const updateTabContent = useCallback((tabId: string, content: string) => {
     setTabs((prev) =>
@@ -311,5 +319,7 @@ export function useEditorStore() {
     renameTab,
     projectPath,
     setProjectPath,
+    largeFileOptimize,
+    setLargeFileOptimize,
   };
 }

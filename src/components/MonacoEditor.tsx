@@ -107,6 +107,7 @@ interface MonacoEditorProps {
   editorRef?: React.MutableRefObject<monaco.editor.IStandaloneCodeEditor | null>;
   unicodeHighlight?: boolean;
   fontSize?: number;
+  largeFileOptimize?: boolean;
 }
 
 const MonacoEditor: React.FC<MonacoEditorProps> = ({
@@ -118,24 +119,31 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
   editorRef: externalEditorRef,
   unicodeHighlight = false,
   fontSize = 14,
+  largeFileOptimize = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const valueRef = useRef(content);
   const onChangeRef = useRef(onChange);
   const isComposingRef = useRef(false);
+  const isLargeFileRef = useRef(false);
   onChangeRef.current = onChange;
 
   // Initialize editor
   useEffect(() => {
     if (!containerRef.current) return;
 
+    // Large file detection and optimization
+    const LARGE_FILE_THRESHOLD = 500 * 1024; // 500KB
+    const isLargeFile = largeFileOptimize && content.length > LARGE_FILE_THRESHOLD;
+    isLargeFileRef.current = isLargeFile;
+
     const editor = monaco.editor.create(containerRef.current, {
       value: content,
       language,
       theme,
       readOnly,
-      minimap: { enabled: true },
+      minimap: { enabled: !isLargeFile },
       fontSize,
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', 'Source Han Sans SC', 'monospace'",
       lineNumbers: 'on',
@@ -146,24 +154,32 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
       automaticLayout: true,
       tabSize: 2,
       insertSpaces: true,
-      wordWrap: 'on',
+      wordWrap: isLargeFile ? 'off' : 'on',
       wrappingStrategy: 'advanced',
       wrappingIndent: 'indent',
-      folding: true,
-      foldingHighlight: true,
-      showFoldingControls: 'mouseover',
-      bracketPairColorization: { enabled: true },
+      folding: !isLargeFile,
+      foldingHighlight: !isLargeFile,
+      showFoldingControls: isLargeFile ? 'never' : 'mouseover',
+      bracketPairColorization: { enabled: !isLargeFile },
       guides: {
-        bracketPairs: true,
+        bracketPairs: !isLargeFile,
         indentation: true,
       },
-      matchBrackets: 'always',
+      matchBrackets: isLargeFile ? 'never' : 'always',
       autoIndent: 'full',
-      formatOnPaste: true,
-      formatOnType: true,
+      formatOnPaste: !isLargeFile,
+      formatOnType: !isLargeFile,
       cursorBlinking: 'smooth',
       cursorSmoothCaretAnimation: 'on',
       smoothScrolling: true,
+      maxTokenizationLineLength: isLargeFile ? 10000 : 20000,
+      largeFileOptimizations: true,
+      renderValidationDecorations: 'editable',
+      renderLineHighlight: isLargeFile ? 'none' : 'line',
+      occurrencesHighlight: isLargeFile ? 'off' : 'singleFile',
+      selectionHighlight: !isLargeFile,
+      hover: { enabled: !isLargeFile },
+      renderWhitespace: 'none',
       unicodeHighlight: {
         ambiguousCharacters: unicodeHighlight,
         invisibleCharacters: false,
@@ -326,12 +342,40 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
     const editor = editorRef.current;
     if (!editor) return;
     if (isComposingRef.current) return;
+
+    const isLarge = largeFileOptimize && content.length > 500 * 1024;
+    if (isLarge !== isLargeFileRef.current) {
+      isLargeFileRef.current = isLarge;
+      editor.updateOptions({
+        minimap: { enabled: !isLarge },
+        wordWrap: isLarge ? 'off' : 'on',
+        folding: !isLarge,
+        foldingHighlight: !isLarge,
+        showFoldingControls: isLarge ? 'never' : 'mouseover',
+        bracketPairColorization: { enabled: !isLarge },
+        guides: { bracketPairs: !isLarge, indentation: true },
+        matchBrackets: isLarge ? 'never' : 'always',
+        formatOnPaste: !isLarge,
+        formatOnType: !isLarge,
+        renderLineHighlight: isLarge ? 'none' : 'line',
+        occurrencesHighlight: isLarge ? 'off' : 'singleFile',
+        selectionHighlight: !isLarge,
+        hover: { enabled: !isLarge },
+        maxTokenizationLineLength: isLarge ? 10000 : 20000,
+      });
+    }
+
     if (content !== editor.getValue()) {
-      const viewState = editor.saveViewState();
-      valueRef.current = content;
-      editor.setValue(content);
-      if (viewState) {
-        editor.restoreViewState(viewState);
+      if (!isLarge) {
+        const viewState = editor.saveViewState();
+        valueRef.current = content;
+        editor.setValue(content);
+        if (viewState) {
+          editor.restoreViewState(viewState);
+        }
+      } else {
+        valueRef.current = content;
+        editor.setValue(content);
       }
     }
   }, [content]);

@@ -338,16 +338,16 @@ function App() {
   // Window close confirmation
   useEffect(() => {
     if (!isTauri()) return;
-    let closing = false;
+    let shouldClose = false;
     const unlistenPromise = getCurrentWindow().onCloseRequested((event) => {
-      if (closing) return;
+      if (shouldClose) return;
       const dirtyTabs = storeRef.current.tabs.filter((t) => t.isDirty);
       if (dirtyTabs.length > 0) {
         const names = dirtyTabs.map((t) => `"${t.title}"`).join(', ');
         event.preventDefault();
         confirm(`${names} 有未保存的更改，确定要退出吗？`, { title: '未保存的更改' }).then((ok) => {
           if (ok) {
-            closing = true;
+            shouldClose = true;
             getCurrentWindow().close();
           }
         }).catch(() => {});
@@ -441,6 +441,8 @@ function App() {
           onToggleUnicodeHighlight={() => store.setUnicodeHighlight(!store.unicodeHighlight)}
           fontSize={store.fontSize}
           onFontSizeChange={store.setFontSize}
+          largeFileOptimize={store.largeFileOptimize}
+          onToggleLargeFileOptimize={() => store.setLargeFileOptimize(!store.largeFileOptimize)}
           projectPath={store.projectPath}
           onProjectChange={store.setProjectPath}
           onOpenFolder={handleOpenFolder}
@@ -479,6 +481,7 @@ function App() {
                     theme={store.theme}
                     onChange={handleEditorChange(group1Tab.id)}
                     editorRef={editorInstanceRef}
+                    largeFileOptimize={store.largeFileOptimize}
                     unicodeHighlight={store.unicodeHighlight}
                     fontSize={store.fontSize}
                   />
@@ -494,6 +497,7 @@ function App() {
                           theme={store.theme}
                           onChange={handleEditorChange(store.activeGroup2TabId)}
                           editorRef={secondaryEditorInstanceRef}
+                          largeFileOptimize={store.largeFileOptimize}
                           unicodeHighlight={store.unicodeHighlight}
                           fontSize={store.fontSize}
                         />
