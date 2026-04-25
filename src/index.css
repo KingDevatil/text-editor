@@ -15,8 +15,8 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Smooth transitions for theme-aware elements */
-* {
+/* Smooth transitions for theme-aware elements (exclude Monaco Editor internals) */
+body, body *:not(.monaco-editor):not(.monaco-editor *) {
   transition-property: background-color, border-color, color;
   transition-duration: 120ms;
   transition-timing-function: ease-out;

@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, ChevronUp, X, Replace, ReplaceAll } from 'lucide-react';
+import * as monaco from 'monaco-editor';
 
 interface FindReplaceProps {
   visible: boolean;
   onClose: () => void;
-  editorRef?: React.MutableRefObject<any>;
+  editorRef?: React.MutableRefObject<monaco.editor.IStandaloneCodeEditor | null>;
 }
 
-const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
+const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, editorRef }) => {
   const [findText, setFindText] = useState('');
   const [replaceText, setReplaceText] = useState('');
   const [showReplace, setShowReplace] = useState(true);
@@ -20,6 +21,37 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
     }
   }, [visible]);
 
+  const handleReplace = () => {
+    const editor = editorRef?.current;
+    if (!editor || !findText) return;
+    const model = editor.getModel();
+    if (!model) return;
+    const matches = model.findMatches(findText, false, false, caseSensitive, null, true);
+    if (matches.length === 0) return;
+    // Replace first match
+    const edit: monaco.editor.IIdentifiedSingleEditOperation = {
+      range: matches[0].range,
+      text: replaceText,
+    };
+    editor.executeEdits('find-replace', [edit]);
+    editor.focus();
+  };
+
+  const handleReplaceAll = () => {
+    const editor = editorRef?.current;
+    if (!editor || !findText) return;
+    const model = editor.getModel();
+    if (!model) return;
+    const matches = model.findMatches(findText, false, false, caseSensitive, null, true);
+    if (matches.length === 0) return;
+    const edits: monaco.editor.IIdentifiedSingleEditOperation[] = matches.map((m) => ({
+      range: m.range,
+      text: replaceText,
+    }));
+    editor.executeEdits('find-replace-all', edits);
+    editor.focus();
+  };
+
   if (!visible) return null;
 
   const inputClass =
@@ -27,6 +59,10 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
 
   const iconBtnClass =
     'p-1.5 rounded-lg hover:bg-gray-200/80 dark:hover:bg-gray-700/80 text-gray-500 dark:text-gray-400 transition-colors active:scale-95';
+
+  const disabledBtnClass = 'opacity-40 cursor-not-allowed active:scale-100';
+
+  const canReplace = !!findText;
 
   return (
     <div className="flex flex-col gap-2.5 px-4 py-3 border-b border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-900 shadow-sm">
@@ -60,10 +96,20 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
         <div className="flex items-center gap-0.5">
           {showReplace && (
             <>
-              <button title="替换" className={iconBtnClass}>
+              <button
+                title="替换"
+                className={`${iconBtnClass} ${!canReplace ? disabledBtnClass : ''}`}
+                onClick={handleReplace}
+                disabled={!canReplace}
+              >
                 <Replace size={14} />
               </button>
-              <button title="全部替换" className={iconBtnClass}>
+              <button
+                title="全部替换"
+                className={`${iconBtnClass} ${!canReplace ? disabledBtnClass : ''}`}
+                onClick={handleReplaceAll}
+                disabled={!canReplace}
+              >
                 <ReplaceAll size={14} />
               </button>
             </>

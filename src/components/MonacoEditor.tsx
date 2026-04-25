@@ -327,7 +327,12 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
     if (!editor) return;
     if (isComposingRef.current) return;
     if (content !== editor.getValue()) {
+      const viewState = editor.saveViewState();
+      valueRef.current = content;
       editor.setValue(content);
+      if (viewState) {
+        editor.restoreViewState(viewState);
+      }
     }
   }, [content]);
 

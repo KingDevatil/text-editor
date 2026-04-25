@@ -1,7 +1,9 @@
 import React from 'react';
+import { isTauri } from '@tauri-apps/api/core';
 import {
   FilePlus,
   FolderOpen,
+  FolderTree,
   Save,
   Search,
   Sun,
@@ -16,6 +18,7 @@ import {
 interface ToolbarProps {
   onNewFile: () => void;
   onOpenFile: () => void;
+  onOpenFolder: () => void;
   onSaveFile: () => void;
   onToggleFindReplace: () => void;
   onToggleTheme: () => void;
@@ -34,6 +37,7 @@ interface ToolbarProps {
 const Toolbar: React.FC<ToolbarProps> = ({
   onNewFile,
   onOpenFile,
+  onOpenFolder,
   onSaveFile,
   onToggleFindReplace,
   onToggleTheme,
@@ -90,6 +94,12 @@ const Toolbar: React.FC<ToolbarProps> = ({
           <FolderOpen size={16} />
           <span className="hidden sm:inline font-medium">打开</span>
         </button>
+        {isTauri() && (
+          <button className={btnClass} onClick={onOpenFolder} title="打开文件夹">
+            <FolderTree size={16} />
+            <span className="hidden sm:inline font-medium">文件夹</span>
+          </button>
+        )}
         <button className={btnClass} onClick={onSaveFile} title="保存文件 (Ctrl+S)">
           <Save size={16} />
           <span className="hidden sm:inline font-medium">保存</span>

@@ -1,6 +1,9 @@
-import React, { useRef, useCallback, useEffect, useState } from 'react';
+import React, { useRef, useCallback, useEffect } from 'react';
 import type { editor } from 'monaco-editor';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { open, confirm } from '@tauri-apps/plugin-dialog';
 import { useEditorStore } from './hooks/useEditorStore';
 import type { Encoding } from './types';
 import Toolbar from './components/Toolbar';
@@ -11,14 +14,12 @@ import StatusBar from './components/StatusBar';
 import Sidebar from './components/Sidebar';
 import MarkdownPreview from './components/MarkdownPreview';
 
-const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
-
 function App() {
   const store = useEditorStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const secondaryEditorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null);
-  const [sidebarWidth] = useState(220);
+  const SIDEBAR_WIDTH = 220;
 
   // Auto-disable split when less than 2 tabs
   useEffect(() => {
@@ -79,17 +80,9 @@ function App() {
     fileInputRef.current?.click();
   }, []);
 
-  const readFile = useCallback(async (file: File, filePath?: string): Promise<string> => {
-    if (isTauri && filePath) {
-      try {
-        const encoding = store.tabs.find((t) => t.filePath === filePath)?.encoding || 'UTF-8';
-        return await invoke<string>('read_file_with_encoding', { path: filePath, encoding });
-      } catch {
-        // fallback to browser API
-      }
-    }
-    return file.text();
-  }, [store.tabs]);
+  const readFileAuto = useCallback(async (filePath: string): Promise<{ text: string; encoding: string }> => {
+    return await invoke<{ text: string; encoding: string }>('read_file_auto_detect', { path: filePath });
+  }, []);
 
   const handleFileSelected = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,11 +91,21 @@ function App() {
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const filePath = isTauri ? (file as any).path as string | undefined : undefined;
+        const filePath = (file as any).path as string | undefined || file.name;
         const fileName = file.name;
 
         try {
-          const text = await readFile(file, filePath);
+          let text: string;
+          let detectedEncoding: Encoding = 'UTF-8';
+
+          if (isTauri() && filePath) {
+            const result = await readFileAuto(filePath);
+            text = result.text;
+            detectedEncoding = result.encoding as Encoding;
+          } else {
+            text = await file.text();
+          }
+
           const existing = store.tabs.find((t) => {
             if (filePath) return t.filePath === filePath;
             return t.title === fileName;
@@ -111,23 +114,28 @@ function App() {
             store.setActiveTabId(existing.id);
             store.updateTabContent(existing.id, text);
             if (filePath) store.renameTab(existing.id, fileName, filePath);
+            store.setTabEncoding(existing.id, detectedEncoding);
           } else {
-            store.createTab(fileName, text, undefined, filePath || fileName);
+            store.createTab(fileName, text, undefined, filePath, 1, detectedEncoding);
           }
         } catch (err) {
           console.error('Failed to read file:', fileName, err);
+          if (isTauri() && filePath) {
+            alert(`无法读取文件: ${fileName}`);
+          }
+          continue;
         }
       }
       e.target.value = '';
     },
-    [store, readFile]
+    [store, readFileAuto]
   );
 
   const handleSaveFile = useCallback(async () => {
     if (!store.activeTab) return;
 
     try {
-      if (isTauri && store.activeTab.filePath) {
+      if (isTauri() && store.activeTab.filePath) {
         await invoke('write_file_with_encoding', {
           path: store.activeTab.filePath,
           content: store.activeTab.content,
@@ -191,6 +199,40 @@ function App() {
     store.setSplitMode(!store.splitMode);
   }, [store.splitMode, store.setSplitMode]);
 
+  const handleOpenFolder = useCallback(async () => {
+    console.log('[OpenFolder] clicked, isTauri:', isTauri());
+    if (!isTauri()) return;
+    try {
+      const selected = await open({ directory: true });
+      console.log('[OpenFolder] selected:', selected);
+      if (selected) {
+        const path = Array.isArray(selected) ? selected[0] : selected;
+        console.log('[OpenFolder] setting project path:', path);
+        store.setProjectPath(path);
+      }
+    } catch (err) {
+      console.error('[OpenFolder] failed:', err);
+    }
+  }, [store.setProjectPath]);
+
+  const handleSidebarOpenFile = useCallback(async (filePath: string) => {
+    if (!isTauri()) return;
+    try {
+      const result = await invoke<{ text: string; encoding: string }>('read_file_auto_detect', { path: filePath });
+      const fileName = filePath.split(/[\\/]/).pop() || filePath;
+      const existing = store.tabs.find((t) => t.filePath === filePath);
+      if (existing) {
+        store.setActiveTabId(existing.id);
+        store.updateTabContent(existing.id, result.text);
+        store.setTabEncoding(existing.id, result.encoding as Encoding);
+      } else {
+        store.createTab(fileName, result.text, undefined, filePath, 1, result.encoding as Encoding);
+      }
+    } catch (err) {
+      console.error('Failed to open file from sidebar:', filePath, err);
+    }
+  }, [store]);
+
   const handleTabClick = useCallback((id: string, group: 1 | 2) => {
     if (group === 1) {
       store.setActiveGroup1TabId(id);
@@ -217,29 +259,109 @@ function App() {
 
   const handleEncodingChange = useCallback(
     async (enc: Encoding) => {
-      if (!store.activeTab) return;
-      store.setTabEncoding(store.activeTab.id, enc);
+      console.log('[EncodingChange] called with', enc);
+      const s = storeRef.current;
+      console.log('[EncodingChange] activeTab:', s.activeTab?.id, s.activeTab?.title);
+      if (!s.activeTab) {
+        console.log('[EncodingChange] no active tab, abort');
+        return;
+      }
+      const tabId = s.activeTab.id;
+      const filePath = s.activeTab.filePath;
+      s.setTabEncoding(tabId, enc);
+      console.log('[EncodingChange] switched to', enc, 'for tab', tabId, 'path:', filePath);
 
       // If in Tauri and file has a path, re-read with new encoding
-      if (isTauri && store.activeTab.filePath) {
+      if (isTauri() && filePath) {
         try {
           const text = await invoke<string>('read_file_with_encoding', {
-            path: store.activeTab.filePath,
+            path: filePath,
             encoding: enc,
           });
-          store.updateTabContent(store.activeTab.id, text);
+          storeRef.current.updateTabContent(tabId, text);
+          console.log('[EncodingChange] re-read success, length:', text.length);
         } catch (err) {
-          console.error('Failed to re-read file with encoding:', enc, err);
+          console.error('[EncodingChange] failed to re-read file with encoding:', enc, err);
         }
       }
     },
-    [store]
+    // storeRef is a ref, not a reactive dependency; intentional empty deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   );
 
   const isDark = store.theme === 'vs-dark' || store.theme === 'hc-black';
 
-  // Handle file drop (HTML5 Drag and Drop)
+  // Keep a ref to the latest store to avoid stale closures in async listeners
+  const storeRef = useRef(store);
   useEffect(() => {
+    storeRef.current = store;
+  });
+
+  // Handle file drop using Tauri native drag-drop events (works in packaged app)
+  useEffect(() => {
+    if (!isTauri()) return;
+
+    let processing = false;
+    const p1 = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === 'drop') {
+        if (processing) return;
+        processing = true;
+        setTimeout(() => { processing = false; }, 500);
+        for (const filePath of event.payload.paths) {
+          const fileName = filePath.split(/[\\/]/).pop() || filePath;
+          invoke<{ text: string; encoding: string }>('read_file_auto_detect', { path: filePath })
+            .then((result) => {
+              const s = storeRef.current;
+              const existing = s.tabs.find((t) => t.filePath === filePath);
+              if (existing) {
+                s.setActiveTabId(existing.id);
+                s.updateTabContent(existing.id, result.text);
+                s.renameTab(existing.id, fileName, filePath);
+                s.setTabEncoding(existing.id, result.encoding as Encoding);
+              } else {
+                s.createTab(fileName, result.text, undefined, filePath, 1, result.encoding as Encoding);
+              }
+            })
+            .catch((err) => {
+              console.error('Failed to read dropped file:', fileName, err);
+            });
+        }
+      }
+    });
+
+    return () => {
+      p1.then((unlisten) => unlisten()).catch(() => {});
+    };
+  }, []);
+
+  // Window close confirmation
+  useEffect(() => {
+    if (!isTauri()) return;
+    let closing = false;
+    const unlistenPromise = getCurrentWindow().onCloseRequested((event) => {
+      if (closing) return;
+      const dirtyTabs = storeRef.current.tabs.filter((t) => t.isDirty);
+      if (dirtyTabs.length > 0) {
+        const names = dirtyTabs.map((t) => `"${t.title}"`).join(', ');
+        event.preventDefault();
+        confirm(`${names} 有未保存的更改，确定要退出吗？`, { title: '未保存的更改' }).then((ok) => {
+          if (ok) {
+            closing = true;
+            getCurrentWindow().close();
+          }
+        }).catch(() => {});
+      }
+    });
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten()).catch(() => {});
+    };
+  }, []);
+
+  // Browser fallback: HTML5 Drag and Drop
+  useEffect(() => {
+    if (isTauri()) return;
+
     const handleDragOver = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -257,21 +379,16 @@ function App() {
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const filePath = isTauri ? (file as any).path as string | undefined : undefined;
         const fileName = file.name;
 
         try {
-          const text = await readFile(file, filePath);
-          const existing = store.tabs.find((t) => {
-            if (filePath) return t.filePath === filePath;
-            return t.title === fileName;
-          });
+          const text = await file.text();
+          const existing = store.tabs.find((t) => t.title === fileName);
           if (existing) {
             store.setActiveTabId(existing.id);
             store.updateTabContent(existing.id, text);
-            if (filePath) store.renameTab(existing.id, fileName, filePath);
           } else {
-            store.createTab(fileName, text, undefined, filePath || fileName);
+            store.createTab(fileName, text, undefined, fileName);
           }
         } catch (err) {
           console.error('Failed to read dropped file:', fileName, err);
@@ -285,7 +402,7 @@ function App() {
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('drop', handleDrop);
     };
-  }, [store, readFile]);
+  }, [store]);
 
   return (
     <div className={`flex flex-col h-screen ${isDark ? 'dark' : ''}`}>
@@ -300,6 +417,7 @@ function App() {
       <Toolbar
         onNewFile={handleNewFile}
         onOpenFile={handleOpenFile}
+        onOpenFolder={handleOpenFolder}
         onSaveFile={handleSaveFile}
         onToggleFindReplace={() => store.setFindReplaceVisible(!store.findReplaceVisible)}
         onToggleTheme={handleToggleTheme}
@@ -318,11 +436,16 @@ function App() {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           visible={store.sidebarVisible}
-          width={sidebarWidth}
+          width={SIDEBAR_WIDTH}
           unicodeHighlight={store.unicodeHighlight}
           onToggleUnicodeHighlight={() => store.setUnicodeHighlight(!store.unicodeHighlight)}
           fontSize={store.fontSize}
           onFontSizeChange={store.setFontSize}
+          projectPath={store.projectPath}
+          onProjectChange={store.setProjectPath}
+          onOpenFolder={handleOpenFolder}
+          openTabs={store.tabs}
+          onOpenFile={handleSidebarOpenFile}
         />
 
         <div className="flex flex-col flex-1 overflow-hidden">
@@ -343,6 +466,7 @@ function App() {
           <FindReplace
             visible={store.findReplaceVisible}
             onClose={() => store.setFindReplaceVisible(false)}
+            editorRef={editorInstanceRef}
           />
 
           <div className="flex flex-1 overflow-hidden">

@@ -72,8 +72,9 @@ export function useEditorStore() {
   const [fontSize, setFontSize] = useState(14);
   const [previewVisible, setPreviewVisible] = useState(false);
   const [splitMode, setSplitModeState] = useState(false);
+  const [projectPath, setProjectPath] = useState<string | null>(null);
 
-  const createTab = useCallback((title = 'Untitled', content = '', language?: Language, filePath?: string, group: 1 | 2 = 1) => {
+  const createTab = useCallback((title = 'Untitled', content = '', language?: Language, filePath?: string, group: 1 | 2 = 1, encoding: Encoding = 'UTF-8') => {
     const lang = language || getLanguageFromFileName(title);
     const actualContent = content || getDefaultContent(lang);
     const newTab: EditorTab = {
@@ -83,7 +84,7 @@ export function useEditorStore() {
       language: lang,
       isDirty: false,
       filePath,
-      encoding: 'UTF-8',
+      encoding,
       group,
     };
     setTabs((prev) => [...prev, newTab]);
@@ -100,6 +101,7 @@ export function useEditorStore() {
     setTabs((prev) =>
       prev.map((tab) => {
         if (tab.id !== tabId) return tab;
+        if (tab.content === content) return tab;
         let newTitle = tab.title;
         if (!tab.filePath) {
           const firstLine = content.split('\n').find((line) => line.trim())?.trim() || '';
@@ -153,30 +155,33 @@ export function useEditorStore() {
 
   const closeTabs = useCallback((idsToClose: string[]) => {
     if (idsToClose.length === 0) return;
-    const newTabs = tabs.filter((t) => !idsToClose.includes(t.id));
-    setTabs(newTabs);
+    setTabs((prev) => {
+      const newTabs = prev.filter((t) => !idsToClose.includes(t.id));
 
-    const g1Tabs = newTabs.filter((t) => t.group === 1 || !t.group);
-    const g2Tabs = newTabs.filter((t) => t.group === 2);
+      const g1Tabs = newTabs.filter((t) => t.group === 1 || !t.group);
+      const g2Tabs = newTabs.filter((t) => t.group === 2);
 
-    setActiveGroup1TabId((current) => {
-      if (current && !idsToClose.includes(current)) return current;
-      return g1Tabs[g1Tabs.length - 1]?.id || null;
-    });
-    setActiveGroup2TabId((current) => {
-      if (current && !idsToClose.includes(current)) return current;
-      return g2Tabs[g2Tabs.length - 1]?.id || null;
-    });
-    setActiveTabId((current) => {
-      if (current && !idsToClose.includes(current)) return current;
-      if (g2Tabs.length > 0) return g2Tabs[g2Tabs.length - 1].id;
-      return g1Tabs[g1Tabs.length - 1]?.id || null;
-    });
+      setActiveGroup1TabId((current) => {
+        if (current && !idsToClose.includes(current)) return current;
+        return g1Tabs[g1Tabs.length - 1]?.id || null;
+      });
+      setActiveGroup2TabId((current) => {
+        if (current && !idsToClose.includes(current)) return current;
+        return g2Tabs[g2Tabs.length - 1]?.id || null;
+      });
+      setActiveTabId((current) => {
+        if (current && !idsToClose.includes(current)) return current;
+        if (g2Tabs.length > 0) return g2Tabs[g2Tabs.length - 1].id;
+        return g1Tabs[g1Tabs.length - 1]?.id || null;
+      });
 
-    if (newTabs.length < 2) {
-      setSplitModeState(false);
-    }
-  }, [tabs]);
+      if (newTabs.length < 2) {
+        setSplitModeState(false);
+      }
+
+      return newTabs;
+    });
+  }, []);
 
   const closeAllTabs = useCallback(() => {
     setTabs([]);
@@ -207,6 +212,7 @@ export function useEditorStore() {
   }, []);
 
   const setTabEncoding = useCallback((tabId: string, encoding: Encoding) => {
+    console.log('[Store] setTabEncoding called:', tabId, encoding);
     setTabs((prev) =>
       prev.map((tab) =>
         tab.id === tabId ? { ...tab, encoding } : tab
@@ -303,5 +309,7 @@ export function useEditorStore() {
     closeAllTabs,
     markTabSaved,
     renameTab,
+    projectPath,
+    setProjectPath,
   };
 }

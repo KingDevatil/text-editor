@@ -12,6 +12,7 @@ export interface EditorTab {
 export type Encoding =
   | 'UTF-8'
   | 'UTF-8 BOM'
+  | 'ANSI'
   | 'GBK'
   | 'GB2312'
   | 'GB18030'
@@ -21,14 +22,10 @@ export type Encoding =
   | 'ISO-8859-1'
   | 'Windows-1252';
 
-export interface EditorState {
-  tabs: EditorTab[];
-  activeTabId: string | null;
-  theme: 'vs' | 'vs-dark' | 'hc-black';
-  sidebarVisible: boolean;
-  sidebarWidth: number;
-  splitView: boolean;
-  splitTabId: string | null;
+export interface DirEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
 }
 
 export type Language =

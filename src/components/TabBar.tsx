@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { confirm } from '@tauri-apps/plugin-dialog';
 import type { EditorTab } from '../types';
 
 interface TabBarProps {
@@ -84,19 +85,36 @@ const TabBar: React.FC<TabBarProps> = ({
       clearTimeout(clickTimer.current);
       clickTimer.current = null;
     }
+    const tab = tabs.find((t) => t.id === tabId);
+    if (tab?.isDirty) {
+      if (!window.confirm(`"${tab.title}" 有未保存的更改，确定要关闭吗？`)) {
+        return;
+      }
+    }
     onTabClose(tabId);
-  }, [onTabClose]);
+  }, [onTabClose, tabs]);
 
   const handleTabClick = useCallback((tabId: string, group: 1 | 2) => {
     if (clickTimer.current) {
       clearTimeout(clickTimer.current);
       clickTimer.current = null;
+      handleTabDoubleClick(tabId);
+      return;
     }
     clickTimer.current = setTimeout(() => {
       clickTimer.current = null;
       handleTabActivate(tabId, group);
     }, 200);
-  }, [handleTabActivate]);
+  }, [handleTabActivate, handleTabDoubleClick]);
+
+  useEffect(() => {
+    return () => {
+      if (clickTimer.current) {
+        clearTimeout(clickTimer.current);
+        clickTimer.current = null;
+      }
+    };
+  }, []);
 
   const handleBlankDoubleClick = useCallback((group: 1 | 2) => {
     onNewFileInGroup?.(group);
@@ -143,10 +161,23 @@ const TabBar: React.FC<TabBarProps> = ({
 
   const handleMenuClose = useCallback(() => {
     if (contextMenu) {
+      const tab = tabs.find((t) => t.id === contextMenu.tabId);
+      if (tab?.isDirty) {
+        confirm(`"${tab.title}" 有未保存的更改，确定要关闭吗？`, { title: '未保存的更改' }).then((ok) => {
+          if (ok) {
+            onTabClose(contextMenu.tabId);
+          }
+          closeContextMenu();
+        }).catch(() => {
+          onTabClose(contextMenu.tabId);
+          closeContextMenu();
+        });
+        return;
+      }
       onTabClose(contextMenu.tabId);
       closeContextMenu();
     }
-  }, [contextMenu, onTabClose, closeContextMenu]);
+  }, [contextMenu, onTabClose, closeContextMenu, tabs]);
 
   const handleMenuCloseOthers = useCallback(() => {
     if (!contextMenu || !onCloseTabs) return;
@@ -154,6 +185,17 @@ const TabBar: React.FC<TabBarProps> = ({
       ? tabs.filter((t) => t.group === 1 || !t.group)
       : tabs.filter((t) => t.group === 2);
     const idsToClose = groupTabs.filter((t) => t.id !== contextMenu.tabId).map((t) => t.id);
+    const hasDirty = idsToClose.some((id) => tabs.find((t) => t.id === id)?.isDirty);
+    if (hasDirty) {
+      confirm('要关闭的页签中有未保存的更改，确定关闭吗？', { title: '未保存的更改' }).then((ok) => {
+        if (ok && idsToClose.length > 0) onCloseTabs(idsToClose);
+        closeContextMenu();
+      }).catch(() => {
+        if (idsToClose.length > 0) onCloseTabs(idsToClose);
+        closeContextMenu();
+      });
+      return;
+    }
     if (idsToClose.length > 0) {
       onCloseTabs(idsToClose);
     }
@@ -168,6 +210,17 @@ const TabBar: React.FC<TabBarProps> = ({
     const index = groupTabs.findIndex((t) => t.id === contextMenu.tabId);
     if (index > 0) {
       const idsToClose = groupTabs.slice(0, index).map((t) => t.id);
+      const hasDirty = idsToClose.some((id) => tabs.find((t) => t.id === id)?.isDirty);
+      if (hasDirty) {
+        confirm('要关闭的页签中有未保存的更改，确定关闭吗？', { title: '未保存的更改' }).then((ok) => {
+          if (ok) onCloseTabs(idsToClose);
+          closeContextMenu();
+        }).catch(() => {
+          onCloseTabs(idsToClose);
+          closeContextMenu();
+        });
+        return;
+      }
       onCloseTabs(idsToClose);
     }
     closeContextMenu();
@@ -181,6 +234,17 @@ const TabBar: React.FC<TabBarProps> = ({
     const index = groupTabs.findIndex((t) => t.id === contextMenu.tabId);
     if (index >= 0 && index < groupTabs.length - 1) {
       const idsToClose = groupTabs.slice(index + 1).map((t) => t.id);
+      const hasDirty = idsToClose.some((id) => tabs.find((t) => t.id === id)?.isDirty);
+      if (hasDirty) {
+        confirm('要关闭的页签中有未保存的更改，确定关闭吗？', { title: '未保存的更改' }).then((ok) => {
+          if (ok) onCloseTabs(idsToClose);
+          closeContextMenu();
+        }).catch(() => {
+          onCloseTabs(idsToClose);
+          closeContextMenu();
+        });
+        return;
+      }
       onCloseTabs(idsToClose);
     }
     closeContextMenu();
@@ -215,10 +279,6 @@ const TabBar: React.FC<TabBarProps> = ({
         onDragStart={(e) => handleDragStart(e, tab.id)}
         onClick={() => handleTabClick(tab.id, group)}
         onContextMenu={(e) => handleContextMenu(e, tab.id, group)}
-        onDoubleClick={(e) => {
-          e.stopPropagation();
-          handleTabDoubleClick(tab.id);
-        }}
         className={`
           group relative flex items-center gap-2 px-3.5 min-w-[120px] max-w-[220px] cursor-pointer select-none flex-shrink-0
           text-sm transition-all duration-100
@@ -246,6 +306,12 @@ const TabBar: React.FC<TabBarProps> = ({
         <button
           onClick={(e) => {
             e.stopPropagation();
+            if (isDirty) {
+              confirm(`"${tab.title}" 有未保存的更改，确定要关闭吗？`, { title: '未保存的更改' }).then((ok) => {
+                if (ok) onTabClose(tab.id);
+              }).catch(() => onTabClose(tab.id));
+              return;
+            }
             onTabClose(tab.id);
           }}
           className={`

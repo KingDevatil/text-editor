@@ -12,6 +12,7 @@ interface StatusBarProps {
 const ENCODINGS: Encoding[] = [
   'UTF-8',
   'UTF-8 BOM',
+  'ANSI',
   'GBK',
   'GB2312',
   'GB18030',
@@ -60,7 +61,7 @@ const StatusBar: React.FC<StatusBarProps> = ({ activeTab, theme, onEncodingChang
   const lineCount = activeTab ? activeTab.content.split('\n').length : 0;
   const charCount = activeTab ? activeTab.content.length : 0;
   const wordCount = activeTab
-    ? activeTab.content.split(/\s+/).filter((w) => w.length > 0).length
+    ? (activeTab.content.match(/[\u4e00-\u9fa5]|\S+/g)?.filter((w) => w.trim()).length || 0)
     : 0;
 
   const isDark = theme === 'vs-dark' || theme === 'hc-black';
