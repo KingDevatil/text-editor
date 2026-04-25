@@ -22,6 +22,8 @@ mod ffi_export;
 /// Uses isize for HWND to be Send + Sync safe
 pub struct AppEditorState {
     pub wgpu_context: Option<render::wgpu_context::WgpuContext>,
+    pub text_atlas: Option<render::text_atlas::TextAtlas>,
+    pub editor_state: editor::editor_state::EditorState,
     #[cfg(windows)]
     pub win32_window: Option<platform::win32::window::Win32EditorWindow>,
     #[cfg(target_os = "macos")]
@@ -32,6 +34,8 @@ impl Default for AppEditorState {
     fn default() -> Self {
         Self {
             wgpu_context: None,
+            text_atlas: None,
+            editor_state: editor::editor_state::EditorState::new(),
             #[cfg(windows)]
             win32_window: None,
             #[cfg(target_os = "macos")]
@@ -217,15 +221,29 @@ pub fn run() {
                     let editor = Win32EditorWindow::new(parent_hwnd, 0, 0, 1, 1).unwrap();
                     let wrapper = Win32WindowWrapper::new(editor.hwnd());
 
-                    let wgpu = tauri::async_runtime::block_on(async {
+                    // Render first line of text (with CJK) using cosmic-text on CPU
+                    let mut text_atlas = render::text_atlas::TextAtlas::new(800, 600);
+                    let editor_state = editor::editor_state::EditorState::from_text("Hello 世界");
+                    text_atlas.render_text(&editor_state.get_text(), 24.0);
+
+                    let mut wgpu = tauri::async_runtime::block_on(async {
                         render::wgpu_context::WgpuContext::new(&wrapper, 800, 600).await
                     });
+
+                    // Upload CPU-rendered text to GPU texture
+                    wgpu.update_text_texture(
+                        &text_atlas.cpu_buffer,
+                        text_atlas.width,
+                        text_atlas.height,
+                    );
 
                     let state = app.state::<Arc<Mutex<AppEditorState>>>();
                     {
                         let mut s = state.inner().lock().unwrap();
                         s.win32_window = Some(editor);
                         s.wgpu_context = Some(wgpu);
+                        s.text_atlas = Some(text_atlas);
+                        s.editor_state = editor_state;
                     }
 
                     // Start render loop (60fps)
@@ -252,6 +270,7 @@ pub fn run() {
             ffi_export::native_editor_resize,
             ffi_export::native_editor_load_text,
             ffi_export::native_editor_get_text,
+            ffi_export::native_editor_key_event,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

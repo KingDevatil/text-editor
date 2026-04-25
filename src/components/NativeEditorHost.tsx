@@ -60,6 +60,47 @@ const NativeEditorHost: React.FC<NativeEditorHostProps> = ({
     }
   }, [content, tabId]);
 
+  // Forward keyboard events to native editor
+  useEffect(() => {
+    if (!isTauri()) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if focus is in an input/textarea/contenteditable
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      // Let UI shortcuts (Ctrl+/Meta+) pass through to frontend
+      if (e.ctrlKey || e.metaKey) {
+        return;
+      }
+
+      // Prevent default for editor navigation keys
+      if (
+        ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Backspace', 'Delete', 'Enter', 'Home', 'End', 'Tab'].includes(e.key)
+      ) {
+        e.preventDefault();
+      }
+
+      invoke('native_editor_key_event', {
+        key: e.key,
+        code: e.code,
+        ctrl: e.ctrlKey,
+        shift: e.shiftKey,
+        alt: e.altKey,
+        meta: e.metaKey,
+      }).catch(() => {});
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Update theme
   useEffect(() => {
     if (theme === themeRef.current) return;

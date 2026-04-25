@@ -2,20 +2,22 @@
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Cursor {
-    pub pos: usize,     // character index
-    pub line: usize,
-    pub col: usize,
+    pub pos: usize,        // character index in buffer
+    pub line: usize,       // line index
+    pub col: usize,        // column (char index within line)
+    pub target_col: usize, // preferred column for vertical movement
 }
 
 impl Cursor {
     pub fn new() -> Self {
-        Self { pos: 0, line: 0, col: 0 }
+        Self { pos: 0, line: 0, col: 0, target_col: 0 }
     }
 
     pub fn set_pos(&mut self, pos: usize, line: usize, col: usize) {
         self.pos = pos;
         self.line = line;
         self.col = col;
+        self.target_col = col;
     }
 }
 

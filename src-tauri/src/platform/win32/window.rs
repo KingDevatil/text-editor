@@ -7,7 +7,7 @@ use raw_window_handle::{
 };
 use std::num::NonZeroIsize;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::Graphics::Gdi::{ValidateRect, HBRUSH, COLOR_WINDOW};
+use windows::Win32::Graphics::Gdi::ValidateRect;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
@@ -57,7 +57,7 @@ impl Win32EditorWindow {
                 hInstance: hinstance.into(),
                 lpszClassName: windows::core::PCWSTR(class_name.as_ptr()),
                 lpfnWndProc: Some(editor_wndproc),
-                hbrBackground: HBRUSH((COLOR_WINDOW.0 + 1) as _),
+                hbrBackground: windows::Win32::Graphics::Gdi::HBRUSH(std::ptr::null_mut()),
                 ..Default::default()
             };
             RegisterClassW(&wc);
@@ -87,7 +87,13 @@ impl Win32EditorWindow {
 
     pub fn show(&self) {
         unsafe {
-            let _ = ShowWindow(HWND(self.hwnd as _), SW_SHOW);
+            // Bring to top of z-order and show
+            let _ = SetWindowPos(
+                HWND(self.hwnd as _),
+                HWND(std::ptr::null_mut()), // HWND_TOP
+                0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
+            );
         }
     }
 
@@ -99,14 +105,15 @@ impl Win32EditorWindow {
 
     pub fn resize(&self, x: i32, y: i32, width: i32, height: i32) {
         unsafe {
-            SetWindowPos(
+            // Use HWND_TOP to ensure window stays above WebView2 sibling
+            let _ = SetWindowPos(
                 HWND(self.hwnd as _),
-                HWND(std::ptr::null_mut()),
+                HWND(std::ptr::null_mut()), // HWND_TOP
                 x,
                 y,
                 width.max(1),
                 height.max(1),
-                SWP_NOZORDER | SWP_NOACTIVATE,
+                SWP_NOACTIVATE,
             );
         }
     }
@@ -116,9 +123,13 @@ extern "system" fn editor_wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     match msg {
         WM_PAINT => {
             unsafe {
-                ValidateRect(hwnd, None);
+                let _ = ValidateRect(hwnd, None);
             }
             LRESULT(0)
+        }
+        WM_MOUSEACTIVATE => {
+            // Keep focus on parent window (WebView) so frontend receives keyboard events
+            LRESULT(windows::Win32::UI::WindowsAndMessaging::MA_NOACTIVATE as isize)
         }
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
     }
