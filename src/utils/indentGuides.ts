@@ -39,23 +39,23 @@ export const indentGuides = [
           const line = view.state.doc.lineAt(pos);
           const text = line.text;
 
-          // Count leading whitespace (tabs count as tabSize visually)
-          let indentChars = 0;
+          let visualCol = 0;
           for (let i = 0; i < text.length; i++) {
             const ch = text[i];
             if (ch === ' ') {
-              indentChars++;
+              visualCol++;
             } else if (ch === '\t') {
-              indentChars += tabSize;
+              // Tab advances to the next multiple of tabSize
+              visualCol += tabSize - (visualCol % tabSize);
             } else {
               break;
             }
-          }
 
-          // Mark every tabSize-th whitespace char with a right border
-          for (let i = tabSize; i <= indentChars; i += tabSize) {
-            const deco = Decoration.mark({ class: 'cm-indent-guide' });
-            builder.add(line.from + i - 1, line.from + i, deco);
+            // Add a guide on the character that completes this indent level
+            if (visualCol > 0 && visualCol % tabSize === 0) {
+              const deco = Decoration.mark({ class: 'cm-indent-guide' });
+              builder.add(line.from + i, line.from + i + 1, deco);
+            }
           }
 
           pos = line.to + 1;

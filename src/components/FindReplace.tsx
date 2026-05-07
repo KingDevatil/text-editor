@@ -1,18 +1,31 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ChevronDown, ChevronUp, X, Replace, ReplaceAll, ChevronRight, ChevronLeft } from 'lucide-react';
-import { SearchCursor } from '@codemirror/search';
+import { ChevronDown, ChevronUp, X, Replace, ReplaceAll, ChevronRight, ChevronLeft, Wand2 } from 'lucide-react';
+import { SearchCursor, RegExpCursor } from '@codemirror/search';
 import type { Text } from '@codemirror/state';
 import { useEditorStore } from '../hooks/useEditorStore';
 import { getActiveView } from '../hooks/useEditorStatePool';
+import RegexBuilderModal from './RegexBuilderModal';
 
 /** Maximum characters to scan for match counting (prevents UI freeze on large files). */
 const MAX_SCAN_CHARS = 200_000;
 /** Debounce delay for match counting (ms). */
 const SCAN_DEBOUNCE_MS = 200;
 
-/** Returns a normalize function for case-insensitive search, or undefined for case-sensitive. */
+  /** Returns a normalize function for case-insensitive search, or undefined for case-sensitive. */
 function getSearchNormalize(caseSensitive: boolean): ((s: string) => string) | undefined {
   return caseSensitive ? undefined : (s: string) => s.toLowerCase();
+}
+
+/** Create a search cursor based on regex mode. */
+function createSearchCursor(doc: Text, query: string, from: number, to: number, caseSensitive: boolean, regexMode: boolean) {
+  if (regexMode) {
+    try {
+      return new RegExpCursor(doc, query, { ignoreCase: !caseSensitive }, from, to);
+    } catch {
+      return null;
+    }
+  }
+  return new SearchCursor(doc, query, from, to, getSearchNormalize(caseSensitive));
 }
 
 interface FindReplaceProps {
@@ -25,6 +38,8 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
   const [replaceText, setReplaceText] = useState('');
   const [showReplace, setShowReplace] = useState(true);
   const [caseSensitive, setCaseSensitive] = useState(false);
+  const [regexMode, setRegexMode] = useState(false);
+  const [regexBuilderOpen, setRegexBuilderOpen] = useState(false);
   const [matchCount, setMatchCount] = useState(0);
   const [currentMatch, setCurrentMatch] = useState(0);
   const findInputRef = useRef<HTMLInputElement>(null);
@@ -68,9 +83,11 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
       const doc = view.state.doc;
       const scanTo = Math.min(doc.length, MAX_SCAN_CHARS);
       let count = 0;
-      const cursor = new SearchCursor(doc, findText, 0, scanTo, getSearchNormalize(caseSensitive));
-      while (!cursor.next().done) {
-        count++;
+      const cursor = createSearchCursor(doc, findText, 0, scanTo, caseSensitive, regexMode);
+      if (cursor) {
+        while (!cursor.next().done) {
+          count++;
+        }
       }
       const capped = doc.length > MAX_SCAN_CHARS;
       setMatchCount(capped ? -count : count); // negative = "count+" display
@@ -78,7 +95,7 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
     }, SCAN_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [findText, caseSensitive, activeTabId]);
+  }, [findText, caseSensitive, regexMode, activeTabId]);
 
   const getView = useCallback(() => {
     return activeTabId ? getActiveView(activeTabId) : undefined;
@@ -88,13 +105,14 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
   const getMatchIndex = useCallback(
     (doc: Text, pos: number) => {
       let idx = 0;
-      const cursor = new SearchCursor(doc, findText, 0, doc.length, getSearchNormalize(caseSensitive));
+      const cursor = createSearchCursor(doc, findText, 0, doc.length, caseSensitive, regexMode);
+      if (!cursor) return 0;
       while (!cursor.next().done && cursor.value.from < pos) {
         idx++;
       }
       return idx + 1;
     },
-    [findText, caseSensitive]
+    [findText, caseSensitive, regexMode]
   );
 
   const findNext = useCallback(() => {
@@ -102,13 +120,8 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
     if (!view || !findText) return;
 
     const { state } = view;
-    const cursor = new SearchCursor(
-      state.doc,
-      findText,
-      state.selection.main.to,
-      state.doc.length,
-      getSearchNormalize(caseSensitive)
-    );
+    const cursor = createSearchCursor(state.doc, findText, state.selection.main.to, state.doc.length, caseSensitive, regexMode);
+    if (!cursor) return;
     const result = cursor.next();
     if (!result.done) {
       view.dispatch({
@@ -118,7 +131,8 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
       setCurrentMatch(getMatchIndex(state.doc, result.value.from));
     } else {
       // Wrap around to beginning
-      const wrapCursor = new SearchCursor(state.doc, findText, 0, state.doc.length, getSearchNormalize(caseSensitive));
+      const wrapCursor = createSearchCursor(state.doc, findText, 0, state.doc.length, caseSensitive, regexMode);
+      if (!wrapCursor) return;
       const wrapResult = wrapCursor.next();
       if (!wrapResult.done) {
         view.dispatch({
@@ -128,7 +142,7 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
         setCurrentMatch(getMatchIndex(state.doc, wrapResult.value.from));
       }
     }
-  }, [getView, findText, caseSensitive, getMatchIndex]);
+  }, [getView, findText, caseSensitive, regexMode, getMatchIndex]);
 
   const findPrevious = useCallback(() => {
     const view = getView();
@@ -138,7 +152,8 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
     const from = state.selection.main.from;
 
     // Search from beginning to current position to find all matches before cursor
-    const cursor = new SearchCursor(state.doc, findText, 0, from, getSearchNormalize(caseSensitive));
+    const cursor = createSearchCursor(state.doc, findText, 0, from, caseSensitive, regexMode);
+    if (!cursor) return;
     let lastMatch: { from: number; to: number } | null = null;
     while (!cursor.next().done) {
       lastMatch = cursor.value;
@@ -152,7 +167,8 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
       setCurrentMatch(getMatchIndex(state.doc, lastMatch.from));
     } else {
       // Wrap around to end
-      const wrapCursor = new SearchCursor(state.doc, findText, 0, state.doc.length, getSearchNormalize(caseSensitive));
+      const wrapCursor = createSearchCursor(state.doc, findText, 0, state.doc.length, caseSensitive, regexMode);
+      if (!wrapCursor) return;
       let finalMatch: { from: number; to: number } | null = null;
       while (!wrapCursor.next().done) {
         finalMatch = wrapCursor.value;
@@ -165,7 +181,7 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
         setCurrentMatch(getMatchIndex(state.doc, finalMatch.from));
       }
     }
-  }, [getView, findText, caseSensitive, getMatchIndex]);
+  }, [getView, findText, caseSensitive, regexMode, getMatchIndex]);
 
   const handleReplace = useCallback(() => {
     const view = getView();
@@ -176,9 +192,20 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
 
     // Check if current selection matches
     const selectedText = state.doc.sliceString(sel.from, sel.to);
-    const matches = caseSensitive
-      ? selectedText === findText
-      : selectedText.toLowerCase() === findText.toLowerCase();
+    let matches: boolean;
+    if (regexMode) {
+      try {
+        const re = new RegExp(findText, caseSensitive ? '' : 'i');
+        const matchResult = selectedText.match(re);
+        matches = matchResult !== null && matchResult[0] === selectedText;
+      } catch {
+        matches = false;
+      }
+    } else {
+      matches = caseSensitive
+        ? selectedText === findText
+        : selectedText.toLowerCase() === findText.toLowerCase();
+    }
 
     if (matches && sel.from !== sel.to) {
       view.dispatch({
@@ -190,7 +217,7 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
     } else {
       findNext();
     }
-  }, [getView, findText, replaceText, caseSensitive, findNext]);
+  }, [getView, findText, replaceText, caseSensitive, regexMode, findNext]);
 
   const handleReplaceAll = useCallback(() => {
     const view = getView();
@@ -199,7 +226,8 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
     const { state } = view;
     const changes: { from: number; to: number; insert: string }[] = [];
 
-    const cursor = new SearchCursor(state.doc, findText, 0, state.doc.length, getSearchNormalize(caseSensitive));
+    const cursor = createSearchCursor(state.doc, findText, 0, state.doc.length, caseSensitive, regexMode);
+    if (!cursor) return;
     while (!cursor.next().done) {
       changes.push({ from: cursor.value.from, to: cursor.value.to, insert: replaceText });
     }
@@ -214,7 +242,7 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
     });
     setMatchCount(0);
     setCurrentMatch(0);
-  }, [getView, findText, replaceText, caseSensitive]);
+  }, [getView, findText, replaceText, caseSensitive, regexMode]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -336,8 +364,46 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
           />
           <span>区分大小写</span>
         </label>
+        <label className="flex items-center gap-1.5 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={regexMode}
+            onChange={(e) => {
+              setRegexMode(e.target.checked);
+              if (e.target.checked) {
+                setRegexBuilderOpen(true);
+              }
+            }}
+            className="rounded border-[var(--te-border)] text-[var(--te-primary)] focus:ring-[var(--te-primary)]"
+          />
+          <span>正则模式</span>
+        </label>
+        {regexMode && (
+          <button
+            onClick={() => setRegexBuilderOpen(true)}
+            className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md border transition-colors hover:bg-[var(--te-bg-primary)]"
+            style={{
+              borderColor: 'var(--te-border)',
+              color: 'var(--te-primary)',
+            }}
+            title="打开可视化正则构建器"
+          >
+            <Wand2 size={10} />
+            编辑正则
+          </button>
+        )}
         <span className="text-[var(--te-text-secondary)]">Enter: 下一个, Shift+Enter: 上一个, Esc: 关闭</span>
       </div>
+
+      <RegexBuilderModal
+        open={regexBuilderOpen}
+        onClose={() => setRegexBuilderOpen(false)}
+        onConfirm={(regex) => {
+          setFindText(regex);
+          setRegexBuilderOpen(false);
+        }}
+        initialValue={findText}
+      />
     </div>
   );
 };

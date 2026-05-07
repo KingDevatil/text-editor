@@ -1,6 +1,6 @@
 [package]
 name = "text-editor"
-version = "1.0.0"
+version = "1.1.0"
 description = "A multi-functional text editor built with Tauri"
 authors = ["you"]
 edition = "2021"

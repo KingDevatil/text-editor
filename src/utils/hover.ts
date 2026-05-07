@@ -5,12 +5,77 @@ import type { EditorView } from '@codemirror/view';
  * Lightweight hover tooltip showing the word/token under cursor.
  * For JSON, also shows the path to the hovered key/value.
  */
+/** Check if token is a hex color value and return normalized hex if valid. */
+function detectHexColor(token: string): string | null {
+  const match = token.match(/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/);
+  if (!match) return null;
+
+  const hex = match[1];
+  // Normalize short hex to 6-digit
+  if (hex.length === 3) {
+    return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`;
+  }
+  if (hex.length === 4) {
+    return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+  }
+  return token.toLowerCase();
+}
+
 function buildTooltip(view: EditorView, pos: number): Tooltip | null {
   const word = view.state.wordAt(pos);
   if (!word || word.from === word.to) return null;
 
-  const token = view.state.doc.sliceString(word.from, word.to);
+  let token = view.state.doc.sliceString(word.from, word.to);
+  let startPos = word.from;
+  let endPos = word.to;
   const line = view.state.doc.lineAt(pos);
+
+  // Expand token to include leading # for hex colors (e.g., #ffea00)
+  if (/^[0-9a-fA-F]+$/.test(token) && word.from > line.from) {
+    const charBefore = view.state.doc.sliceString(word.from - 1, word.from);
+    if (charBefore === '#') {
+      startPos = word.from - 1;
+      token = '#' + token;
+    }
+  }
+
+  // Also handle cursor directly on the # character
+  const charAtPos = view.state.doc.sliceString(pos, pos + 1);
+  if (charAtPos === '#') {
+    let hexEnd = pos + 1;
+    while (hexEnd < line.to && /[0-9a-fA-F]/.test(view.state.doc.sliceString(hexEnd, hexEnd + 1))) {
+      hexEnd++;
+    }
+    if (hexEnd > pos + 1) {
+      startPos = pos;
+      endPos = hexEnd;
+      token = view.state.doc.sliceString(startPos, endPos);
+    }
+  }
+
+  // Check for hex color values first
+  const hexColor = detectHexColor(token);
+  if (hexColor) {
+    return {
+      pos: startPos,
+      end: endPos,
+      above: true,
+      create() {
+        const dom = document.createElement('div');
+        dom.className = 'cm-hover-tooltip';
+        dom.innerHTML = `
+          <div class="flex items-center gap-2">
+            <div style="width: 24px; height: 24px; border-radius: 4px; background-color: ${hexColor}; border: 1px solid rgba(128,128,128,0.3);"></div>
+            <div>
+              <div class="font-mono text-xs">${escapeHtml(token)}</div>
+              <div class="text-[10px] opacity-60">color</div>
+            </div>
+          </div>
+        `;
+        return { dom };
+      },
+    };
+  }
 
   // Simple type inference for display
   let typeLabel = 'identifier';

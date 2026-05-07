@@ -136,3 +136,36 @@ export const EXT_TO_LANGUAGE: Record<string, Language> = {
   bash: 'shell',
   zsh: 'shell',
 };
+
+export type RegexConditionType =
+  | 'literal'
+  | 'digit'
+  | 'letter'
+  | 'word'
+  | 'space'
+  | 'any'
+  | 'lineStart'
+  | 'lineEnd'
+  | 'wordBoundary'
+  | 'customSet'
+  | 'group'
+  | 'or';
+
+export type RegexQuantifier =
+  | 'exactly-one'
+  | 'zero-or-one'
+  | 'zero-or-more'
+  | 'one-or-more'
+  | 'exactly-n'
+  | 'range'
+  | 'at-least-n';
+
+export interface RegexCondition {
+  id: string;
+  type: RegexConditionType;
+  value?: string;
+  quantifier: RegexQuantifier;
+  quantifierValue?: { n?: number; m?: number };
+  capture?: boolean;
+  children?: RegexCondition[];
+}

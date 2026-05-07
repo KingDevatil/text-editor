@@ -12,10 +12,12 @@
 - **CodeMirror 6 内核**：轻量、极速启动，支持超大文件流畅编辑
 - **30+ 语言高亮**：JavaScript、TypeScript、HTML、CSS、JSON、Python、Java、C/C++、C#、Rust、Go、Markdown、YAML、XML、SQL、Shell、INI、Log、Vue、Svelte、Kotlin、Swift、Ruby、PHP、Lua 等
 - **多光标编辑**：支持 `Ctrl+D` 选中下一个匹配项、`Ctrl+Shift+L` 选中所有匹配项
-- **查找替换**：支持大小写敏感、循环搜索、全部替换
+- **查找替换**：支持大小写敏感、**正则表达式可视化构建**、循环搜索、全部替换
 - **代码格式化**：支持 JSON、XML、HTML、CSS、JavaScript、TypeScript、SQL
 - **转到定义**：同文件内符号跳转（`F12`）
 - **大文件优化**：自动关闭折叠、括号匹配等重扩展，保障大文件流畅度
+- **智能悬浮提示**：鼠标悬停显示 token 类型，**悬停十六进制颜色值时显示实时颜色预览**
+- **缩进引导线**：直观显示代码缩进层级
 
 ### 主题系统
 - **Light / Dark / Custom 三主题**：一键循环切换
@@ -78,7 +80,7 @@ npm run tauri-build
 
 | 平台 | 路径 |
 |------|------|
-| Windows | `src-tauri/target/release/bundle/nsis/Text Editor_1.0.0_x64-setup.exe` |
+| Windows | `src-tauri/target/release/bundle/nsis/Text Editor_1.1.0_x64-setup.exe` |
 
 ---
 
@@ -128,7 +130,7 @@ npm run tauri-build
 
 | 类型 | 路径 |
 |------|------|
-| DMG 安装包 | `src-tauri/target/release/bundle/dmg/Text Editor_1.0.0_x64.dmg` |
+| DMG 安装包 | `src-tauri/target/release/bundle/dmg/Text Editor_1.1.0_x64.dmg` |
 | APP 应用包 | `src-tauri/target/release/bundle/macos/Text Editor.app` |
 
 ##### 5. 常见问题
@@ -172,8 +174,8 @@ A: 若需分发给其他 Mac 用户，建议配置 Apple Developer 签名：
 项目已配置 GitHub Actions，推送 `v*` 标签时自动在 macOS runner 上构建并发布 Release。
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
 也可以手动在 **Actions → Release → Run workflow** 触发。
@@ -195,6 +197,22 @@ git push origin v1.0.0
 | `F12` | 转到定义 |
 | `Ctrl + Shift + V` | Markdown 阅读模式 |
 | `鼠标拖拽标签` | 同组内排序 / 跨组移动（分屏） |
+
+---
+
+## 📋 更新日志
+
+### v1.1.0
+
+**新功能**
+- **可视化正则构建器**：查找替换面板新增"正则模式"，通过积木式 UI 拼装正则条件，无需手写正则语法。支持精确文本、数字、字母、空白字符、任意字符、分组、或逻辑等条件，内置邮箱、URL、IP 地址、日期、手机号等 7 个常用模板
+- **十六进制颜色悬浮预览**：鼠标悬停在 `#RRGGBB` / `#RGB` / `#RGBA` 等颜色值上时，提示框中显示实时颜色方块预览
+- **缩进引导线修复**：修正了制表符与空格混用时引导线位置偏移的问题，引导线现在精确对齐每个缩进层级
+
+**改进**
+- 查找替换支持正则表达式搜索（基于 CodeMirror RegExpCursor）
+- 正则构建器弹窗支持主题外观自适应（Light / Dark / Custom）
+- 主题系统 CSS 变量覆盖全部弹窗组件
 
 ---
 
