@@ -33,6 +33,8 @@ import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 import Minimap from './Minimap';
 import { useEditorStore } from '../hooks/useEditorStore';
 import { goToDefinition } from '../utils/cmCommands';
+import { executeMarkdownAction } from '../utils/markdownActions';
+import MarkdownToolbar from './MarkdownToolbar';
 
 interface CmEditorProps {
   tabId: string;
@@ -440,7 +442,10 @@ function buildBaseExtensions(
     languageCompartment.of(getLanguageExtensionsSync(lang)),
     themeCompartment.of(buildDynamicTheme(colors, isDark)),
     fontSizeCompartment.of(
-      EditorView.theme({ '.cm-content': { fontSize: `${fontSize}px` } })
+      EditorView.theme({
+        '.cm-content': { fontSize: `${fontSize}px` },
+        '.cm-gutters': { fontSize: `${fontSize}px` },
+      })
     ),
     readOnlyCompartment.of(EditorView.editable.of(!readOnly)),
     wordWrapCompartment.of(wordWrap ? EditorView.lineWrapping : []),
@@ -449,7 +454,7 @@ function buildBaseExtensions(
 
   exts.push(
     largeFileCompartment.of(
-      largeFileOptimize ? [] : [foldGutter(), keymap.of(foldKeymap)]
+      largeFileOptimize ? [] : [foldGutter({ openText: '▼', closedText: '▶' }), keymap.of(foldKeymap)]
     )
   );
 
@@ -668,7 +673,10 @@ const CmEditor: React.FC<CmEditorProps> = ({
     // Also update compartment so the state stays consistent
     view.dispatch({
       effects: fontSizeCompartment.reconfigure(
-        EditorView.theme({ '.cm-content': { fontSize: `${fontSize}px` } })
+        EditorView.theme({
+          '.cm-content': { fontSize: `${fontSize}px` },
+          '.cm-gutters': { fontSize: `${fontSize}px` },
+        })
       ),
     });
     setEditorState(tabId, view.state);
@@ -710,7 +718,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
     if (!view) return;
     view.dispatch({
       effects: largeFileCompartment.reconfigure(
-        largeFileOptimize ? [] : [foldGutter(), keymap.of(foldKeymap)]
+        largeFileOptimize ? [] : [foldGutter({ openText: '▼', closedText: '▶' }), keymap.of(foldKeymap)]
       ),
     });
     setEditorState(tabId, view.state);
@@ -934,22 +942,32 @@ const CmEditor: React.FC<CmEditorProps> = ({
   }, [handleContextMenu]);
 
   return (
-    <div className={`flex w-full h-full overflow-hidden ${minimapVisible ? 'hide-scrollbar' : ''}`}>
-      <div
-        ref={containerRef}
-        className="flex-1 h-full overflow-hidden"
-        style={{ fontFamily: '"JetBrains Mono", "Fira Code", "Consolas", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", monospace' }}
-      >
-        {contextMenu && (
-          <ContextMenu
-            x={contextMenu.x}
-            y={contextMenu.y}
-            items={contextMenu.items}
-            onClose={() => setContextMenu(null)}
-          />
-        )}
+    <div className="flex flex-col w-full h-full overflow-hidden">
+      {language === 'markdown' && !readOnly && (
+        <MarkdownToolbar
+          onAction={(action) => {
+            const view = viewRef.current;
+            if (view) executeMarkdownAction(view, action);
+          }}
+        />
+      )}
+      <div className={`flex flex-1 w-full overflow-hidden ${minimapVisible ? 'hide-scrollbar' : ''}`}>
+        <div
+          ref={containerRef}
+          className="flex-1 h-full overflow-hidden"
+          style={{ fontFamily: '"JetBrains Mono", "Fira Code", "Consolas", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", monospace' }}
+        >
+          {contextMenu && (
+            <ContextMenu
+              x={contextMenu.x}
+              y={contextMenu.y}
+              items={contextMenu.items}
+              onClose={() => setContextMenu(null)}
+            />
+          )}
+        </div>
+        {minimapVisible && <Minimap viewRef={viewRef} theme={theme} />}
       </div>
-      {minimapVisible && <Minimap viewRef={viewRef} theme={theme} />}
     </div>
   );
 };

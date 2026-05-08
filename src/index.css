@@ -142,6 +142,22 @@ input[type="range"]::-webkit-slider-thumb {
   box-shadow: inset -1px 0 0 color-mix(in srgb, var(--te-border) 50%, transparent) !important;
 }
 
+/* Fold gutter arrows: larger, bolder, and more visible */
+.cm-foldGutter .cm-gutterElement {
+  font-size: 11px !important;
+  font-weight: 700;
+  color: var(--te-text-primary);
+  opacity: 0.85;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cm-foldGutter .cm-gutterElement:hover {
+  opacity: 1;
+  color: var(--te-primary-text);
+}
+
 /* INI file header styling */
 .cm-header {
   color: #7c3aed;
