@@ -269,14 +269,30 @@ input[type="range"]::-webkit-slider-thumb {
   pointer-events: none;
 }
 
+/* ── Search Match Highlight ──────────────────────────────────── */
+mark.cm-searchMatch {
+  background-color: var(--te-editor-match-highlight);
+}
+
+mark.cm-searchMatch.cm-searchMatch-selected {
+  background-color: var(--te-editor-search-match-active-bg);
+  color: var(--te-editor-search-match-active-text) !important;
+}
+
 /* ── Bracket Pair Colorization ────────────────────────────────── */
 .cm-matchingBracket {
-  background-color: color-mix(in srgb, var(--te-text-secondary) 25%, transparent) !important;
   border-radius: 2px;
 }
 
+/* Bracket/tag pair marker in the line-numbers gutter */
+.cm-bracket-marker {
+  font-size: 0.75em;
+  opacity: 0.9;
+}
+
 .cm-nonmatchingBracket {
-  background-color: color-mix(in srgb, var(--te-error) 25%, transparent) !important;
+  background-color: color-mix(in srgb, var(--te-error) 18%, transparent) !important;
+  border-bottom: 2px solid var(--te-error) !important;
   border-radius: 2px;
 }
 

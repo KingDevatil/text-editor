@@ -1,12 +1,12 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Undo, Redo, Scissors, Copy, ClipboardPaste, AlignLeft, Braces, Map, WrapText, Space, GitCompare, X, FileMinus, Crosshair, FolderOpen } from 'lucide-react';
-import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightActiveLine, highlightWhitespace, highlightTrailingWhitespace, scrollPastEnd as scrollPastEndExt, rectangularSelection, crosshairCursor, drawSelection, highlightSpecialChars, dropCursor } from '@codemirror/view';
-import { EditorState, Compartment, EditorSelection, type Extension } from '@codemirror/state';
+import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightActiveLine, highlightWhitespace, highlightTrailingWhitespace, scrollPastEnd as scrollPastEndExt, rectangularSelection, crosshairCursor, drawSelection, highlightSpecialChars, dropCursor, GutterMarker, gutter, Decoration, ViewPlugin } from '@codemirror/view';
+import { EditorState, Compartment, EditorSelection, type Extension, StateField, RangeSetBuilder, RangeSet } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, undo, redo, selectAll, indentMore, indentLess } from '@codemirror/commands';
 import { selectNextOccurrence, selectSelectionMatches } from '@codemirror/search';
 import { highlightSelectionMatches } from '@codemirror/search';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
-import { foldGutter, foldKeymap, bracketMatching, indentOnInput, indentService, IndentContext, indentUnit } from '@codemirror/language';
+import { foldGutter, foldKeymap, indentOnInput, indentService, IndentContext, indentUnit, matchBrackets, syntaxTree } from '@codemirror/language';
 import { unicodeHighlight as unicodeHighlightExt } from '../utils/unicodeHighlight';
 import { loadLanguageExtensions, getLanguageExtensionsSync } from '../utils/languageExtensions';
 import { buildDynamicTheme, syntaxHighlightExtension } from '../utils/themes';
@@ -18,6 +18,7 @@ import { getAutocompleteExtension } from '../utils/autocomplete';
 import { indentGuides } from '../utils/indentGuides';
 import { hoverInfo } from '../utils/hover';
 import { bracketColorization } from '../utils/bracketColorization';
+import { searchHighlight } from '../utils/searchHighlight';
 import { signatureHelp } from '../utils/signatureHelp';
 import { perf } from '../utils/perf';
 import { isTauri } from '@tauri-apps/api/core';
@@ -106,6 +107,301 @@ async function readClipboard(): Promise<string> {
   }
 }
 
+function findTagPair(
+  state: EditorState,
+  pos: number
+): { start: { from: number; to: number }; end: { from: number; to: number } } | null {
+  const tree = syntaxTree(state);
+  if (!tree) return null;
+
+  let node = tree.resolveInner(pos, 1);
+
+  // Walk up to find OpenTag, CloseTag, TagName, or Element
+  let tagContainer: any = null;
+  for (let cur: any = node; cur; cur = cur.parent) {
+    const name = cur.type.name;
+    if (name === 'TagName') {
+      tagContainer = cur.parent;
+      break;
+    }
+    if (name === 'OpenTag' || name === 'CloseTag') {
+      tagContainer = cur;
+      break;
+    }
+  }
+
+  // If cursor is inside Element content but not on a tag, find the parent Element
+  if (!tagContainer) {
+    for (let cur: any = node; cur; cur = cur.parent) {
+      if (cur.type.name === 'Element') {
+        tagContainer = cur;
+        break;
+      }
+    }
+  }
+
+  if (!tagContainer) return null;
+
+  // Extract the TagName child range from a tag container
+  const getTagName = (container: any): { from: number; to: number } | null => {
+    const child = container.getChild('TagName');
+    if (child) return { from: child.from, to: child.to };
+    const c = container.cursor();
+    if (c.firstChild()) {
+      do {
+        if (c.type.name === 'TagName') return { from: c.from, to: c.to };
+      } while (c.nextSibling());
+    }
+    return null;
+  };
+
+  // If tagContainer is Element, search recursively for the nearest tag
+  // near the cursor (e.g. cursor is in indentation whitespace before a child tag).
+  if (tagContainer.type.name === 'Element') {
+    const line = state.doc.lineAt(pos);
+    let nearestTag: any = null;
+    let nearestDist = Infinity;
+
+    const stack: any[] = [tagContainer];
+    while (stack.length) {
+      const current = stack.pop()!;
+      if (nearestDist === 0) break; // can't get better
+
+      if (current.type.name === 'OpenTag' || current.type.name === 'CloseTag') {
+        const tagLine = state.doc.lineAt(current.from);
+        if (Math.abs(tagLine.number - line.number) <= 1) {
+          const dist = Math.min(Math.abs(current.from - pos), Math.abs(current.to - pos));
+          if (dist < nearestDist && dist <= 200) {
+            nearestDist = dist;
+            nearestTag = current;
+          }
+        }
+      }
+
+      const c = current.cursor();
+      if (c.firstChild()) {
+        do {
+          stack.push(c.node);
+        } while (c.nextSibling());
+      }
+    }
+
+    if (nearestTag) {
+      tagContainer = nearestTag;
+    } else {
+      // No nearby tag, fall back to the Element's own open/close tags
+      let openTag: any = null;
+      let closeTag: any = null;
+      const c2 = tagContainer.cursor();
+      if (c2.firstChild()) {
+        do {
+          if (c2.type.name === 'OpenTag') openTag = c2.node;
+          if (c2.type.name === 'CloseTag') closeTag = c2.node;
+        } while (c2.nextSibling());
+      }
+      if (!openTag || !closeTag) return null;
+      const s = getTagName(openTag);
+      const e = getTagName(closeTag);
+      if (!s || !e) return null;
+      return { start: s, end: e };
+    }
+  }
+
+  const currentTagName = getTagName(tagContainer);
+  if (!currentTagName) return null;
+
+  const element = tagContainer.parent;
+  if (!element || element.type.name !== 'Element') return null;
+
+  const isOpen = tagContainer.type.name === 'OpenTag';
+  let matchTagName: { from: number; to: number } | null = null;
+
+  if (isOpen) {
+    const c = element.cursor();
+    if (c.firstChild()) {
+      let foundSelf = false;
+      do {
+        if (c.from === tagContainer.from && c.to === tagContainer.to) {
+          foundSelf = true;
+          continue;
+        }
+        if (foundSelf && c.type.name === 'CloseTag') {
+          matchTagName = getTagName(c.node);
+          break;
+        }
+      } while (c.nextSibling());
+    }
+  } else {
+    const c = element.cursor();
+    if (c.lastChild()) {
+      let foundSelf = false;
+      do {
+        if (c.from === tagContainer.from && c.to === tagContainer.to) {
+          foundSelf = true;
+          continue;
+        }
+        if (foundSelf && c.type.name === 'OpenTag') {
+          matchTagName = getTagName(c.node);
+          break;
+        }
+      } while (c.prevSibling());
+    }
+  }
+
+  if (!matchTagName) return null;
+  return { start: currentTagName, end: matchTagName };
+}
+
+/** Search near pos (skipping whitespace) for the closest bracket on the same line. */
+function findBracketNear(
+  state: EditorState,
+  pos: number
+): { pos: number; dir: -1 | 1 } | null {
+  const openBrackets = '([{<';
+  const closeBrackets = ')]}>';
+  const line = state.doc.lineAt(pos);
+
+  // Search backward
+  for (let p = pos - 1; p >= line.from; p--) {
+    const ch = state.doc.sliceString(p, p + 1);
+    if (openBrackets.includes(ch)) return { pos: p, dir: 1 };
+    if (closeBrackets.includes(ch)) return { pos: p, dir: -1 };
+    if (ch !== ' ' && ch !== '\t') break;
+  }
+
+  // Search forward
+  for (let p = pos; p < line.to && p < state.doc.length; p++) {
+    const ch = state.doc.sliceString(p, p + 1);
+    if (openBrackets.includes(ch)) return { pos: p, dir: 1 };
+    if (closeBrackets.includes(ch)) return { pos: p, dir: -1 };
+    if (ch !== ' ' && ch !== '\t') break;
+  }
+
+  return null;
+}
+
+function computeMarkedLines(state: EditorState, cursorPos: number): readonly number[] {
+  const lines = new Set<number>();
+
+  // Try syntax-tree tag matching first (HTML/XML)
+  const tagMatch = findTagPair(state, cursorPos);
+  if (tagMatch) {
+    lines.add(state.doc.lineAt(tagMatch.start.from).number);
+    lines.add(state.doc.lineAt(tagMatch.end.from).number);
+    return Object.freeze([...lines].sort((a, b) => a - b));
+  }
+
+  // Fall back to plain bracket matching
+  const config = { brackets: '()[]{}<>' as string };
+  let match = null;
+
+  const bracketNear = findBracketNear(state, cursorPos);
+  if (bracketNear) {
+    match = matchBrackets(state, bracketNear.pos, bracketNear.dir, config);
+  }
+
+  if (match && match.matched && match.end) {
+    lines.add(state.doc.lineAt(match.start.from).number);
+    lines.add(state.doc.lineAt(match.end.from).number);
+  }
+
+  return Object.freeze([...lines].sort((a, b) => a - b));
+}
+
+class PairMarker extends GutterMarker {
+  toDOM() {
+    const span = document.createElement('span');
+    span.className = 'cm-bracket-marker';
+    span.textContent = '◆';
+    return span;
+  }
+}
+
+const pairMarkerInstance = new PairMarker();
+
+/** StateField that stores a RangeSet of gutter markers for bracket/tag pair matches. */
+const markedLinesField = StateField.define<RangeSet<any>>({
+  create(state) {
+    const cursorPos = state.selection.main.head;
+    const lines = computeMarkedLines(state, cursorPos);
+    const builder = new RangeSetBuilder<any>();
+    for (const lineNo of lines) {
+      const line = state.doc.line(lineNo);
+      builder.add(line.from, line.to, pairMarkerInstance);
+    }
+    return builder.finish();
+  },
+  update(value, tr) {
+    if (!tr.docChanged && tr.startState.selection.eq(tr.state.selection)) return value;
+    const cursorPos = tr.state.selection.main.head;
+    const lines = computeMarkedLines(tr.state, cursorPos);
+    const builder = new RangeSetBuilder<any>();
+    for (const lineNo of lines) {
+      const line = tr.state.doc.line(lineNo);
+      builder.add(line.from, line.to, pairMarkerInstance);
+    }
+    return builder.finish();
+  },
+});
+
+/** Gutter that shows ◆ on lines containing a bracket/tag pair match. */
+const pairGutter = gutter({
+  class: 'cm-pair-gutter',
+  markers(view) {
+    return view.state.field(markedLinesField);
+  },
+  initialSpacer() {
+    return pairMarkerInstance;
+  },
+});
+
+const pairMatchMark = Decoration.mark({ class: 'cm-matchingBracket' });
+
+/** ViewPlugin that highlights tag names for HTML/XML, and brackets for plain text. */
+const bracketAndTagMatcher = ViewPlugin.fromClass(
+  class {
+    decorations: any;
+    constructor(view: EditorView) {
+      this.decorations = this.compute(view);
+    }
+    update(update: any) {
+      if (update.docChanged || update.selectionSet) {
+        this.decorations = this.compute(update.view);
+      }
+    }
+    compute(view: EditorView) {
+      const decorations: any[] = [];
+      for (const range of view.state.selection.ranges) {
+        if (!range.empty) continue;
+
+        // Try tag name pair first (HTML/XML)
+        const tagMatch = findTagPair(view.state, range.head);
+        if (tagMatch) {
+          decorations.push(pairMatchMark.range(tagMatch.start.from, tagMatch.start.to));
+          decorations.push(pairMatchMark.range(tagMatch.end.from, tagMatch.end.to));
+          continue;
+        }
+
+        // Fall back to plain bracket matching
+        const config = { brackets: '()[]{}<>' as string };
+        let match = null;
+
+        const bracketNear = findBracketNear(view.state, range.head);
+        if (bracketNear) {
+          match = matchBrackets(view.state, bracketNear.pos, bracketNear.dir, config);
+        }
+
+        if (match && match.end) {
+          decorations.push(pairMatchMark.range(match.start.from, match.start.to));
+          decorations.push(pairMatchMark.range(match.end.from, match.end.to));
+        }
+      }
+      return Decoration.set(decorations, true);
+    }
+  },
+  { decorations: (v: any) => v.decorations }
+);
+
 function buildBaseExtensions(
   lang: Language,
   colors: ThemeColors,
@@ -144,6 +440,9 @@ function buildBaseExtensions(
       { key: 'Mod-d', run: selectNextOccurrence, preventDefault: true },
       { key: 'Shift-Mod-l', run: selectSelectionMatches, preventDefault: true },
     ]),
+    markedLinesField,
+    pairGutter,
+    bracketAndTagMatcher,
     lineNumbers(),
     highlightActiveLineGutter(),
     highlightActiveLine(),
@@ -161,7 +460,7 @@ function buildBaseExtensions(
 
   exts.push(
     largeFileCompartment.of(
-      largeFileOptimize ? [] : [foldGutter(), keymap.of(foldKeymap), bracketMatching()]
+      largeFileOptimize ? [] : [foldGutter(), keymap.of(foldKeymap)]
     )
   );
 
@@ -178,6 +477,7 @@ function buildBaseExtensions(
   exts.push(hoverInfo);
   exts.push(bracketColorization);
   exts.push(signatureHelp());
+  exts.push(...searchHighlight);
 
   return exts;
 }
@@ -421,7 +721,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
     if (!view) return;
     view.dispatch({
       effects: largeFileCompartment.reconfigure(
-        largeFileOptimize ? [] : [foldGutter(), keymap.of(foldKeymap), bracketMatching()]
+        largeFileOptimize ? [] : [foldGutter(), keymap.of(foldKeymap)]
       ),
     });
     setEditorState(tabId, view.state);

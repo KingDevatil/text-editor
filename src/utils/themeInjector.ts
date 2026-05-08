@@ -38,6 +38,8 @@ export function injectThemeVars(colors: ThemeColors): void {
     --te-editor-active-line: ${colors.editorActiveLine};
     --te-editor-match-highlight: ${colors.editorMatchHighlight};
     --te-editor-selection-match: ${colors.editorSelectionMatch};
+    --te-editor-search-match-active-bg: ${colors.editorSearchMatchActiveBg};
+    --te-editor-search-match-active-text: ${colors.editorSearchMatchActiveText};
     --te-tab-active-bg: ${colors.tabActiveBg};
     --te-scrollbar-thumb: ${colors.scrollbarThumb};
     --te-scrollbar-thumb-hover: ${colors.scrollbarThumbHover};

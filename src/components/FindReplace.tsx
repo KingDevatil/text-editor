@@ -5,6 +5,7 @@ import type { Text } from '@codemirror/state';
 import { useEditorStore } from '../hooks/useEditorStore';
 import { getActiveView } from '../hooks/useEditorStatePool';
 import RegexBuilderModal from './RegexBuilderModal';
+import { setSearchQuery } from '../utils/searchHighlight';
 
 /** Maximum characters to scan for match counting (prevents UI freeze on large files). */
 const MAX_SCAN_CHARS = 200_000;
@@ -67,8 +68,17 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
     }
   }, [visible, activeTabId]);
 
-  // Debounced + limited match counting to avoid freezing on large files
+  // Sync search highlight + debounced match counting
   useEffect(() => {
+    const view = activeTabId ? getActiveView(activeTabId) : undefined;
+    if (!view) return;
+
+    view.dispatch({
+      effects: setSearchQuery.of(
+        findText ? { query: findText, caseSensitive, regexMode } : null
+      ),
+    });
+
     if (!findText) {
       queueMicrotask(() => {
         setMatchCount(0);
@@ -76,8 +86,6 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
       });
       return;
     }
-    const view = activeTabId ? getActiveView(activeTabId) : undefined;
-    if (!view) return;
 
     const timer = setTimeout(() => {
       const doc = view.state.doc;

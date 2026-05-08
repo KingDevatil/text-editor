@@ -27,11 +27,14 @@ const COLOR_ITEMS: ColorItemMeta[] = [
   // Editor
   { key: 'editorGutterBg', title: '行号区背景', area: 'CodeMirror 左侧行号栏' },
   { key: 'editorGutterText', title: '行号文字色', area: '行号数字' },
+  { key: 'editorBracketMatch', title: '括号配对颜色', area: '括号配对下划线与 ◆ 标记' },
   { key: 'editorCursor', title: '光标颜色', area: '编辑器插入光标' },
   { key: 'editorSelection', title: '选中高亮色', area: '文字选中背景' },
   { key: 'editorActiveLine', title: '当前行高亮', area: '光标所在行背景' },
-  { key: 'editorMatchHighlight', title: '搜索匹配高亮', area: '查找匹配项背景' },
+  { key: 'editorMatchHighlight', title: '搜索匹配高亮', area: '查找其他匹配项背景' },
   { key: 'editorSelectionMatch', title: '选中词匹配高亮', area: '当前选中单词在其他位置的高亮' },
+  { key: 'editorSearchMatchActiveBg', title: '当前搜索匹配背景', area: '查找时光标所在匹配项背景' },
+  { key: 'editorSearchMatchActiveText', title: '当前搜索匹配文字', area: '查找时光标所在匹配项文字' },
   { key: 'tabActiveBg', title: '激活标签背景', area: '当前激活标签页的背景色' },
   // Status
   { key: 'success', title: '成功色', area: '已保存提示' },

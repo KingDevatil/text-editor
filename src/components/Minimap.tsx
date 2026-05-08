@@ -155,20 +155,16 @@ const Minimap: React.FC<MinimapProps> = ({ viewRef, theme }) => {
       const rect = container.getBoundingClientRect();
       const y = clientY - rect.top;
       const lines = view.state.doc.lines;
-      const lineH = lineHRef.current;
-      const contentHeight = lines * lineH;
+      const H = rect.height;
+      const virtualLines = virtualLinesRef.current;
 
-      let targetLine: number;
-      if (y >= contentHeight) {
-        // 点击空白区域，跳到文档末尾
-        targetLine = lines;
-      } else {
-        // 点击内容区域，按内容区域内的比例计算
-        const ratio = Math.max(0, Math.min(1, y / contentHeight));
-        targetLine = Math.floor(ratio * lines) + 1;
-      }
+      // 整个画布高度 H 对应 virtualLines 行（包含短文档时的视口填充）
+      // 直接将点击 Y 坐标按比例映射到虚拟行数
+      const ratio = Math.max(0, Math.min(1, y / H));
+      const targetLine = Math.floor(ratio * (virtualLines - 1)) + 1;
+      const clampedLine = Math.min(targetLine, lines);
 
-      const line = view.state.doc.line(Math.min(targetLine, lines));
+      const line = view.state.doc.line(clampedLine);
 
       view.dispatch({
         selection: { anchor: line.from },

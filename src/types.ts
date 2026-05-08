@@ -63,11 +63,14 @@ export interface ThemeColors {
   primaryText: string;
   editorGutterBg: string;
   editorGutterText: string;
+  editorBracketMatch: string;
   editorCursor: string;
   editorSelection: string;
   editorActiveLine: string;
   editorMatchHighlight: string;
   editorSelectionMatch: string;
+  editorSearchMatchActiveBg: string;
+  editorSearchMatchActiveText: string;
   tabActiveBg: string;
   success: string;
   warning: string;

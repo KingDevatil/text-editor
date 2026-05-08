@@ -47,6 +47,13 @@ export function buildDynamicTheme(colors: ThemeColors, isDark: boolean = false):
         backgroundColor: colors.editorGutterBg,
         color: colors.textPrimary,
       },
+      '.cm-matchingBracket': {
+        backgroundColor: `${colors.editorBracketMatch}40`,
+        borderBottom: `2px solid ${colors.editorBracketMatch}`,
+      },
+      '.cm-bracket-marker': {
+        color: colors.editorBracketMatch,
+      },
       '.cm-activeLine': {
         backgroundColor: colors.editorActiveLine,
       },
@@ -66,7 +73,8 @@ export function buildDynamicTheme(colors: ThemeColors, isDark: boolean = false):
         backgroundColor: colors.editorMatchHighlight,
       },
       '.cm-searchMatch.cm-searchMatch-selected': {
-        backgroundColor: '#ffd700',
+        backgroundColor: colors.editorSearchMatchActiveBg,
+        color: colors.editorSearchMatchActiveText,
       },
       // Log severity colors
       '.cm-log-error': { color: colors.error, fontWeight: 'bold' },
