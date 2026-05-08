@@ -64,6 +64,7 @@ export interface ThemeColors {
   editorGutterBg: string;
   editorGutterText: string;
   editorBracketMatch: string;
+  editorNonmatchingBracket: string;
   editorCursor: string;
   editorSelection: string;
   editorActiveLine: string;

@@ -7,6 +7,7 @@ import { selectNextOccurrence, selectSelectionMatches } from '@codemirror/search
 import { highlightSelectionMatches } from '@codemirror/search';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { foldGutter, foldKeymap, indentOnInput, indentService, IndentContext, indentUnit, matchBrackets, syntaxTree } from '@codemirror/language';
+import type { SyntaxNode } from '@lezer/common';
 import { unicodeHighlight as unicodeHighlightExt } from '../utils/unicodeHighlight';
 import { loadLanguageExtensions, getLanguageExtensionsSync } from '../utils/languageExtensions';
 import { buildDynamicTheme, syntaxHighlightExtension } from '../utils/themes';
@@ -117,8 +118,8 @@ function findTagPair(
   let node = tree.resolveInner(pos, 1);
 
   // Walk up to find OpenTag, CloseTag, TagName, or Element
-  let tagContainer: any = null;
-  for (let cur: any = node; cur; cur = cur.parent) {
+  let tagContainer: SyntaxNode | null = null;
+  for (let cur: SyntaxNode | null = node; cur; cur = cur.parent) {
     const name = cur.type.name;
     if (name === 'TagName') {
       tagContainer = cur.parent;
@@ -132,7 +133,7 @@ function findTagPair(
 
   // If cursor is inside Element content but not on a tag, find the parent Element
   if (!tagContainer) {
-    for (let cur: any = node; cur; cur = cur.parent) {
+    for (let cur: SyntaxNode | null = node; cur; cur = cur.parent) {
       if (cur.type.name === 'Element') {
         tagContainer = cur;
         break;
@@ -143,7 +144,7 @@ function findTagPair(
   if (!tagContainer) return null;
 
   // Extract the TagName child range from a tag container
-  const getTagName = (container: any): { from: number; to: number } | null => {
+  const getTagName = (container: SyntaxNode): { from: number; to: number } | null => {
     const child = container.getChild('TagName');
     if (child) return { from: child.from, to: child.to };
     const c = container.cursor();
@@ -159,17 +160,17 @@ function findTagPair(
   // near the cursor (e.g. cursor is in indentation whitespace before a child tag).
   if (tagContainer.type.name === 'Element') {
     const line = state.doc.lineAt(pos);
-    let nearestTag: any = null;
+    let nearestTag: SyntaxNode | null = null;
     let nearestDist = Infinity;
 
-    const stack: any[] = [tagContainer];
+    const stack: SyntaxNode[] = [tagContainer];
     while (stack.length) {
       const current = stack.pop()!;
       if (nearestDist === 0) break; // can't get better
 
       if (current.type.name === 'OpenTag' || current.type.name === 'CloseTag') {
         const tagLine = state.doc.lineAt(current.from);
-        if (Math.abs(tagLine.number - line.number) <= 1) {
+        if (tagLine.number === line.number) {
           const dist = Math.min(Math.abs(current.from - pos), Math.abs(current.to - pos));
           if (dist < nearestDist && dist <= 200) {
             nearestDist = dist;
@@ -189,21 +190,9 @@ function findTagPair(
     if (nearestTag) {
       tagContainer = nearestTag;
     } else {
-      // No nearby tag, fall back to the Element's own open/close tags
-      let openTag: any = null;
-      let closeTag: any = null;
-      const c2 = tagContainer.cursor();
-      if (c2.firstChild()) {
-        do {
-          if (c2.type.name === 'OpenTag') openTag = c2.node;
-          if (c2.type.name === 'CloseTag') closeTag = c2.node;
-        } while (c2.nextSibling());
-      }
-      if (!openTag || !closeTag) return null;
-      const s = getTagName(openTag);
-      const e = getTagName(closeTag);
-      if (!s || !e) return null;
-      return { start: s, end: e };
+      // Cursor is inside an Element but not near any child tag
+      // (e.g. inside <style> or <script> content). Let bracket matching handle it.
+      return null;
     }
   }
 
@@ -261,19 +250,19 @@ function findBracketNear(
   const closeBrackets = ')]}>';
   const line = state.doc.lineAt(pos);
 
-  // Search backward
+  // Search backward (stay on the same line)
   for (let p = pos - 1; p >= line.from; p--) {
     const ch = state.doc.sliceString(p, p + 1);
     if (openBrackets.includes(ch)) return { pos: p, dir: 1 };
-    if (closeBrackets.includes(ch)) return { pos: p, dir: -1 };
+    if (closeBrackets.includes(ch)) return { pos: p + 1, dir: -1 };
     if (ch !== ' ' && ch !== '\t') break;
   }
 
-  // Search forward
+  // Search forward (stay on the same line)
   for (let p = pos; p < line.to && p < state.doc.length; p++) {
     const ch = state.doc.sliceString(p, p + 1);
     if (openBrackets.includes(ch)) return { pos: p, dir: 1 };
-    if (closeBrackets.includes(ch)) return { pos: p, dir: -1 };
+    if (closeBrackets.includes(ch)) return { pos: p + 1, dir: -1 };
     if (ch !== ' ' && ch !== '\t') break;
   }
 

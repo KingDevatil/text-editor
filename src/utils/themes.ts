@@ -51,6 +51,10 @@ export function buildDynamicTheme(colors: ThemeColors, isDark: boolean = false):
         backgroundColor: `${colors.editorBracketMatch}40`,
         borderBottom: `2px solid ${colors.editorBracketMatch}`,
       },
+      '.cm-nonmatchingBracket': {
+        backgroundColor: `${colors.editorNonmatchingBracket}40`,
+        borderBottom: `2px solid ${colors.editorNonmatchingBracket}`,
+      },
       '.cm-bracket-marker': {
         color: colors.editorBracketMatch,
       },

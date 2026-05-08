@@ -28,6 +28,7 @@ const COLOR_ITEMS: ColorItemMeta[] = [
   { key: 'editorGutterBg', title: '行号区背景', area: 'CodeMirror 左侧行号栏' },
   { key: 'editorGutterText', title: '行号文字色', area: '行号数字' },
   { key: 'editorBracketMatch', title: '括号配对颜色', area: '括号配对下划线与 ◆ 标记' },
+  { key: 'editorNonmatchingBracket', title: '括号不匹配颜色', area: '不匹配的括号下划线与背景' },
   { key: 'editorCursor', title: '光标颜色', area: '编辑器插入光标' },
   { key: 'editorSelection', title: '选中高亮色', area: '文字选中背景' },
   { key: 'editorActiveLine', title: '当前行高亮', area: '光标所在行背景' },

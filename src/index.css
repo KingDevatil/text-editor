@@ -291,8 +291,6 @@ mark.cm-searchMatch.cm-searchMatch-selected {
 }
 
 .cm-nonmatchingBracket {
-  background-color: color-mix(in srgb, var(--te-error) 18%, transparent) !important;
-  border-bottom: 2px solid var(--te-error) !important;
   border-radius: 2px;
 }
 
