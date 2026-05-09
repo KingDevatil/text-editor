@@ -355,8 +355,6 @@ fn get_pending_files(state: tauri::State<AppState>) -> Vec<String> {
 /// Reveal a file or folder in the system's file manager
 #[tauri::command]
 fn reveal_in_folder(path: String) -> Result<(), String> {
-    let path_obj = std::path::Path::new(&path);
-    
     #[cfg(target_os = "windows")]
     {
         use std::process::Command;
@@ -365,7 +363,7 @@ fn reveal_in_folder(path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("无法打开文件夹: {}", e))?;
     }
-    
+
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
@@ -374,9 +372,10 @@ fn reveal_in_folder(path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("无法打开文件夹: {}", e))?;
     }
-    
+
     #[cfg(target_os = "linux")]
     {
+        let path_obj = std::path::Path::new(&path);
         let target = if path_obj.is_file() {
             path_obj.parent().unwrap_or(path_obj)
         } else {

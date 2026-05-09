@@ -134,7 +134,7 @@ const Toolbar: React.FC<ToolbarProps> = React.memo(({
           style={previewActive ? activeStyle : btnStyle}
           onClick={onTogglePreview}
           disabled={!canPreview || splitActive}
-          title="Markdown 预览"
+          title="预览"
         >
           <BookOpen size={16} />
           <span className="hidden sm:inline font-medium">预览</span>
@@ -144,7 +144,7 @@ const Toolbar: React.FC<ToolbarProps> = React.memo(({
           style={readModeActive ? activeStyle : btnStyle}
           onClick={onToggleReadMode}
           disabled={!canReadMode}
-          title="Markdown 阅读模式 (Ctrl+Shift+V)"
+          title="阅读模式 (Ctrl+Shift+V)"
         >
           <Eye size={16} />
           <span className="hidden sm:inline font-medium">阅读</span>

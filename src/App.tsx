@@ -20,6 +20,8 @@ import StatusBar from './components/StatusBar';
 import Sidebar from './components/Sidebar';
 import MarkdownPreview from './components/MarkdownPreview';
 import MarkdownReader from './components/MarkdownReader';
+import HtmlPreview from './components/HtmlPreview';
+import HtmlReader from './components/HtmlReader';
 import CmEditor from './components/CmEditor';
 import DiffEditor from './components/DiffEditor';
 import CommandPalette from './components/CommandPalette';
@@ -188,10 +190,10 @@ function App() {
           setReadMode(false);
         } else {
           const tab = state.tabs.find((t) => t.id === state.activeTabId);
-          if (tab?.language === 'markdown') {
+          if (tab?.language === 'markdown' || tab?.language === 'html') {
             setReadMode(true);
           } else {
-            console.warn('[ReadMode] 仅对 Markdown 文件可用');
+            console.warn('[ReadMode] 仅对 Markdown 和 HTML 文件可用');
           }
         }
       }
@@ -636,16 +638,16 @@ function App() {
       setReadMode(false);
     } else {
       const tab = state.tabs.find((t) => t.id === state.activeTabId);
-      if (tab?.language === 'markdown') {
+      if (tab?.language === 'markdown' || tab?.language === 'html') {
         setReadMode(true);
       } else {
-        console.warn('[ReadMode] 仅对 Markdown 文件可用');
+        console.warn('[ReadMode] 仅对 Markdown 和 HTML 文件可用');
       }
     }
   }, [setReadMode]);
 
   const group1Tab = tabs.find((t) => t.id === activeGroup1TabId);
-  const canPreview = group1Tab?.language === 'markdown';
+  const canPreview = group1Tab?.language === 'markdown' || group1Tab?.language === 'html';
   const canSplit = tabs.length >= 2;
 
   // Command palette items
@@ -659,8 +661,8 @@ function App() {
     { id: 'theme', label: `切换主题 (${theme})`, icon: isDark ? <Sun size={16} /> : <Moon size={16} />, action: handleCycleTheme },
     { id: 'wordwrap', label: wordWrap ? '关闭自动换行' : '开启自动换行', icon: <WrapText size={16} />, action: () => useEditorStore.getState().setWordWrap(!wordWrap) },
     { id: 'whitespace', label: showWhitespace ? '隐藏空白字符' : '显示空白字符', icon: <Space size={16} />, action: () => useEditorStore.getState().setShowWhitespace(!showWhitespace) },
-    { id: 'preview', label: previewVisible ? '关闭 Markdown 预览' : '开启 Markdown 预览', icon: <BookOpen size={16} />, action: () => setPreviewVisible(!previewVisible) },
-    { id: 'readmode', label: readMode ? '退出阅读模式' : 'Markdown 阅读模式', shortcut: 'Ctrl+Shift+V', icon: <Eye size={16} />, action: handleToggleReadMode },
+    { id: 'preview', label: previewVisible ? '关闭预览' : '开启预览', icon: <BookOpen size={16} />, action: () => setPreviewVisible(!previewVisible) },
+    { id: 'readmode', label: readMode ? '退出阅读模式' : '阅读模式', shortcut: 'Ctrl+Shift+V', icon: <Eye size={16} />, action: handleToggleReadMode },
     { id: 'split', label: splitMode ? '关闭分屏' : '开启分屏', icon: <Columns2 size={16} />, action: handleToggleSplit },
     { id: 'diff', label: diffMode ? '退出对比' : '对比文件', icon: diffMode ? <X size={16} /> : <GitCompare size={16} />, action: handleToggleDiff },
     ...(activeTab?.filePath ? [{
@@ -706,7 +708,7 @@ function App() {
         previewActive={previewVisible}
         canSplit={canSplit}
         splitActive={splitMode}
-        canReadMode={!!activeTab && activeTab.language === 'markdown'}
+        canReadMode={!!activeTab && (activeTab.language === 'markdown' || activeTab.language === 'html')}
         readModeActive={readMode}
         theme={theme}
       />
@@ -823,7 +825,11 @@ function App() {
                   <>
                     <div className="w-px bg-gray-200 dark:bg-gray-800 self-stretch flex-shrink-0" />
                     <div className="flex-1 h-full min-w-0">
-                      <MarkdownPreview tabId={group1Tab.id} theme={theme} />
+                      {group1Tab.language === 'markdown' ? (
+                        <MarkdownPreview tabId={group1Tab.id} theme={theme} />
+                      ) : (
+                        <HtmlPreview tabId={group1Tab.id} theme={theme} />
+                      )}
                     </div>
                   </>
                 )}
@@ -837,14 +843,23 @@ function App() {
               </div>
             )}
 
-            {/* Markdown Read Mode — shown inside editor area only */}
-            {readMode && activeTab && activeTab.language === 'markdown' && (
-              <MarkdownReader
-                tabId={activeTab.id}
-                theme={theme}
-                onExit={() => setReadMode(false)}
-                onToggleTheme={handleCycleTheme}
-              />
+            {/* Read Mode — shown inside editor area only */}
+            {readMode && activeTab && (activeTab.language === 'markdown' || activeTab.language === 'html') && (
+              activeTab.language === 'markdown' ? (
+                <MarkdownReader
+                  tabId={activeTab.id}
+                  theme={theme}
+                  onExit={() => setReadMode(false)}
+                  onToggleTheme={handleCycleTheme}
+                />
+              ) : (
+                <HtmlReader
+                  tabId={activeTab.id}
+                  theme={theme}
+                  onExit={() => setReadMode(false)}
+                  onToggleTheme={handleCycleTheme}
+                />
+              )
             )}
           </div>
 

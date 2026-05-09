@@ -15,5 +15,6 @@ export default defineConfig({
   envPrefix: ['VITE_', 'TAURI_ENV_*'],
   build: {
     cssMinify: true,
+    chunkSizeWarningLimit: 700,
   },
 })

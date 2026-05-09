@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Minus, Square, X, Maximize2 } from 'lucide-react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 interface TitleBarProps {
   title?: string;
@@ -14,7 +15,6 @@ const TitleBar: React.FC<TitleBarProps> = ({ title = 'Text Editor' }) => {
     if (!isTauri()) return;
     const check = async () => {
       try {
-        const { getCurrentWindow } = await import('@tauri-apps/api/window');
         const w = getCurrentWindow();
         const max = await w.isMaximized();
         setIsMaximized(max);
