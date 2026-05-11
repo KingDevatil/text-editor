@@ -32,7 +32,7 @@ const ShortcutRow: React.FC<{ keys: string; desc: string }> = ({ keys, desc }) =
 
 const EditorHelp: React.FC<EditorHelpProps> = ({ onClose }) => {
   return (
-    <div className="absolute inset-0 z-50 flex flex-col" style={{ backgroundColor: 'var(--te-bg-primary)' }}>
+    <div className="absolute inset-0 z-50 flex flex-col" style={{ backgroundColor: 'var(--te-bg-primary)' }} onClick={(e) => e.stopPropagation()}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 h-12 shrink-0 border-b" style={{ borderColor: 'color-mix(in srgb, var(--te-border) 10%, transparent)' }}>
         <div className="flex items-center gap-2">
@@ -40,7 +40,7 @@ const EditorHelp: React.FC<EditorHelpProps> = ({ onClose }) => {
           <span className="text-sm font-medium" style={{ color: 'var(--te-text-primary)' }}>编辑器使用说明</span>
         </div>
         <button
-          onClick={onClose}
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
           className="p-1.5 rounded-lg transition-colors hover:bg-[color-mix(in_srgb,var(--te-text-primary)_10%,transparent)]"
           style={{ color: 'var(--te-text-primary)' }}
           title="关闭"

@@ -18,6 +18,7 @@ import TabBar from './components/TabBar';
 import FindReplace from './components/FindReplace';
 import StatusBar from './components/StatusBar';
 import Sidebar from './components/Sidebar';
+import SettingsPanel from './components/SettingsPanel';
 import MarkdownPreview from './components/MarkdownPreview';
 import MarkdownReader from './components/MarkdownReader';
 import HtmlPreview from './components/HtmlPreview';
@@ -26,7 +27,6 @@ import CmEditor from './components/CmEditor';
 import DiffEditor from './components/DiffEditor';
 import CommandPalette from './components/CommandPalette';
 import TitleBar from './components/TitleBar';
-import EditorHelp from './components/EditorHelp';
 
 function App() {
   const tabs = useEditorStore((s) => s.tabs);
@@ -73,12 +73,9 @@ function App() {
   const setTheme = useEditorStore((s) => s.setTheme);
   const setSidebarVisible = useEditorStore((s) => s.setSidebarVisible);
   const setFindReplaceVisible = useEditorStore((s) => s.setFindReplaceVisible);
-  const setUnicodeHighlight = useEditorStore((s) => s.setUnicodeHighlight);
-  const setFontSize = useEditorStore((s) => s.setFontSize);
   const setPreviewVisible = useEditorStore((s) => s.setPreviewVisible);
   const setSplitMode = useEditorStore((s) => s.setSplitMode);
   const setProjectPath = useEditorStore((s) => s.setProjectPath);
-  const setLargeFileOptimize = useEditorStore((s) => s.setLargeFileOptimize);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const setTabEncoding = useEditorStore((s) => s.setTabEncoding);
   const setTabLanguage = useEditorStore((s) => s.setTabLanguage);
@@ -94,7 +91,7 @@ function App() {
 
   const openFile = useFileOpener();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showHelp, setShowHelp] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
   const SIDEBAR_WIDTH = 220;
 
   // Auto-disable split when less than 2 tabs
@@ -563,16 +560,6 @@ function App() {
     };
   }, [setActiveTabId, createTab]);
 
-  const handleRegisterDefaultApp = useCallback(async () => {
-    if (!isTauri()) return;
-    try {
-      const result = await invoke<string>('register_as_default_app');
-      console.log('[RegisterDefault]', result);
-    } catch (err) {
-      console.error('[RegisterDefault]', err);
-    }
-  }, []);
-
   const canFormat = !!activeTab;
 
   const handleFormat = useCallback(async () => {
@@ -703,6 +690,7 @@ function App() {
         onTogglePreview={() => setPreviewVisible(!previewVisible)}
         onToggleSplit={handleToggleSplit}
         onToggleReadMode={handleToggleReadMode}
+        onToggleSettings={() => setSettingsVisible((v) => !v)}
         canFormat={canFormat}
         canPreview={canPreview}
         previewActive={previewVisible}
@@ -714,33 +702,15 @@ function App() {
       />
 
       <div className="flex flex-1 overflow-hidden">
-          <Sidebar
-            visible={sidebarVisible}
-            width={SIDEBAR_WIDTH}
-            unicodeHighlight={unicodeHighlight}
-            onToggleUnicodeHighlight={() => setUnicodeHighlight(!unicodeHighlight)}
-            fontSize={fontSize}
-            onFontSizeChange={setFontSize}
-            largeFileOptimize={largeFileOptimize}
-            onToggleLargeFileOptimize={() => setLargeFileOptimize(!largeFileOptimize)}
-            minimapVisible={minimapVisible}
-            onToggleMinimap={() => {
-              const next = !minimapVisible;
-              useEditorStore.getState().setMinimapVisible(next);
-            }}
-            wordWrap={wordWrap}
-            onToggleWordWrap={() => {
-              const next = !wordWrap;
-              useEditorStore.getState().setWordWrap(next);
-            }}
-            projectPath={projectPath}
-            onProjectChange={setProjectPath}
-            onOpenFolder={handleOpenFolder}
-            openTabs={tabs}
-            onOpenFile={handleSidebarOpenFile}
-            onRegisterDefaultApp={handleRegisterDefaultApp}
-            onOpenHelp={() => setShowHelp(true)}
-          />
+        <Sidebar
+          visible={sidebarVisible}
+          width={SIDEBAR_WIDTH}
+          projectPath={projectPath}
+          onProjectChange={setProjectPath}
+          onOpenFolder={handleOpenFolder}
+          openTabs={tabs}
+          onOpenFile={handleSidebarOpenFile}
+        />
 
         <div className="flex flex-col flex-1 overflow-hidden">
           <TabBar
@@ -863,10 +833,8 @@ function App() {
             )}
           </div>
 
-      {/* Editor Help overlay */}
-      {showHelp && (
-        <EditorHelp onClose={() => setShowHelp(false)} />
-      )}
+      {/* Settings Panel overlay */}
+      <SettingsPanel visible={settingsVisible} onClose={() => setSettingsVisible(false)} />
 
           <StatusBar
             activeTab={activeTab}

@@ -222,7 +222,7 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
       {/* Main content */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-auto"
+        className={`flex-1 overflow-auto ${tocVisible && toc.length > 0 ? 'pl-64' : ''}`}
         onScroll={handleScroll}
         onClick={handleContentClick}
         onContextMenu={(e) => {

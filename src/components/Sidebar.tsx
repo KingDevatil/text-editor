@@ -1,29 +1,16 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { FileText, Settings, ChevronRight, ChevronDown, Folder, FolderOpen, RotateCcw, FolderOpenIcon, Star, HelpCircle, Palette } from 'lucide-react';
-import ThemeEditor from './ThemeEditor';
+import { FileText, ChevronRight, ChevronDown, Folder, FolderOpen, RotateCcw } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import type { DirEntry, EditorTab } from '../types';
 
 interface SidebarProps {
   visible: boolean;
   width: number;
-  unicodeHighlight: boolean;
-  onToggleUnicodeHighlight: () => void;
-  fontSize: number;
-  onFontSizeChange: (size: number) => void;
-  largeFileOptimize: boolean;
-  onToggleLargeFileOptimize: () => void;
-  minimapVisible: boolean;
-  onToggleMinimap: () => void;
-  wordWrap: boolean;
-  onToggleWordWrap: () => void;
   projectPath: string | null;
   onProjectChange: (path: string | null) => void;
   onOpenFolder: () => void;
   openTabs: EditorTab[];
   onOpenFile: (filePath: string) => void;
-  onRegisterDefaultApp?: () => void;
-  onOpenHelp?: () => void;
 }
 
 interface TreeNodeProps {
@@ -111,26 +98,12 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 const Sidebar: React.FC<SidebarProps> = React.memo(({
   visible,
   width,
-  unicodeHighlight,
-  onToggleUnicodeHighlight,
-  fontSize,
-  onFontSizeChange,
-  largeFileOptimize,
-  onToggleLargeFileOptimize,
-  minimapVisible,
-  onToggleMinimap,
-  wordWrap,
-  onToggleWordWrap,
   projectPath,
   onProjectChange,
   onOpenFolder,
   openTabs,
   onOpenFile,
-  onRegisterDefaultApp,
-  onOpenHelp,
 }) => {
-  const [activeSection, setActiveSection] = useState<'files' | 'settings'>('files');
-  const [showThemeEditor, setShowThemeEditor] = useState(false);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [dirCache, setDirCache] = useState<Map<string, DirEntry[]>>(new Map());
 
@@ -162,7 +135,6 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
         }
         return next;
       });
-      // Load children if not cached
       if (!dirCache.has(path)) {
         await loadDirectory(path);
       }
@@ -170,7 +142,6 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
     [dirCache, loadDirectory]
   );
 
-  // Auto-load root directory when project changes
   useEffect(() => {
     if (projectPath) {
       queueMicrotask(() => {
@@ -179,8 +150,7 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
         loadDirectory(projectPath);
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectPath]);
+  }, [projectPath, loadDirectory]);
 
   const handleCloseFolder = useCallback(() => {
     onProjectChange(null);
@@ -190,7 +160,6 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
 
   const handleRefresh = useCallback(async () => {
     if (!projectPath) return;
-    // Refresh all expanded directories
     const toRefresh = [projectPath, ...Array.from(expandedDirs)];
     for (const path of toRefresh) {
       await loadDirectory(path);
@@ -199,11 +168,6 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
 
   if (!visible) return null;
 
-  const sectionBtnClass = (active: boolean) =>
-    `relative flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors ${
-      active ? '' : 'hover:text-[var(--te-text-primary)]'
-    }`;
-
   const rootEntries = projectPath ? dirCache.get(projectPath) || [] : [];
 
   return (
@@ -211,249 +175,87 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
       className="flex flex-col border-r"
       style={{ width: `${width}px`, minWidth: `${width}px`, backgroundColor: 'var(--te-bg-secondary)', borderColor: 'var(--te-border)' }}
     >
-      <div className="flex items-center border-b relative" style={{ borderColor: 'var(--te-border)' }}>
-        <button
-          onClick={() => setActiveSection('files')}
-          className={sectionBtnClass(activeSection === 'files')}
-          style={{ color: activeSection === 'files' ? 'var(--te-primary)' : 'var(--te-text-secondary)' }}
-        >
-          <FolderOpen size={14} />
-          文件
-        </button>
-        <button
-          onClick={() => setActiveSection('settings')}
-          className={sectionBtnClass(activeSection === 'settings')}
-          style={{ color: activeSection === 'settings' ? 'var(--te-primary)' : 'var(--te-text-secondary)' }}
-        >
-          <Settings size={14} />
-          设置
-        </button>
-        <div
-          className="absolute bottom-0 h-0.5 rounded-full transition-all duration-200"
-          style={{
-            width: '50%',
-            left: activeSection === 'files' ? '0%' : '50%',
-            backgroundColor: 'var(--te-primary)',
-          }}
-        />
-      </div>
-
-      <div className="flex-1 overflow-auto">
-        {activeSection === 'files' && (
-          <div className="text-sm">
-            {/* Project header */}
-            <div className="px-3 py-2 border-b" style={{ borderColor: 'var(--te-border)' }}>
-              {projectPath ? (
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <FolderOpenIcon size={14} className="text-amber-500 shrink-0" />
-                    <span className="text-xs font-medium truncate" style={{ color: 'var(--te-text-secondary)' }} title={projectPath}>
-                      {projectPath.split(/[\\/]/).pop() || projectPath}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={onOpenFolder}
-                      className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[10px] rounded border transition-colors hover:bg-[var(--te-bg-secondary)]"
-                      style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)', color: 'var(--te-text-primary)' }}
-                      title="打开其他文件夹"
-                    >
-                      <FolderOpenIcon size={10} />
-                      打开
-                    </button>
-                    <button
-                      onClick={handleRefresh}
-                      className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[10px] rounded border transition-colors hover:bg-[var(--te-bg-secondary)]"
-                      style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)', color: 'var(--te-text-primary)' }}
-                    >
-                      <RotateCcw size={10} />
-                      刷新
-                    </button>
-                    <button
-                      onClick={handleCloseFolder}
-                      className="flex-1 px-2 py-1 text-[10px] rounded border transition-colors hover:bg-[var(--te-bg-secondary)]"
-                      style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)', color: 'var(--te-text-primary)' }}
-                    >
-                      关闭
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  onClick={onOpenFolder}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg transition-colors font-medium"
-                  style={{ backgroundColor: 'color-mix(in srgb, var(--te-primary) 10%, transparent)', color: 'var(--te-primary)' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--te-primary) 15%, transparent)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--te-primary) 10%, transparent)'; }}
-                >
-                  <FolderOpenIcon size={14} />
-                  打开文件夹
-                </button>
-              )}
+      {/* Project header */}
+      <div className="px-3 py-2 border-b" style={{ borderColor: 'var(--te-border)' }}>
+        {projectPath ? (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <FolderOpen size={14} className="text-amber-500 shrink-0" />
+              <span className="text-xs font-medium truncate" style={{ color: 'var(--te-text-secondary)' }} title={projectPath}>
+                {projectPath.split(/[\\/]/).pop() || projectPath}
+              </span>
             </div>
-
-            {/* File tree */}
-            <div className="p-1.5">
-              {projectPath ? (
-                rootEntries.length > 0 ? (
-                  rootEntries.map((entry) => (
-                    <TreeNode
-                      key={entry.path}
-                      entry={entry}
-                      depth={0}
-                      expandedDirs={expandedDirs}
-                      dirCache={dirCache}
-                      openFilePaths={openFilePaths}
-                      onToggleDir={handleToggleDir}
-                      onOpenFile={onOpenFile}
-                    />
-                  ))
-                ) : (
-                  <div className="text-center py-4 text-xs" style={{ color: 'var(--te-text-secondary)' }}>
-                    空文件夹
-                  </div>
-                )
-              ) : (
-                <div className="text-center py-8 px-3">
-                  <Folder size={32} className="mx-auto mb-2" style={{ color: 'color-mix(in srgb, var(--te-text-secondary) 50%, transparent)' }} />
-                  <p className="text-xs" style={{ color: 'var(--te-text-secondary)' }}>
-                    打开一个文件夹<br />开始浏览项目文件
-                  </p>
-                </div>
-              )}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={onOpenFolder}
+                className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[10px] rounded border transition-colors hover:bg-[var(--te-bg-secondary)]"
+                style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)', color: 'var(--te-text-primary)' }}
+                title="打开其他文件夹"
+              >
+                <FolderOpen size={10} />
+                打开
+              </button>
+              <button
+                onClick={handleRefresh}
+                className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[10px] rounded border transition-colors hover:bg-[var(--te-bg-secondary)]"
+                style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)', color: 'var(--te-text-primary)' }}
+              >
+                <RotateCcw size={10} />
+                刷新
+              </button>
+              <button
+                onClick={handleCloseFolder}
+                className="flex-1 px-2 py-1 text-[10px] rounded border transition-colors hover:bg-[var(--te-bg-secondary)]"
+                style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)', color: 'var(--te-text-primary)' }}
+              >
+                关闭
+              </button>
             </div>
           </div>
+        ) : (
+          <button
+            onClick={onOpenFolder}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg transition-colors font-medium"
+            style={{ backgroundColor: 'color-mix(in srgb, var(--te-primary) 10%, transparent)', color: 'var(--te-primary)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--te-primary) 15%, transparent)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--te-primary) 10%, transparent)'; }}
+          >
+            <FolderOpen size={14} />
+            打开文件夹
+          </button>
         )}
+      </div>
 
-        {activeSection === 'settings' && (
-          <div className="space-y-4 text-sm p-3" style={{ color: 'var(--te-text-primary)' }}>
-            <div>
-              <label className="block text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: 'var(--te-text-secondary)' }}>
-                编辑器设置
-              </label>
-              <div className="space-y-2.5 rounded-lg p-3 border" style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)' }}>
-                <label className="flex items-center justify-between cursor-pointer group">
-                  <span className="text-sm text-[var(--te-text-primary)] transition-colors">全角半角检测</span>
-                  <input
-                    type="checkbox"
-                    checked={unicodeHighlight}
-                    onChange={onToggleUnicodeHighlight}
-                    className="rounded border-[var(--te-border)] text-[var(--te-primary)] focus:ring-[var(--te-primary)]"
-                  />
-                </label>
-                <label className="flex items-center justify-between cursor-pointer group">
-                  <span className="text-sm text-[var(--te-text-primary)] transition-colors">显示行号</span>
-                  <input type="checkbox" defaultChecked className="rounded border-[var(--te-border)] text-[var(--te-primary)] focus:ring-[var(--te-primary)]" />
-                </label>
-                <label className="flex items-center justify-between cursor-pointer group">
-                  <span className="text-sm text-[var(--te-text-primary)] transition-colors">自动换行</span>
-                  <input
-                    type="checkbox"
-                    checked={wordWrap}
-                    onChange={onToggleWordWrap}
-                    className="rounded border-[var(--te-border)] text-[var(--te-primary)] focus:ring-[var(--te-primary)]"
-                  />
-                </label>
-                <label className="flex items-center justify-between cursor-pointer group">
-                  <span className="text-sm text-[var(--te-text-primary)] transition-colors">迷你地图</span>
-                  <input
-                    type="checkbox"
-                    checked={minimapVisible}
-                    onChange={onToggleMinimap}
-                    className="rounded border-[var(--te-border)] text-[var(--te-primary)] focus:ring-[var(--te-primary)]"
-                  />
-                </label>
-                <label className="flex items-center justify-between cursor-pointer group" title="打开大文件时自动禁用高亮、折叠等功能以提升性能">
-                  <span className="text-sm text-[var(--te-text-primary)] transition-colors">大文件性能优化</span>
-                  <input
-                    type="checkbox"
-                    checked={largeFileOptimize}
-                    onChange={onToggleLargeFileOptimize}
-                    className="rounded border-[var(--te-border)] text-[var(--te-primary)] focus:ring-[var(--te-primary)]"
-                  />
-                </label>
-              </div>
+      {/* File tree */}
+      <div className="flex-1 overflow-auto p-1.5">
+        {projectPath ? (
+          rootEntries.length > 0 ? (
+            rootEntries.map((entry) => (
+              <TreeNode
+                key={entry.path}
+                entry={entry}
+                depth={0}
+                expandedDirs={expandedDirs}
+                dirCache={dirCache}
+                openFilePaths={openFilePaths}
+                onToggleDir={handleToggleDir}
+                onOpenFile={onOpenFile}
+              />
+            ))
+          ) : (
+            <div className="text-center py-4 text-xs" style={{ color: 'var(--te-text-secondary)' }}>
+              空文件夹
             </div>
-            <div>
-              <label className="block text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: 'var(--te-text-secondary)' }}>
-                应用设置
-              </label>
-              <div className="rounded-lg p-3 border" style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)' }}>
-                <button
-                  onClick={onRegisterDefaultApp}
-                  disabled={!onRegisterDefaultApp}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ backgroundColor: 'color-mix(in srgb, var(--te-primary) 10%, transparent)', color: 'var(--te-primary)' }}
-                  onMouseEnter={(e) => { if (!onRegisterDefaultApp) return; e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--te-primary) 15%, transparent)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--te-primary) 10%, transparent)'; }}
-                >
-                  <Star size={14} />
-                  设为默认文本编辑器
-                </button>
-                <p className="text-[10px] mt-1.5 text-center" style={{ color: 'var(--te-text-secondary)' }}>
-                  注册为 .txt、.md、.js 等文件类型的默认打开方式
-                </p>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: 'var(--te-text-secondary)' }}>
-                字体大小
-              </label>
-              <div className="rounded-lg p-3 border" style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)' }}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-[var(--te-text-primary)]">{fontSize}px</span>
-                </div>
-                <input
-                  type="range"
-                  min="10"
-                  max="24"
-                  value={fontSize}
-                  onChange={(e) => onFontSizeChange(Number(e.target.value))}
-                  className="w-full"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: 'var(--te-text-secondary)' }}>
-                主题外观
-              </label>
-              <div className="rounded-lg p-3 border" style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)' }}>
-                <button
-                  onClick={() => setShowThemeEditor(true)}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg transition-colors font-medium hover:bg-[var(--te-bg-secondary)]"
-                  style={{ backgroundColor: 'var(--te-bg-tertiary)', color: 'var(--te-text-primary)' }}
-                >
-                  <Palette size={14} />
-                  编辑主题颜色
-                </button>
-                <p className="text-[10px] mt-1.5 text-center" style={{ color: 'var(--te-text-secondary)' }}>
-                  自定义亮色、暗色和独立主题的颜色配置
-                </p>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: 'var(--te-text-secondary)' }}>
-                帮助
-              </label>
-              <div className="rounded-lg p-3 border" style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)' }}>
-                <button
-                  onClick={onOpenHelp}
-                  disabled={!onOpenHelp}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--te-bg-secondary)]"
-                  style={{ backgroundColor: 'var(--te-bg-tertiary)', color: 'var(--te-text-primary)' }}
-                >
-                  <HelpCircle size={14} />
-                  使用说明
-                </button>
-                <p className="text-[10px] mt-1.5 text-center" style={{ color: 'var(--te-text-secondary)' }}>
-                  查看编辑器快捷键与功能说明
-                </p>
-              </div>
-            </div>
+          )
+        ) : (
+          <div className="text-center py-8 px-3">
+            <Folder size={32} className="mx-auto mb-2" style={{ color: 'color-mix(in srgb, var(--te-text-secondary) 50%, transparent)' }} />
+            <p className="text-xs" style={{ color: 'var(--te-text-secondary)' }}>
+              打开一个文件夹<br />开始浏览项目文件
+            </p>
           </div>
         )}
       </div>
-      {showThemeEditor && <ThemeEditor onClose={() => setShowThemeEditor(false)} />}
     </div>
   );
 });
