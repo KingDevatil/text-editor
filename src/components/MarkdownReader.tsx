@@ -42,6 +42,11 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
   const lastContentRef = useRef('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Scroll to top when switching files
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [tabId]);
+
   // Poll content changes
   useEffect(() => {
     const poll = () => {

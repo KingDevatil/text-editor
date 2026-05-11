@@ -23,6 +23,11 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
   const lastContentRef = useRef('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // Scroll to top when switching files
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.scrollTo({ top: 0 });
+  }, [tabId]);
+
   // Poll content changes
   useEffect(() => {
     const poll = () => {
