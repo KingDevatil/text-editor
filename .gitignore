@@ -31,7 +31,6 @@ dist-ssr
 # Rust
 **/target/
 src-tauri/gen
-Cargo.lock
 
 # OS
 Thumbs.db
