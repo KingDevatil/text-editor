@@ -48,7 +48,7 @@ jobs:
         shell: bash
         run: |
           git fetch --tags
-          LATEST=$(git describe --tags --abbrev=0)
+          LATEST=$(git tag --sort=-creatordate | head -n 1)
           echo "tag=$LATEST" >> "$GITHUB_OUTPUT"
 
       - name: Upload Release Asset
@@ -132,7 +132,7 @@ jobs:
         shell: bash
         run: |
           git fetch --tags
-          LATEST=$(git describe --tags --abbrev=0)
+          LATEST=$(git tag --sort=-creatordate | head -n 1)
           echo "tag=$LATEST" >> "$GITHUB_OUTPUT"
 
       - name: Upload Release Assets
