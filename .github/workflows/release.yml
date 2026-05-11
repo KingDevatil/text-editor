@@ -30,6 +30,9 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Sync Tauri versions
+        run: npm install @tauri-apps/api@latest @tauri-apps/cli@latest
+
       - name: Build Tauri app
         run: npm run tauri build
         env:
@@ -83,6 +86,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm install
+
+      - name: Sync Tauri versions
+        run: npm install @tauri-apps/api@latest @tauri-apps/cli@latest
 
       # 1. Build full installer (offlineInstaller – bundled WebView2 for offline environments)
       - name: Build Windows full installer
