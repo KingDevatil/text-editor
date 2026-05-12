@@ -214,6 +214,14 @@ git push origin v1.1.0
 - 正则构建器弹窗支持主题外观自适应（Light / Dark / Custom）
 - 主题系统 CSS 变量覆盖全部弹窗组件
 
+**性能优化**
+- `useEditorStore` localStorage 保存增加 300ms 防抖，避免打字时同步写盘阻塞主线程
+- `MarkdownReader` 轮询从 60fps (`requestAnimationFrame`) 降至 100ms (`setTimeout`)，显著降低大文件 GC 压力
+- `Minimap` 增加容器可见性检测，隐藏标签页完全停止后台渲染；无变化时从 60fps 降级为 200ms 轮询；延迟读取 `getBoundingClientRect` 避免强制同步布局
+- `useFileWatcher` 路径集合不变时提前退出，消除 `markTabDirty` 导致的无意义 diff 计算
+- `useFileWatcher` 新增 `onFileChanged` 回调解耦 Store 依赖，提升可测试性与复用性
+- `App.tsx` 补全 `handleSaveFile` 依赖数组，消除潜在闭包不一致风险
+
 ---
 
 ## 🏗️ 技术栈
