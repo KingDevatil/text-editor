@@ -22,6 +22,7 @@ interface MarkdownReaderProps {
   theme: ThemeMode;
   onExit: () => void;
   onToggleTheme: () => void;
+  shouldScrollToTop?: boolean;
 }
 
 
@@ -31,6 +32,7 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
   theme,
   onExit,
   onToggleTheme,
+  shouldScrollToTop = false,
 }) => {
   const [content, setContent] = useState('');
   const [readerFontSize, setReaderFontSize] = useState(16);
@@ -42,10 +44,12 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
   const lastContentRef = useRef('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to top when switching files
+  // Scroll to top only when newly opened
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 0 });
-  }, [tabId]);
+    if (shouldScrollToTop) {
+      scrollRef.current?.scrollTo({ top: 0 });
+    }
+  }, [tabId, shouldScrollToTop]);
 
   // Poll content changes
   useEffect(() => {

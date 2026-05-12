@@ -92,6 +92,7 @@ function App() {
   const openFile = useFileOpener();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [readerScrollToTop, setReaderScrollToTop] = useState(false);
   const SIDEBAR_WIDTH = 220;
 
   // Auto-disable split when less than 2 tabs
@@ -354,12 +355,15 @@ function App() {
   const handleSidebarOpenFile = useCallback(
     async (filePath: string) => {
       if (!isTauri()) return;
+      const existing = useEditorStore.getState().tabs.find((t) => t.filePath === filePath);
+      setReaderScrollToTop(!existing);
       await openFile(filePath);
     },
     [openFile]
   );
 
   const handleTabClick = useCallback((id: string, group: 1 | 2) => {
+    setReaderScrollToTop(false);
     const switchStart = performance.now();
     if (group === 1) {
       setActiveGroup1TabId(id);
@@ -821,6 +825,7 @@ function App() {
                   theme={theme}
                   onExit={() => setReadMode(false)}
                   onToggleTheme={handleCycleTheme}
+                  shouldScrollToTop={readerScrollToTop}
                 />
               ) : (
                 <HtmlReader
@@ -828,6 +833,7 @@ function App() {
                   theme={theme}
                   onExit={() => setReadMode(false)}
                   onToggleTheme={handleCycleTheme}
+                  shouldScrollToTop={readerScrollToTop}
                 />
               )
             )}

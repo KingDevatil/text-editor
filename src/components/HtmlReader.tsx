@@ -9,6 +9,7 @@ interface HtmlReaderProps {
   theme: ThemeMode;
   onExit: () => void;
   onToggleTheme: () => void;
+  shouldScrollToTop?: boolean;
 }
 
 const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
@@ -16,6 +17,7 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
   theme,
   onExit,
   onToggleTheme,
+  shouldScrollToTop = false,
 }) => {
   const [content, setContent] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -23,10 +25,12 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
   const lastContentRef = useRef('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // Scroll to top when switching files
+  // Scroll to top only when newly opened
   useEffect(() => {
-    iframeRef.current?.contentWindow?.scrollTo({ top: 0 });
-  }, [tabId]);
+    if (shouldScrollToTop) {
+      iframeRef.current?.contentWindow?.scrollTo({ top: 0 });
+    }
+  }, [tabId, shouldScrollToTop]);
 
   // Poll content changes
   useEffect(() => {
