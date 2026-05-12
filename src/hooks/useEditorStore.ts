@@ -420,7 +420,17 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
     });
   },
 
-  setActiveTabId: (id) => set({ activeTabId: id }),
+  setActiveTabId: (id) =>
+    set((state) => {
+      if (!id) return { activeTabId: null };
+      const tab = state.tabs.find((t) => t.id === id);
+      const group = tab?.group || 1;
+      return {
+        activeTabId: id,
+        activeGroup1TabId: group === 1 ? id : state.activeGroup1TabId,
+        activeGroup2TabId: group === 2 ? id : state.activeGroup2TabId,
+      };
+    }),
   setActiveGroup1TabId: (id) => set({ activeGroup1TabId: id }),
   setActiveGroup2TabId: (id) => set({ activeGroup2TabId: id }),
 
