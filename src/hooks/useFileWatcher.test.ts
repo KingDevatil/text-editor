@@ -16,8 +16,11 @@ const listenMock = vi.fn((_event: string, cb: (event: { payload: string }) => vo
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
-  listen: (...args: unknown[]) => listenMock(...args),
   isTauri: () => true,
+}));
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: (...args: unknown[]) => listenMock(...args),
 }));
 
 describe('useFileWatcher', () => {

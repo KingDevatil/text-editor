@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { invoke, isTauri, listen } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import type { EditorTab } from '../types';
 
 export function useFileWatcher(tabs: EditorTab[], onFileChanged?: (path: string) => void | Promise<void>) {
