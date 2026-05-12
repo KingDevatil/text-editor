@@ -18,11 +18,26 @@ vi.mock('../hooks/useEditorStore', () => ({
 describe('MarkdownReader', () => {
   beforeEach(() => {
     getEditorContent.mockClear();
-    vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   });
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('throttles content polling to ~100ms interval', () => {
+    render(
+      <MarkdownReader tabId="tab1" theme="light" onExit={vi.fn()} onToggleTheme={vi.fn()} visible={true} />
+    );
+
+    expect(getEditorContent).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(100);
+    expect(getEditorContent).toHaveBeenCalledTimes(1);
+
+    getEditorContent.mockClear();
+    vi.advanceTimersByTime(100);
+    expect(getEditorContent).toHaveBeenCalledTimes(1);
   });
 
   it('stops polling when visible becomes false', () => {
@@ -30,14 +45,14 @@ describe('MarkdownReader', () => {
       <MarkdownReader tabId="tab1" theme="light" onExit={vi.fn()} onToggleTheme={vi.fn()} visible={true} />
     );
 
-    vi.advanceTimersByTime(50);
+    vi.advanceTimersByTime(250);
     expect(getEditorContent).toHaveBeenCalled();
 
     getEditorContent.mockClear();
 
     rerender(<MarkdownReader tabId="tab1" theme="light" onExit={vi.fn()} onToggleTheme={vi.fn()} visible={false} />);
 
-    vi.advanceTimersByTime(50);
+    vi.advanceTimersByTime(250);
     expect(getEditorContent).not.toHaveBeenCalled();
   });
 

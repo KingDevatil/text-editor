@@ -1,11 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { invoke, isTauri, listen } from '@tauri-apps/api/core';
-import { confirm } from '@tauri-apps/plugin-dialog';
-import type { EditorTab, Encoding } from '../types';
-import { useEditorStore } from './useEditorStore';
-import { updateEditorContent } from './useEditorStatePool';
+import type { EditorTab } from '../types';
 
-export function useFileWatcher(tabs: EditorTab[]) {
+export function useFileWatcher(tabs: EditorTab[], onFileChanged?: (path: string) => void | Promise<void>) {
   const watchedPathsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -13,6 +10,18 @@ export function useFileWatcher(tabs: EditorTab[]) {
 
     const currentPaths = new Set(tabs.map((t) => t.filePath).filter(Boolean) as string[]);
     const watched = watchedPathsRef.current;
+
+    // Early exit: skip diff if the path sets are identical
+    if (currentPaths.size === watched.size) {
+      let allSame = true;
+      for (const path of currentPaths) {
+        if (!watched.has(path)) {
+          allSame = false;
+          break;
+        }
+      }
+      if (allSame) return;
+    }
 
     for (const path of watched) {
       if (!currentPaths.has(path)) {
@@ -29,6 +38,9 @@ export function useFileWatcher(tabs: EditorTab[]) {
     }
   }, [tabs]);
 
+  const onFileChangedRef = useRef(onFileChanged);
+  onFileChangedRef.current = onFileChanged;
+
   useEffect(() => {
     if (!isTauri()) return;
     let unlisten: (() => void) | undefined;
@@ -36,30 +48,8 @@ export function useFileWatcher(tabs: EditorTab[]) {
     const setup = async () => {
       unlisten = await listen<string>('file-changed', async (event) => {
         const changedPath = event.payload;
-        const tab = useEditorStore.getState().tabs.find((t) => t.filePath === changedPath);
-        if (!tab) return;
-
-        if (tab.isDirty) {
-          const ok = await confirm(
-            `"${tab.title}" 已被外部程序修改。是否重新加载并覆盖当前未保存的更改？`,
-            { title: '文件已更改', kind: 'warning' }
-          );
-          if (!ok) return;
-        }
-
-        const stillTab = useEditorStore.getState().tabs.find((t) => t.filePath === changedPath);
-        if (!stillTab) return;
-
-        try {
-          const result = await invoke<{ text: string; encoding: string }>('read_file_auto_detect', {
-            path: changedPath,
-          });
-          updateEditorContent(stillTab.id, result.text);
-          useEditorStore.getState().markTabSaved(stillTab.id);
-          useEditorStore.getState().setTabEncoding(stillTab.id, result.encoding as Encoding);
-        } catch (err) {
-          console.error('Failed to reload changed file:', err);
-        }
+        if (!watchedPathsRef.current.has(changedPath)) return;
+        await onFileChangedRef.current?.(changedPath);
       });
     };
 

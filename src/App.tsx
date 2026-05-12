@@ -95,7 +95,34 @@ function App() {
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [readerScrollToTop, setReaderScrollToTop] = useState(false);
   const SIDEBAR_WIDTH = 220;
-  const { pauseWatch, resumeWatch } = useFileWatcher(tabs);
+  const handleFileChanged = useCallback(async (changedPath: string) => {
+    const tab = useEditorStore.getState().tabs.find((t) => t.filePath === changedPath);
+    if (!tab) return;
+
+    if (tab.isDirty) {
+      const ok = await confirm(
+        `"${tab.title}" 已被外部程序修改。是否重新加载并覆盖当前未保存的更改？`,
+        { title: '文件已更改', kind: 'warning' }
+      );
+      if (!ok) return;
+    }
+
+    const stillTab = useEditorStore.getState().tabs.find((t) => t.filePath === changedPath);
+    if (!stillTab) return;
+
+    try {
+      const result = await invoke<{ text: string; encoding: string }>('read_file_auto_detect', {
+        path: changedPath,
+      });
+      updateEditorContent(stillTab.id, result.text);
+      markTabSaved(stillTab.id);
+      setTabEncoding(stillTab.id, result.encoding as Encoding);
+    } catch (err) {
+      console.error('Failed to reload changed file:', err);
+    }
+  }, [markTabSaved, setTabEncoding]);
+
+  const { pauseWatch, resumeWatch } = useFileWatcher(tabs, handleFileChanged);
 
   // Auto-disable split when less than 2 tabs
   useEffect(() => {
@@ -338,7 +365,7 @@ function App() {
     } catch (err) {
       console.log('Save cancelled or failed', err);
     }
-  }, [activeTab, markTabSaved, renameTab]);
+  }, [activeTab, markTabSaved, renameTab, pauseWatch, resumeWatch]);
   useEffect(() => {
     handleSaveFileRef.current = handleSaveFile;
   });

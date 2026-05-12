@@ -42,13 +42,32 @@ const Minimap: React.FC<MinimapProps> = ({ viewRef, theme }) => {
         return;
       }
 
+      // Pause rendering when container is hidden (e.g. inactive tab with display:none)
+      if (container.offsetParent === null) {
+        pollId = setTimeout(render, 200);
+        return;
+      }
+
       const doc = view.state.doc;
       const viewport = view.viewport;
+
+      // Fast-path: skip layout read if doc and viewport haven't changed
+      // (canvas size is checked lazily only when needed)
+      if (
+        doc.length === lastDocLen &&
+        viewport.from === lastVpFrom &&
+        viewport.to === lastVpTo &&
+        lastH > 0
+      ) {
+        pollId = setTimeout(render, 200);
+        return;
+      }
+
       const rect = container.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
       const H = rect.height;
 
-      // Only repaint when doc, viewport, or canvas size actually changed
+      // If nothing meaningful changed after reading layout, skip repaint
       if (
         doc.length === lastDocLen &&
         viewport.from === lastVpFrom &&
@@ -56,7 +75,7 @@ const Minimap: React.FC<MinimapProps> = ({ viewRef, theme }) => {
         W === lastW &&
         H === lastH
       ) {
-        rafId = requestAnimationFrame(render);
+        pollId = setTimeout(render, 200);
         return;
       }
 

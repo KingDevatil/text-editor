@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { EditorTab, Language, Encoding, ThemeMode, PartialThemeColors, ThemeColors } from '../types';
 import { EXT_TO_LANGUAGE } from '../types';
 import { deleteEditorState } from './useEditorStatePool';
+import { debounce } from '../utils/debounce';
 
 let tabCounter = 0;
 
@@ -472,8 +473,6 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
   resetKeybindings: () => set({ customKeybindings: {} }),
 }));
 
-useEditorStore.subscribe((state) => {
-  saveSettings(state);
-});
+useEditorStore.subscribe(debounce(saveSettings, 300));
 
 export { useEditorStore };

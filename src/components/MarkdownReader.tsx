@@ -53,11 +53,11 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
     }
   }, [tabId, shouldScrollToTop]);
 
-  // Poll content changes
+  // Poll content changes (throttled to 250ms to avoid 60fps GC pressure on large files)
   useEffect(() => {
     if (!visible) {
       if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
+        clearTimeout(rafRef.current);
         rafRef.current = null;
       }
       return;
@@ -69,12 +69,12 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
         lastContentRef.current = current;
         setContent(current);
       }
-      rafRef.current = requestAnimationFrame(poll);
+      rafRef.current = window.setTimeout(poll, 100);
     };
-    rafRef.current = requestAnimationFrame(poll);
+    rafRef.current = window.setTimeout(poll, 100);
     return () => {
       if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
+        clearTimeout(rafRef.current);
         rafRef.current = null;
       }
     };

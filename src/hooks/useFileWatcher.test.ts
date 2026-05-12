@@ -14,35 +14,10 @@ const listenMock = vi.fn((_event: string, cb: (event: { payload: string }) => vo
   return Promise.resolve(unlisten);
 });
 
-const confirmMock = vi.fn(() => Promise.resolve(true));
-
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
   listen: (...args: unknown[]) => listenMock(...args),
   isTauri: () => true,
-}));
-
-vi.mock('@tauri-apps/plugin-dialog', () => ({
-  confirm: (...args: unknown[]) => confirmMock(...args),
-}));
-
-const mockTabs: EditorTab[] = [];
-const mockMarkTabSaved = vi.fn();
-const mockSetTabEncoding = vi.fn();
-const mockUpdateEditorContent = vi.fn();
-
-vi.mock('./useEditorStore', () => ({
-  useEditorStore: {
-    getState: () => ({
-      tabs: mockTabs,
-      markTabSaved: mockMarkTabSaved,
-      setTabEncoding: mockSetTabEncoding,
-    }),
-  },
-}));
-
-vi.mock('./useEditorStatePool', () => ({
-  updateEditorContent: (...args: unknown[]) => mockUpdateEditorContent(...args),
 }));
 
 describe('useFileWatcher', () => {
@@ -51,17 +26,6 @@ describe('useFileWatcher', () => {
     listenMock.mockClear();
     listenCallbacks.length = 0;
     unlistenFns.length = 0;
-    confirmMock.mockClear();
-    mockUpdateEditorContent.mockClear();
-    mockMarkTabSaved.mockClear();
-    mockSetTabEncoding.mockClear();
-    mockTabs.length = 0;
-    invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'read_file_auto_detect') {
-        return Promise.resolve({ text: 'new content', encoding: 'UTF-8' });
-      }
-      return Promise.resolve();
-    });
   });
 
   afterEach(() => {
@@ -131,7 +95,7 @@ describe('useFileWatcher', () => {
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
-  it('reloads content when file-changed event fires for an open tab', async () => {
+  it('does not invoke watch/unwatch when only tab references change but file paths stay the same', () => {
     const tab: EditorTab = {
       id: 'tab-1',
       title: 'test.txt',
@@ -141,45 +105,31 @@ describe('useFileWatcher', () => {
       encoding: 'UTF-8',
     };
 
-    mockTabs.length = 0;
-    mockTabs.push(tab);
-    invokeMock.mockResolvedValueOnce({ text: 'new content', encoding: 'UTF-8' });
-
-    renderHook(({ tabs }) => useFileWatcher(tabs), {
+    const { rerender } = renderHook(({ tabs }) => useFileWatcher(tabs), {
       initialProps: { tabs: [tab] },
     });
 
-    await waitFor(() => expect(listenCallbacks.length).toBeGreaterThan(0));
+    // simulate markTabDirty creating a new tab reference with same filePath
+    const newTabRef = { ...tab, isDirty: true };
+    invokeMock.mockClear();
+    rerender({ tabs: [newTabRef] });
 
-    listenCallbacks[listenCallbacks.length - 1]({ payload: '/project/test.txt' });
-
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith('read_file_auto_detect', { path: '/project/test.txt' })
-    );
-    await waitFor(() => expect(mockUpdateEditorContent).toHaveBeenCalledWith('tab-1', 'new content'));
-    await waitFor(() => expect(mockMarkTabSaved).toHaveBeenCalledWith('tab-1'));
-    await waitFor(() => expect(mockSetTabEncoding).toHaveBeenCalledWith('tab-1', 'UTF-8'));
+    expect(invokeMock).not.toHaveBeenCalled();
   });
 
-  it('does nothing when file-changed event fires for a closed tab after confirm', async () => {
+  it('calls onFileChanged when file-changed event fires', async () => {
     const tab: EditorTab = {
       id: 'tab-1',
       title: 'test.txt',
       language: 'plaintext',
-      isDirty: true,
+      isDirty: false,
       filePath: '/project/test.txt',
       encoding: 'UTF-8',
     };
 
-    mockTabs.length = 0;
-    mockTabs.push(tab);
+    const onFileChanged = vi.fn();
 
-    let confirmResolve: ((value: boolean) => void) | undefined;
-    confirmMock.mockImplementation(() => new Promise((resolve) => {
-      confirmResolve = resolve;
-    }));
-
-    renderHook(({ tabs }) => useFileWatcher(tabs), {
+    renderHook(({ tabs }) => useFileWatcher(tabs, onFileChanged), {
       initialProps: { tabs: [tab] },
     });
 
@@ -187,19 +137,31 @@ describe('useFileWatcher', () => {
 
     listenCallbacks[listenCallbacks.length - 1]({ payload: '/project/test.txt' });
 
-    await waitFor(() => expect(confirmMock).toHaveBeenCalled());
+    await waitFor(() => expect(onFileChanged).toHaveBeenCalledWith('/project/test.txt'));
+  });
 
-    // Simulate user closing the tab while confirm dialog is open
-    mockTabs.length = 0;
+  it('does not call onFileChanged for paths not in current tabs', async () => {
+    const tab: EditorTab = {
+      id: 'tab-1',
+      title: 'test.txt',
+      language: 'plaintext',
+      isDirty: false,
+      filePath: '/project/test.txt',
+      encoding: 'UTF-8',
+    };
 
-    // User confirms after tab was closed
-    confirmResolve?.(true);
+    const onFileChanged = vi.fn();
 
-    // Allow async handler to continue
+    renderHook(({ tabs }) => useFileWatcher(tabs, onFileChanged), {
+      initialProps: { tabs: [tab] },
+    });
+
+    await waitFor(() => expect(listenCallbacks.length).toBeGreaterThan(0));
+
+    listenCallbacks[listenCallbacks.length - 1]({ payload: '/project/other.txt' });
+
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    // Should not attempt to reload because tab no longer exists
-    expect(invokeMock).not.toHaveBeenCalledWith('read_file_auto_detect', expect.anything);
-    expect(mockUpdateEditorContent).not.toHaveBeenCalled();
+    expect(onFileChanged).not.toHaveBeenCalled();
   });
 });
