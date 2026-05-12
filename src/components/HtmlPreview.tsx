@@ -7,9 +7,10 @@ import { prepareHtmlSrcDoc } from '../utils/htmlPreview';
 interface HtmlPreviewProps {
   tabId: string;
   theme: string;
+  visible?: boolean;
 }
 
-const HtmlPreview: React.FC<HtmlPreviewProps> = React.memo(({ tabId, theme }) => {
+const HtmlPreview: React.FC<HtmlPreviewProps> = React.memo(({ tabId, theme, visible = true }) => {
   const [content, setContent] = useState('');
   const rafRef = useRef<number | null>(null);
   const lastContentRef = useRef('');
@@ -18,6 +19,14 @@ const HtmlPreview: React.FC<HtmlPreviewProps> = React.memo(({ tabId, theme }) =>
 
   // Poll content changes using requestAnimationFrame
   useEffect(() => {
+    if (!visible) {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      return;
+    }
+
     const poll = () => {
       const current = getEditorContent(tabId);
       if (current !== lastContentRef.current) {
@@ -30,9 +39,10 @@ const HtmlPreview: React.FC<HtmlPreviewProps> = React.memo(({ tabId, theme }) =>
     return () => {
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
       }
     };
-  }, [tabId]);
+  }, [tabId, visible]);
 
   const isDark = theme === 'dark';
   const srcDoc = useMemo(() => prepareHtmlSrcDoc(content, isDark), [content, isDark]);

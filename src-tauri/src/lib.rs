@@ -391,6 +391,11 @@ fn reveal_in_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
+const SHCNE_ASSOCCHANGED: i32 = 0x08000000;
+#[cfg(target_os = "windows")]
+const SHCNF_FLUSHNOWAIT: u32 = 0x2000;
+
 #[tauri::command]
 fn register_as_default_app() -> Result<String, String> {
     #[cfg(not(target_os = "windows"))]
@@ -455,12 +460,24 @@ fn register_as_default_app() -> Result<String, String> {
         ];
 
         for ext in extensions {
+            // 1. Remove Windows UserChoice cache so our ProgID takes effect
+            let user_choice_path = format!(
+                "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\{}\\UserChoice",
+                ext
+            );
+            // It's okay if the subkey doesn't exist — just means there's no prior user choice.
+            let _ = hkcu.delete_subkey_all(&user_choice_path);
+
+            // 2. Set ProgID for this extension
             let (ext_key, _) = classes
                 .create_subkey(ext)
                 .map_err(|e| format!("创建 {} 键失败: {}", ext, e))?;
             ext_key
                 .set_value("", &"TextFile")
                 .map_err(|e| format!("设置 {} 默认值失败: {}", ext, e))?;
+            ext_key
+                .set_value("PerceivedType", &"text")
+                .map_err(|e| format!("设置 {} PerceivedType 失败: {}", ext, e))?;
         }
 
         // Notify Windows to refresh file associations
@@ -473,7 +490,7 @@ fn register_as_default_app() -> Result<String, String> {
                     dwItem2: *const std::ffi::c_void,
                 );
             }
-            SHChangeNotify(0x08000000, 0, std::ptr::null(), std::ptr::null());
+            SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_FLUSHNOWAIT, std::ptr::null(), std::ptr::null());
         }
 
         Ok(format!(

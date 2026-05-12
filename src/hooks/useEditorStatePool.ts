@@ -17,6 +17,7 @@ export function setEditorState(tabId: string, state: EditorState): void {
 
 export function deleteEditorState(tabId: string): void {
   pool.states.delete(tabId);
+  scrollTops.delete(tabId);
 }
 
 export function getEditorContent(tabId: string): string {
@@ -36,6 +37,21 @@ export function getEditorValueLength(tabId: string): number {
 
 export function hasEditorState(tabId: string): boolean {
   return pool.states.has(tabId);
+}
+
+// Scroll position per tab (CodeMirror EditorView scrollTop)
+const scrollTops = new Map<string, number>();
+
+export function getEditorScrollTop(tabId: string): number | undefined {
+  return scrollTops.get(tabId);
+}
+
+export function setEditorScrollTop(tabId: string, scrollTop: number): void {
+  scrollTops.set(tabId, scrollTop);
+}
+
+export function deleteEditorScrollTop(tabId: string): void {
+  scrollTops.delete(tabId);
 }
 
 /**

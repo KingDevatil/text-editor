@@ -8,15 +8,24 @@ import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 interface MarkdownPreviewProps {
   tabId: string;
   theme: string;
+  visible?: boolean;
 }
 
-const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ tabId, theme }) => {
+const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ tabId, theme, visible = true }) => {
   const [content, setContent] = useState('');
   const rafRef = useRef<number | null>(null);
   const lastContentRef = useRef('');
 
   // Poll content changes using requestAnimationFrame (cheap, stops when offscreen)
   useEffect(() => {
+    if (!visible) {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      return;
+    }
+
     const poll = () => {
       const current = getEditorContent(tabId);
       if (current !== lastContentRef.current) {
@@ -29,9 +38,10 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ tabId, the
     return () => {
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
       }
     };
-  }, [tabId]);
+  }, [tabId, visible]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);

@@ -422,13 +422,6 @@ function App() {
     });
   }, [setTheme]);
 
-  const handleEditorChange = useCallback(
-    (tabId: string) => () => {
-      markTabDirty(tabId, true);
-    },
-    [markTabDirty]
-  );
-
   const handleEncodingChange = useCallback(
     async (enc: Encoding) => {
       if (!activeTab) return;
@@ -637,9 +630,29 @@ function App() {
     }
   }, [setReadMode]);
 
+  const handleReaderExit = useCallback(() => setReadMode(false), [setReadMode]);
+  const handleReaderToggleTheme = useCallback(() => handleCycleTheme(), [handleCycleTheme]);
+
   const group1Tab = tabs.find((t) => t.id === activeGroup1TabId);
   const canPreview = group1Tab?.language === 'markdown' || group1Tab?.language === 'html';
   const canSplit = tabs.length >= 2;
+
+  const previewTabs = useMemo(
+    () => tabs.filter((t) => t.language === 'markdown' || t.language === 'html'),
+    [tabs]
+  );
+  const readerTabs = useMemo(
+    () => tabs.filter((t) => t.language === 'markdown' || t.language === 'html'),
+    [tabs]
+  );
+  const group1Tabs = useMemo(
+    () => tabs.filter((t) => t.group === 1 || !t.group),
+    [tabs]
+  );
+  const group2Tabs = useMemo(
+    () => tabs.filter((t) => t.group === 2),
+    [tabs]
+  );
 
   // Command palette items
   const commands = useMemo(() => [
@@ -752,41 +765,53 @@ function App() {
               />
             ) : group1Tab ? (
               <>
-                <div className="h-full flex-1 min-w-0">
-                  <CmEditor
-                    tabId={group1Tab.id}
-                    language={group1Tab.language}
-                    theme={theme}
-                    onChange={handleEditorChange(group1Tab.id)}
-                    fontSize={fontSize}
-                    initialContent={group1Tab.initialContent || ''}
-                    largeFileOptimize={largeFileOptimize}
-                    wordWrap={wordWrap}
-                    showWhitespace={showWhitespace}
-                    scrollPastEnd={scrollPastEnd}
-                    minimapVisible={minimapVisible}
-                    unicodeHighlight={unicodeHighlight}
-                  />
-                </div>
+                {group1Tabs.map((tab) => (
+                  <div
+                    key={tab.id}
+                    className="h-full flex-1 min-w-0"
+                    style={{ display: tab.id === activeGroup1TabId ? 'flex' : 'none' }}
+                  >
+                    <CmEditor
+                      tabId={tab.id}
+                      language={tab.language}
+                      theme={theme}
+                      fontSize={fontSize}
+                      initialContent={tab.initialContent || ''}
+                      largeFileOptimize={largeFileOptimize}
+                      wordWrap={wordWrap}
+                      showWhitespace={showWhitespace}
+                      scrollPastEnd={scrollPastEnd}
+                      minimapVisible={minimapVisible}
+                      unicodeHighlight={unicodeHighlight}
+                    />
+                  </div>
+                ))}
                 {splitMode && (
                   <>
                     <div className="w-px bg-gray-200 dark:bg-gray-800 self-stretch flex-shrink-0" />
                     <div className="flex-1 h-full min-w-0">
-                      {activeGroup2TabId ? (
-                        <CmEditor
-                          tabId={activeGroup2TabId}
-                          language={tabs.find((t) => t.id === activeGroup2TabId)?.language ?? 'plaintext'}
-                          theme={theme}
-                          onChange={handleEditorChange(activeGroup2TabId)}
-                          fontSize={fontSize}
-                          initialContent={tabs.find((t) => t.id === activeGroup2TabId)?.initialContent || ''}
-                          largeFileOptimize={largeFileOptimize}
-                          wordWrap={wordWrap}
-                          showWhitespace={showWhitespace}
-                          scrollPastEnd={scrollPastEnd}
-                          minimapVisible={minimapVisible}
-                          unicodeHighlight={unicodeHighlight}
-                        />
+                      {group2Tabs.length > 0 ? (
+                        group2Tabs.map((tab) => (
+                            <div
+                              key={tab.id}
+                              className="h-full w-full"
+                              style={{ display: tab.id === activeGroup2TabId ? 'flex' : 'none' }}
+                            >
+                              <CmEditor
+                                tabId={tab.id}
+                                language={tab.language}
+                                theme={theme}
+                                fontSize={fontSize}
+                                initialContent={tab.initialContent || ''}
+                                largeFileOptimize={largeFileOptimize}
+                                wordWrap={wordWrap}
+                                showWhitespace={showWhitespace}
+                                scrollPastEnd={scrollPastEnd}
+                                minimapVisible={minimapVisible}
+                                unicodeHighlight={unicodeHighlight}
+                              />
+                            </div>
+                          ))
                       ) : (
                         <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-600 bg-white dark:bg-gray-900">
                           <p className="text-sm">选择标签页开始编辑</p>
@@ -795,18 +820,25 @@ function App() {
                     </div>
                   </>
                 )}
-                {previewVisible && canPreview && (
-                  <>
-                    <div className="w-px bg-gray-200 dark:bg-gray-800 self-stretch flex-shrink-0" />
-                    <div className="flex-1 h-full min-w-0">
-                      {group1Tab.language === 'markdown' ? (
-                        <MarkdownPreview tabId={group1Tab.id} theme={theme} />
-                      ) : (
-                        <HtmlPreview tabId={group1Tab.id} theme={theme} />
-                      )}
-                    </div>
-                  </>
-                )}
+                {previewVisible &&
+                  previewTabs.map((tab) => (
+                    <React.Fragment key={tab.id}>
+                      <div
+                        className="w-px bg-gray-200 dark:bg-gray-800 self-stretch flex-shrink-0"
+                        style={{ display: tab.id === activeGroup1TabId ? 'flex' : 'none' }}
+                      />
+                      <div
+                        className="flex-1 h-full min-w-0"
+                        style={{ display: tab.id === activeGroup1TabId ? 'flex' : 'none' }}
+                      >
+                        {tab.language === 'markdown' ? (
+                          <MarkdownPreview tabId={tab.id} theme={theme} visible={tab.id === activeGroup1TabId} />
+                        ) : (
+                          <HtmlPreview tabId={tab.id} theme={theme} visible={tab.id === activeGroup1TabId} />
+                        )}
+                      </div>
+                    </React.Fragment>
+                  ))}
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center text-gray-400 dark:text-gray-600 bg-white dark:bg-gray-900">
@@ -818,25 +850,34 @@ function App() {
             )}
 
             {/* Read Mode — shown inside editor area only */}
-            {readMode && activeTab && (activeTab.language === 'markdown' || activeTab.language === 'html') && (
-              activeTab.language === 'markdown' ? (
-                <MarkdownReader
-                  tabId={activeTab.id}
-                  theme={theme}
-                  onExit={() => setReadMode(false)}
-                  onToggleTheme={handleCycleTheme}
-                  shouldScrollToTop={readerScrollToTop}
-                />
-              ) : (
-                <HtmlReader
-                  tabId={activeTab.id}
-                  theme={theme}
-                  onExit={() => setReadMode(false)}
-                  onToggleTheme={handleCycleTheme}
-                  shouldScrollToTop={readerScrollToTop}
-                />
-              )
-            )}
+            {readMode &&
+              readerTabs.map((tab) => (
+                <div
+                  key={tab.id}
+                  className="absolute inset-0 z-30 flex flex-col"
+                  style={{ display: tab.id === activeTabId ? 'flex' : 'none' }}
+                >
+                  {tab.language === 'markdown' ? (
+                    <MarkdownReader
+                      tabId={tab.id}
+                      theme={theme}
+                      onExit={handleReaderExit}
+                      onToggleTheme={handleReaderToggleTheme}
+                      shouldScrollToTop={readerScrollToTop && tab.id === activeTabId}
+                      visible={tab.id === activeTabId}
+                    />
+                  ) : (
+                    <HtmlReader
+                      tabId={tab.id}
+                      theme={theme}
+                      onExit={handleReaderExit}
+                      onToggleTheme={handleReaderToggleTheme}
+                      shouldScrollToTop={readerScrollToTop && tab.id === activeTabId}
+                      visible={tab.id === activeTabId}
+                    />
+                  )}
+                </div>
+              ))}
           </div>
 
       {/* Settings Panel overlay */}

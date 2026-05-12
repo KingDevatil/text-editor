@@ -10,6 +10,7 @@ interface HtmlReaderProps {
   onExit: () => void;
   onToggleTheme: () => void;
   shouldScrollToTop?: boolean;
+  visible?: boolean;
 }
 
 const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
@@ -18,22 +19,36 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
   onExit,
   onToggleTheme,
   shouldScrollToTop = false,
+  visible = true,
 }) => {
   const [content, setContent] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const rafRef = useRef<number | null>(null);
   const lastContentRef = useRef('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const savedScrollYRef = useRef(0);
 
-  // Scroll to top only when newly opened
+  // Scroll to top only when newly opened; otherwise restore previous position
   useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
     if (shouldScrollToTop) {
-      iframeRef.current?.contentWindow?.scrollTo({ top: 0 });
+      win.scrollTo({ top: 0 });
+    } else if (savedScrollYRef.current > 0) {
+      win.scrollTo({ top: savedScrollYRef.current });
     }
   }, [tabId, shouldScrollToTop]);
 
   // Poll content changes
   useEffect(() => {
+    if (!visible) {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      return;
+    }
+
     const poll = () => {
       const current = getEditorContent(tabId);
       if (current !== lastContentRef.current) {
@@ -46,9 +61,12 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
     return () => {
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
       }
+      // Save iframe scroll position before unmount/tab switch
+      savedScrollYRef.current = iframeRef.current?.contentWindow?.scrollY || 0;
     };
-  }, [tabId]);
+  }, [tabId, visible]);
 
   const isDark = theme === 'dark';
   const srcDoc = useMemo(() => prepareHtmlSrcDoc(content, isDark), [content, isDark]);
@@ -85,16 +103,16 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
     iframeRef.current?.contentWindow?.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
-  // Keyboard: ESC to exit
+  // Keyboard: ESC to exit (only when this instance is visible)
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && visible) {
         onExit();
       }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onExit]);
+  }, [onExit, visible]);
 
   const bgColor = 'var(--te-bg-primary)';
   const textColor = 'var(--te-text-primary)';

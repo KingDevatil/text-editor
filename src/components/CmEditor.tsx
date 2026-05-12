@@ -28,6 +28,8 @@ import {
   getEditorState,
   setEditorState,
   setActiveView,
+  getEditorScrollTop,
+  setEditorScrollTop,
 } from '../hooks/useEditorStatePool';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 import Minimap from './Minimap';
@@ -40,7 +42,6 @@ interface CmEditorProps {
   tabId: string;
   language: Language;
   theme: ThemeMode;
-  onChange: () => void;
   fontSize: number;
   readOnly?: boolean;
   initialContent?: string;
@@ -480,7 +481,6 @@ const CmEditor: React.FC<CmEditorProps> = ({
   tabId,
   language,
   theme,
-  onChange,
   fontSize,
   readOnly = false,
   initialContent = '',
@@ -493,7 +493,6 @@ const CmEditor: React.FC<CmEditorProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const onChangeRef = useRef(onChange);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
 
@@ -503,11 +502,6 @@ const CmEditor: React.FC<CmEditorProps> = ({
   const lightCustomColors = useEditorStore((s) => s.lightCustomColors);
   const darkCustomColors = useEditorStore((s) => s.darkCustomColors);
   const customColors = useEditorStore((s) => s.customColors);
-
-  // Keep callback ref up to date
-  useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
 
   // Initialize or switch editor state when tabId changes
   useEffect(() => {
@@ -537,7 +531,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
             // are persisted, not just doc changes.
             setEditorState(tabId, update.state);
             if (update.docChanged) {
-              onChangeRef.current();
+              useEditorStore.getState().markTabDirty(tabId, true);
             }
           }),
         ],
@@ -558,6 +552,18 @@ const CmEditor: React.FC<CmEditorProps> = ({
     });
     viewRef.current = view;
     setActiveView(tabId, view);
+
+    // Restore previous scroll position for this tab
+    const savedScrollTop = getEditorScrollTop(tabId);
+    if (savedScrollTop !== undefined && savedScrollTop > 0) {
+      const restoreScroll = () => {
+        if (viewRef.current) {
+          viewRef.current.scrollDOM.scrollTop = savedScrollTop;
+        }
+      };
+      requestAnimationFrame(restoreScroll);
+      setTimeout(restoreScroll, 50);
+    }
 
     // Ensure wordWrap is applied even when reusing a pooled state with stale config
     view.dispatch({
@@ -606,6 +612,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
       cancelled = true;
       dblClickCleanup?.();
       if (view) {
+        setEditorScrollTop(tabId, view.scrollDOM.scrollTop);
         setEditorState(tabId, view.state);
         setActiveView(tabId, null);
         view.destroy();

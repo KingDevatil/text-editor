@@ -23,6 +23,7 @@ interface MarkdownReaderProps {
   onExit: () => void;
   onToggleTheme: () => void;
   shouldScrollToTop?: boolean;
+  visible?: boolean;
 }
 
 
@@ -33,6 +34,7 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
   onExit,
   onToggleTheme,
   shouldScrollToTop = false,
+  visible = true,
 }) => {
   const [content, setContent] = useState('');
   const [readerFontSize, setReaderFontSize] = useState(16);
@@ -53,6 +55,14 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
 
   // Poll content changes
   useEffect(() => {
+    if (!visible) {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      return;
+    }
+
     const poll = () => {
       const current = getEditorContent(tabId);
       if (current !== lastContentRef.current) {
@@ -65,8 +75,14 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
     return () => {
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
       }
     };
+  }, [tabId, visible]);
+
+  // Close context menu when switching tabs
+  useEffect(() => {
+    setContextMenu(null);
   }, [tabId]);
 
   const deferredContent = React.useDeferredValue(content);
@@ -116,16 +132,16 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
     }
   }, []);
 
-  // Keyboard: ESC to exit
+  // Keyboard: ESC to exit (only when this instance is visible)
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && visible) {
         onExit();
       }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onExit]);
+  }, [onExit, visible]);
 
   const isDark = theme === 'dark';
 
