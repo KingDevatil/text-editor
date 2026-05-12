@@ -80,7 +80,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 
   return (
     <div
-      className={`flex items-center gap-1.5 rounded-md px-2 py-1 cursor-pointer transition-colors text-[var(--te-text-primary)] ${
+      className={`flex items-center gap-1.5 px-2 py-1 cursor-pointer transition-colors text-[var(--te-text-primary)] ${
         isOpen
           ? 'bg-[color-mix(in_srgb,var(--te-primary)_10%,transparent)] text-[var(--te-primary)]'
           : 'hover:bg-[var(--te-bg-tertiary)]'

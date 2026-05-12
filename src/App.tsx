@@ -7,6 +7,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open, confirm, message } from '@tauri-apps/plugin-dialog';
 import { useEditorStore } from './hooks/useEditorStore';
 import { useFileOpener } from './hooks/useFileOpener';
+import { useFileWatcher } from './hooks/useFileWatcher';
 import { getEditorContent, updateEditorContent, getActiveView } from './hooks/useEditorStatePool';
 import { formatDocument, goToDefinition } from './utils/cmCommands';
 import { perf } from './utils/perf';
@@ -94,6 +95,7 @@ function App() {
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [readerScrollToTop, setReaderScrollToTop] = useState(false);
   const SIDEBAR_WIDTH = 220;
+  const { pauseWatch, resumeWatch } = useFileWatcher(tabs);
 
   // Auto-disable split when less than 2 tabs
   useEffect(() => {
@@ -295,11 +297,13 @@ function App() {
     try {
       if (isTauri() && activeTab.filePath) {
         const content = getEditorContent(activeTab.id);
+        await pauseWatch(activeTab.filePath);
         await invoke('write_file_with_encoding', {
           path: activeTab.filePath,
           content,
           encoding: activeTab.encoding,
         });
+        await resumeWatch(activeTab.filePath);
         markTabSaved(activeTab.id);
         return;
       }
@@ -356,10 +360,15 @@ function App() {
     async (filePath: string) => {
       if (!isTauri()) return;
       const existing = useEditorStore.getState().tabs.find((t) => t.filePath === filePath);
-      setReaderScrollToTop(!existing);
-      await openFile(filePath);
+      if (existing) {
+        setReaderScrollToTop(false);
+        setActiveTabId(existing.id);
+      } else {
+        setReaderScrollToTop(true);
+        await openFile(filePath);
+      }
     },
-    [openFile]
+    [openFile, setActiveTabId]
   );
 
   const handleTabClick = useCallback((id: string, group: 1 | 2) => {

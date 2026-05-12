@@ -1,6 +1,8 @@
 use tauri::{Manager, Emitter};
 use std::fs;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use encoding_rs::{
     Encoding, UTF_8, GBK, BIG5, SHIFT_JIS, EUC_JP, EUC_KR, ISO_2022_JP,
     ISO_8859_2, ISO_8859_5, ISO_8859_7, KOI8_R, KOI8_U, MACINTOSH,
@@ -180,6 +182,69 @@ struct DirEntry {
 #[derive(Default)]
 struct AppState {
     pending_files: Mutex<Vec<String>>,
+}
+
+/// File watcher manager — watches open files for external modifications.
+struct FileWatcherManager {
+    watchers: Mutex<HashMap<String, RecommendedWatcher>>,
+    last_emitted: Arc<Mutex<HashMap<String, std::time::Instant>>>,
+}
+
+impl FileWatcherManager {
+    fn new() -> Self {
+        Self {
+            watchers: Mutex::new(HashMap::new()),
+            last_emitted: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    fn watch(&self, app: tauri::AppHandle, path: String) -> Result<(), String> {
+        let mut watchers = self.watchers.lock().map_err(|e| e.to_string())?;
+        // Drop any existing watcher for this path
+        watchers.remove(&path);
+
+        let path_clone = path.clone();
+        let app_clone = app.clone();
+        let last_emitted = self.last_emitted.clone();
+
+        let mut watcher = RecommendedWatcher::new(
+            move |res: Result<notify::Event, notify::Error>| {
+                if let Ok(event) = res {
+                    match event.kind {
+                        notify::EventKind::Modify(_) | notify::EventKind::Create(_) => {
+                            let now = std::time::Instant::now();
+                            let mut map = last_emitted.lock().unwrap();
+                            if let Some(last) = map.get(&path_clone) {
+                                if now.duration_since(*last) < std::time::Duration::from_millis(500) {
+                                    return;
+                                }
+                            }
+                            map.insert(path_clone.clone(), now);
+                            drop(map);
+                            let _ = app_clone.emit("file-changed", path_clone.clone());
+                        }
+                        _ => {}
+                    }
+                }
+            },
+            Config::default(),
+        )
+        .map_err(|e| e.to_string())?;
+
+        watcher
+            .watch(std::path::Path::new(&path), RecursiveMode::NonRecursive)
+            .map_err(|e| e.to_string())?;
+
+        watchers.insert(path, watcher);
+        Ok(())
+    }
+
+    fn unwatch(&self, path: &str) {
+        let mut watchers = self.watchers.lock().unwrap();
+        watchers.remove(path);
+        let mut last = self.last_emitted.lock().unwrap();
+        last.remove(path);
+    }
 }
 
 /// Read file bytes (mmap removed: to_vec() negates zero-copy benefit;
@@ -526,6 +591,16 @@ fn rename_file(old_path: String, new_path: String) -> Result<(), String> {
     fs::rename(&old_path, &new_path).map_err(|e| format!("重命名文件失败: {}", e))
 }
 
+#[tauri::command]
+fn watch_file(app: tauri::AppHandle, state: tauri::State<'_, FileWatcherManager>, path: String) -> Result<(), String> {
+    state.watch(app, path)
+}
+
+#[tauri::command]
+fn unwatch_file(state: tauri::State<'_, FileWatcherManager>, path: String) {
+    state.unwatch(&path);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Collect startup file paths from command line arguments
@@ -566,6 +641,7 @@ pub fn run() {
             }
         }))
         .manage(app_state)
+        .manage(FileWatcherManager::new())
         .setup(|app| {
             #[cfg(desktop)]
             {
@@ -591,6 +667,8 @@ pub fn run() {
             window_maximize,
             window_close,
             rename_file,
+            watch_file,
+            unwatch_file,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
