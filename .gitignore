@@ -35,3 +35,6 @@ src-tauri/gen
 # OS
 Thumbs.db
 CHANGELOG_v1.1.0.md
+
+# CodeBuddy
+.codebuddy/
