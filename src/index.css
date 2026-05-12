@@ -360,6 +360,11 @@ mark.cm-searchMatch.cm-searchMatch-selected {
 }
 
 /* ── Markdown Reader Prose Overrides ──────────────────────────── */
+.reader-prose {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 .reader-prose h1,
 .reader-prose h2,
 .reader-prose h3,

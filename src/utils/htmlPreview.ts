@@ -12,6 +12,8 @@ export function prepareHtmlSrcDoc(content: string, isDark: boolean): string {
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       line-height: 1.6;
+      user-select: text;
+      -webkit-user-select: text;
     }
     a { color: ${colors.primary}; }
     a:visited { color: ${colors.primaryText}; }
