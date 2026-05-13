@@ -1,7 +1,8 @@
 # Text Editor V2
 
 一款基于 **Tauri + React + CodeMirror 6** 构建的高性能桌面文本编辑器，支持多种编程语言高亮、分屏编辑、Markdown 预览、文件对比等丰富功能。
-可直接千万release下载Windows和Macos版安装包，离线且缺少webview2环境的Windows请下载full全量安装包
+
+可直接前往release下载Windows和Macos版安装包，离线且缺少webview2环境的Windows请下载full全量安装包
 
 ---
 <img width="1920" height="1040" alt="image" src="https://github.com/user-attachments/assets/d64434fb-43b4-4416-933a-0bb16172d000" />
