@@ -338,12 +338,41 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
   },
 
   moveTabToGroup: (tabId, group) => {
-    set((state) => ({
-      tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, group } : tab)),
-      activeTabId: tabId,
-      activeGroup1TabId: group === 1 ? tabId : state.activeGroup1TabId,
-      activeGroup2TabId: group === 2 ? tabId : state.activeGroup2TabId,
-    }));
+    set((state) => {
+      const tab = state.tabs.find((t) => t.id === tabId);
+      if (!tab || (tab.group || 1) === group) return state;
+
+      const sourceGroup = tab.group || 1;
+      const newTabs = state.tabs.map((t) => (t.id === tabId ? { ...t, group } : t));
+
+      let nextActiveGroup1Id = state.activeGroup1TabId;
+      let nextActiveGroup2Id = state.activeGroup2TabId;
+
+      // If the moved tab was the active tab of the source group,
+      // switch the source group to another remaining tab.
+      if (sourceGroup === 1 && state.activeGroup1TabId === tabId) {
+        const g1Tabs = newTabs.filter((t) => t.group === 1 || !t.group);
+        nextActiveGroup1Id = g1Tabs[g1Tabs.length - 1]?.id || null;
+      }
+      if (sourceGroup === 2 && state.activeGroup2TabId === tabId) {
+        const g2Tabs = newTabs.filter((t) => t.group === 2);
+        nextActiveGroup2Id = g2Tabs[g2Tabs.length - 1]?.id || null;
+      }
+
+      // Activate the moved tab in the target group.
+      if (group === 1) {
+        nextActiveGroup1Id = tabId;
+      } else {
+        nextActiveGroup2Id = tabId;
+      }
+
+      return {
+        tabs: newTabs,
+        activeTabId: tabId,
+        activeGroup1TabId: nextActiveGroup1Id,
+        activeGroup2TabId: nextActiveGroup2Id,
+      };
+    });
   },
 
   reorderTab: (tabId, group, targetGroupIndex) => {
