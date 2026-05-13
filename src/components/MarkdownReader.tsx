@@ -38,6 +38,7 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
 }) => {
   const [content, setContent] = useState('');
   const [readerFontSize, setReaderFontSize] = useState(16);
+  const [readerWidth, setReaderWidth] = useState<'default' | 'wide' | 'full'>('default');
   const tocVisible = useEditorStore((s) => s.readerTocVisible);
   const setReaderTocVisible = useEditorStore((s) => s.setReaderTocVisible);
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -181,6 +182,32 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
             <List size={16} />
           </button>
 
+          {/* Page width toggle */}
+          <div className="flex items-center gap-0.5 px-1 rounded-lg" style={{ backgroundColor: 'color-mix(in srgb, var(--te-bg-tertiary) 50%, transparent)' }}>
+            {([
+              { key: 'default', label: '默认宽度', w: 14 },
+              { key: 'wide', label: '较宽宽度', w: 18 },
+              { key: 'full', label: '全宽', w: 22 },
+            ] as const).map((item) => (
+              <button
+                key={item.key}
+                onClick={() => setReaderWidth(item.key)}
+                className={`px-1.5 py-1.5 rounded-md transition-all ${readerWidth === item.key ? 'bg-[color-mix(in_srgb,var(--te-primary)_15%,transparent)]' : 'hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)]'}`}
+                title={item.label}
+                style={{ color: readerWidth === item.key ? 'var(--te-primary)' : textColor }}
+              >
+                <div
+                  className="h-2.5 rounded-sm border"
+                  style={{
+                    width: item.w,
+                    borderColor: readerWidth === item.key ? 'var(--te-primary)' : 'currentColor',
+                    opacity: readerWidth === item.key ? 1 : 0.5,
+                  }}
+                />
+              </button>
+            ))}
+          </div>
+
           {/* Font size */}
           <div className="flex items-center gap-0.5">
             <button
@@ -280,7 +307,7 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
           setContextMenu({ x: e.clientX, y: e.clientY, items });
         }}
       >
-        <div className="mx-auto px-6 py-10 max-w-3xl">
+        <div className={`mx-auto px-6 py-10 ${readerWidth === 'default' ? 'max-w-3xl' : readerWidth === 'wide' ? 'max-w-5xl' : 'max-w-none'}`}>
           <div
             className={`prose ${proseInvert} max-w-none reader-prose`}
             style={{

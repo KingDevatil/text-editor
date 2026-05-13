@@ -22,6 +22,7 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
   visible = true,
 }) => {
   const [content, setContent] = useState('');
+  const [readerWidth, setReaderWidth] = useState<'default' | 'wide' | 'full'>('default');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const rafRef = useRef<number | null>(null);
   const lastContentRef = useRef('');
@@ -139,6 +140,32 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
         </div>
 
         <div className="flex items-center gap-1">
+          {/* Page width toggle */}
+          <div className="flex items-center gap-0.5 px-1 rounded-lg" style={{ backgroundColor: 'color-mix(in srgb, var(--te-bg-tertiary) 50%, transparent)' }}>
+            {([
+              { key: 'default', label: '默认宽度', w: 14 },
+              { key: 'wide', label: '较宽宽度', w: 18 },
+              { key: 'full', label: '全宽', w: 22 },
+            ] as const).map((item) => (
+              <button
+                key={item.key}
+                onClick={() => setReaderWidth(item.key)}
+                className={`px-1.5 py-1.5 rounded-md transition-all ${readerWidth === item.key ? 'bg-[color-mix(in_srgb,var(--te-primary)_15%,transparent)]' : 'hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)]'}`}
+                title={item.label}
+                style={{ color: readerWidth === item.key ? 'var(--te-primary)' : textColor }}
+              >
+                <div
+                  className="h-2.5 rounded-sm border"
+                  style={{
+                    width: item.w,
+                    borderColor: readerWidth === item.key ? 'var(--te-primary)' : 'currentColor',
+                    opacity: readerWidth === item.key ? 1 : 0.5,
+                  }}
+                />
+              </button>
+            ))}
+          </div>
+
           {/* Theme */}
           <button
             onClick={onToggleTheme}
@@ -153,7 +180,7 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
 
       {/* Main content */}
       <div className="flex-1 overflow-hidden">
-        <div className="w-full h-full min-h-[100vh]">
+        <div className={`mx-auto h-full min-h-[100vh] ${readerWidth === 'default' ? 'max-w-3xl' : readerWidth === 'wide' ? 'max-w-5xl' : 'max-w-none'}`}>
           <iframe
             ref={iframeRef}
             title="HTML Reader"
