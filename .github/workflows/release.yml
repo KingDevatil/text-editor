@@ -84,8 +84,25 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Create full installer override config
+        shell: pwsh
+        run: |
+          $config = @'
+          {
+            "bundle": {
+              "windows": {
+                "webviewInstallMode": {
+                  "type": "offlineInstaller",
+                  "silent": true
+                }
+              }
+            }
+          }
+          '@
+          $config | Set-Content src-tauri/full-installer.json -Encoding UTF8
+
       - name: Build Windows full installer
-        run: npm run tauri-build
+        run: npm run tauri-build -- --config src-tauri/full-installer.json
         env:
           CI: true
 
