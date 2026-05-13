@@ -2,7 +2,9 @@
 
 一款基于 **Tauri + React + CodeMirror 6** 构建的高性能桌面文本编辑器，支持多种编程语言高亮、分屏编辑、Markdown 预览、文件对比等丰富功能。
 
-可直接前往release下载Windows和Macos版安装包，离线且缺少webview2环境的Windows请下载full全量安装包
+可直接前往 Release 下载 Windows 和 macOS 版安装包。Windows 提供两个版本：
+- **轻量安装包**（`-setup.exe`）：体积较小，安装时按需在线下载 WebView2 运行时
+- **全量安装包**（`-full-setup.exe`）：内置离线 WebView2 安装包，适合无网络或缺少 WebView2 的环境
 
 ---
 <img width="1920" height="1040" alt="image" src="https://github.com/user-attachments/assets/d64434fb-43b4-4416-933a-0bb16172d000" />
@@ -19,8 +21,11 @@
 - **查找替换**：支持大小写敏感、**正则表达式可视化构建**、循环搜索、全部替换
 - **代码格式化**：支持 JSON、XML、HTML、CSS、JavaScript、TypeScript、SQL
 - **转到定义**：同文件内符号跳转（`F12`）
+- **代码折叠**：点击行号旁箭头折叠/展开代码块
+- **括号与标签匹配**：自动高亮匹配括号及 HTML/XML 标签对
 - **大文件优化**：自动关闭折叠、括号匹配等重扩展，保障大文件流畅度
 - **智能悬浮提示**：鼠标悬停显示 token 类型，**悬停十六进制颜色值时显示实时颜色预览**
+- **自动补全与签名提示**：输入时自动提示代码补全，函数参数列表实时显示
 - **缩进引导线**：直观显示代码缩进层级
 
 ### 主题系统
@@ -31,7 +36,7 @@
 
 ### 界面与交互
 - **分屏编辑**：左右双栏独立编辑，方便对照与复制（需至少 2 个标签页）
-- **Markdown 预览/阅读模式**：实时预览渲染效果，专注阅读体验
+- **Markdown / HTML 预览/阅读模式**：实时预览渲染效果，专注阅读体验；阅读模式支持**默认/较宽/全宽**三种页宽一键切换
 - **文件对比（Diff）**：基于 CodeMirror Merge，高亮差异
 - **命令面板（F1）**：快速搜索执行所有命令
 - **侧边栏文件树**：浏览项目目录，快速打开文件
@@ -193,13 +198,16 @@ git push origin v1.1.0
 | `Ctrl + N` | 新建文件 |
 | `Ctrl + O` | 打开文件 |
 | `Ctrl + S` | 保存文件 |
-| `Ctrl + F` | 查找替换 |
+| `Ctrl + W` | 关闭当前标签 |
+| `Ctrl + F` | 查找 |
+| `Ctrl + H` | 替换 |
 | `Ctrl + D` | 选中下一个匹配项 |
 | `Ctrl + Shift + L` | 选中所有匹配项 |
 | `Shift + Alt + F` | 格式化文档 |
 | `F1` | 命令面板 |
 | `F12` | 转到定义 |
-| `Ctrl + Shift + V` | Markdown 阅读模式 |
+| `Ctrl + Shift + V` | Markdown / HTML 阅读模式 |
+| `F11` | 切换全屏 |
 | `鼠标拖拽标签` | 同组内排序 / 跨组移动（分屏） |
 
 ---
@@ -218,6 +226,10 @@ git push origin v1.1.0
 - 正则构建器弹窗支持主题外观自适应（Light / Dark / Custom）
 - 主题系统 CSS 变量覆盖全部弹窗组件
 
+**体验改进**
+- **阅读模式页宽切换**：Markdown / HTML 阅读模式顶部工具栏新增默认、较宽、全宽三种页宽一键切换，优先自适应窗口尺寸与目录预留宽度
+- **编辑器使用说明更新**：帮助面板补充命令面板、正则构建器、代码导航辅助、Diff 对比、Minimap 等缺失功能说明，并修正错误快捷键
+
 **性能优化**
 - `useEditorStore` localStorage 保存增加 300ms 防抖，避免打字时同步写盘阻塞主线程
 - `MarkdownReader` 轮询从 60fps (`requestAnimationFrame`) 降至 100ms (`setTimeout`)，显著降低大文件 GC 压力
@@ -225,6 +237,8 @@ git push origin v1.1.0
 - `useFileWatcher` 路径集合不变时提前退出，消除 `markTabDirty` 导致的无意义 diff 计算
 - `useFileWatcher` 新增 `onFileChanged` 回调解耦 Store 依赖，提升可测试性与复用性
 - `App.tsx` 补全 `handleSaveFile` 依赖数组，消除潜在闭包不一致风险
+
+
 
 ---
 
