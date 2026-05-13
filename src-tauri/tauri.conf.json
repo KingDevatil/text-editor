@@ -75,7 +75,7 @@
     },
     "windows": {
       "webviewInstallMode": {
-        "type": "offlineInstaller"
+        "type": "download"
       },
       "nsis": {
         "installMode": "both",
