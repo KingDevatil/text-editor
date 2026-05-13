@@ -147,13 +147,25 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
-      - name: Switch config to basic installer
+      - name: Create basic installer override config
         shell: pwsh
         run: |
-          (Get-Content src-tauri/tauri.conf.json -Raw) -replace '"type"\s*:\s*"offlineInstaller"', '"type": "downloadBootstrapper"' | Set-Content src-tauri/tauri.conf.json -NoNewline
+          $config = @'
+          {
+            "bundle": {
+              "windows": {
+                "webviewInstallMode": {
+                  "type": "downloadBootstrapper",
+                  "silent": true
+                }
+              }
+            }
+          }
+          '@
+          $config | Set-Content src-tauri/basic-installer.json -Encoding UTF8
 
       - name: Build Windows basic installer
-        run: npm run tauri-build
+        run: npm run tauri-build -- --config src-tauri/basic-installer.json
         env:
           CI: true
 
