@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, AlertCircle, AlertTriangle } from 'lucide-react';
+import { AlertCircle, AlertTriangle } from 'lucide-react';
 import { forEachDiagnostic } from '@codemirror/lint';
 import { EditorSelection } from '@codemirror/state';
 import { getActiveView } from '../hooks/useEditorStatePool';

@@ -1,7 +1,7 @@
 import { linter, type Diagnostic } from '@codemirror/lint';
 import type { EditorView } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
-import { registerDiagnosticEngine } from './diagnostics';
+import { registerDiagnosticEngine, getDiagnosticEngine, translateDiagnosticMessage } from './diagnostics';
 
 const LINT_MAX_SIZE = 2_000_000; // Skip linting for files > 2MB
 
@@ -30,7 +30,7 @@ function jsonLinter(view: EditorView): Diagnostic[] {
         from: line.from,
         to: line.to,
         severity: 'error',
-        message: `JSON: ${(e as Error).message}`,
+        message: translateDiagnosticMessage((e as Error).message),
       },
     ];
   }
@@ -66,7 +66,7 @@ function jsLinter(view: EditorView): Diagnostic[] {
         from,
         to: Math.min(from + 1, line.to),
         severity: 'error',
-        message: `Syntax: ${(e as Error).message}`,
+        message: translateDiagnosticMessage((e as Error).message),
       },
     ];
   }
@@ -99,8 +99,8 @@ function xmlLinter(view: EditorView): Diagnostic[] {
           to: line.to,
           severity: 'error',
           message: last
-            ? `Tag mismatch: expected </${last.tag}> but found </${tag}>`
-            : `Unexpected closing tag </${tag}>`,
+            ? `标签不匹配：应为 </${last.tag}>，但遇到 </${tag}>`
+            : `意外的关闭标签 </${tag}>`,
         });
       }
     } else if (!m[0].endsWith('/>')) {
@@ -116,7 +116,7 @@ function xmlLinter(view: EditorView): Diagnostic[] {
       from: line.from,
       to: line.to,
       severity: 'warning',
-      message: `Unclosed tag <${unclosed.tag}>`,
+      message: `未闭合标签 <${unclosed.tag}>`,
     });
   }
 
@@ -141,7 +141,7 @@ function cssLinter(view: EditorView): Diagnostic[] {
           from: line.from,
           to: line.to,
           severity: 'error',
-          message: 'Unexpected closing brace }',
+          message: '意外的关闭大括号 }',
         });
       } else {
         depth--;
@@ -155,7 +155,7 @@ function cssLinter(view: EditorView): Diagnostic[] {
       from: lastLine.from,
       to: lastLine.to,
       severity: 'error',
-      message: `Missing ${depth} closing brace(s)`,
+      message: `缺少 ${depth} 个关闭大括号`,
     });
   }
 
