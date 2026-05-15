@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { EditorState } from '@codemirror/state';
+import { EditorState, EditorSelection } from '@codemirror/state';
 import { EditorView, type DecorationSet } from '@codemirror/view';
-import { columnAlignExtension, setColumnAlign, createColumnDragLayer } from './columnAlign';
+import { columnAlignExtension, setColumnAlign, createColumnDragLayer, columnAlignTabCommand } from './columnAlign';
 
 function createView(doc: string, enabled = true) {
   const state = EditorState.create({
@@ -130,6 +130,49 @@ describe('columnAlignExtension', () => {
 
     const decorations = view.plugin(columnAlignExtension[2] as unknown as { decorations: DecorationSet })?.decorations;
     expect(decorations).toBeDefined();
+    view.destroy();
+  });
+});
+
+describe('columnAlignTabCommand', () => {
+  it('inserts tab at cursor position when enabled', () => {
+    const state = EditorState.create({
+      doc: 'hello world',
+      extensions: columnAlignExtension,
+    });
+    const view = new EditorView({ state });
+    // Enable column align
+    view.dispatch({
+      effects: setColumnAlign.of({ enabled: true, widths: [] }),
+    });
+    // Place cursor at position 5 (after "hello")
+    view.dispatch({
+      selection: EditorSelection.cursor(5),
+    });
+
+    const handled = columnAlignTabCommand(view);
+    expect(handled).toBe(true);
+    // Tab should be inserted at position 5 (before the existing space)
+    expect(view.state.doc.toString()).toBe('hello\t world');
+    // Cursor should be after the inserted tab (position 6)
+    expect(view.state.selection.main.head).toBe(6);
+    view.destroy();
+  });
+
+  it('falls through when disabled', () => {
+    const state = EditorState.create({
+      doc: 'hello world',
+      extensions: columnAlignExtension,
+    });
+    const view = new EditorView({ state });
+    // Column align is disabled by default
+    view.dispatch({
+      selection: EditorSelection.cursor(5),
+    });
+
+    const handled = columnAlignTabCommand(view);
+    expect(handled).toBe(false);
+    expect(view.state.doc.toString()).toBe('hello world');
     view.destroy();
   });
 });

@@ -23,7 +23,7 @@ import { searchHighlight } from '../utils/searchHighlight';
 import { signatureHelp } from '../utils/signatureHelp';
 import { perf } from '../utils/perf';
 import { isTauri } from '@tauri-apps/api/core';
-import { columnAlignExtension, setColumnAlign, createColumnDragLayer, columnAlignTabCommand, columnAlignField } from '../utils/columnAlign';
+import { columnAlignExtension, setColumnAlign, createColumnDragLayer, columnAlignField } from '../utils/columnAlign';
 import type { Language, ThemeColors } from '../types';
 import {
   getEditorState,
@@ -67,6 +67,7 @@ const wordWrapCompartment = new Compartment();
 const unicodeHighlightCompartment = new Compartment();
 const largeFileCompartment = new Compartment();
 const columnAlignCompartment = new Compartment();
+const tabBehaviorCompartment = new Compartment();
 
 const FORMATTABLE_LANGUAGES = new Set(['json', 'xml', 'html', 'css', 'javascript', 'typescript', 'sql']);
 
@@ -432,11 +433,12 @@ function buildBaseExtensions(
     }),
     keymap.of([...defaultKeymap, ...historyKeymap, ...closeBracketsKeymap]),
     keymap.of([
-      { key: 'Tab', run: columnAlignTabCommand },
-      { key: 'Tab', run: indentMore, shift: indentLess },
       { key: 'Mod-d', run: selectNextOccurrence, preventDefault: true },
       { key: 'Shift-Mod-l', run: selectSelectionMatches, preventDefault: true },
     ]),
+    tabBehaviorCompartment.of(
+      keymap.of([{ key: 'Tab', run: indentMore, shift: indentLess }])
+    ),
     markedLinesField,
     pairGutter,
     bracketAndTagMatcher,
@@ -773,9 +775,30 @@ const CmEditor: React.FC<CmEditorProps> = ({
     const view = viewRef.current;
     if (!view) return;
     view.dispatch({
-      effects: columnAlignCompartment.reconfigure(
-        columnAlignEnabled ? columnAlignExtension : []
-      ),
+      effects: [
+        columnAlignCompartment.reconfigure(
+          columnAlignEnabled ? columnAlignExtension : []
+        ),
+        tabBehaviorCompartment.reconfigure(
+          keymap.of([
+            {
+              key: 'Tab',
+              run: columnAlignEnabled
+                ? (view) => {
+                    const { state } = view;
+                    const changes = state.changeByRange((range) => ({
+                      changes: { from: range.from, to: range.to, insert: '\t' },
+                      range: EditorSelection.range(range.from + 1, range.from + 1),
+                    }));
+                    view.dispatch(state.update(changes, { userEvent: 'input' }));
+                    return true;
+                  }
+                : indentMore,
+              shift: indentLess,
+            },
+          ])
+        ),
+      ],
     });
     if (columnAlignEnabled) {
       const savedWidths = tabColumnWidthsRef.current[tabId] || [];
