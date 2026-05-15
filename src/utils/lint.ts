@@ -53,6 +53,26 @@ function preprocessESM(code: string): string {
 }
 
 /**
+ * When new Function() throws an error without (line:col) info,
+ * try to infer the relevant line from the original source text.
+ */
+function inferLineFromErrorMessage(text: string, message: string): number {
+  const lower = message.toLowerCase();
+  const lines = text.split('\n');
+  if (lower.includes('import')) {
+    for (let i = 0; i < lines.length; i++) {
+      if (/^(\s*)import\b/.test(lines[i])) return i + 1;
+    }
+  }
+  if (lower.includes('export')) {
+    for (let i = 0; i < lines.length; i++) {
+      if (/^(\s*)export\b/.test(lines[i])) return i + 1;
+    }
+  }
+  return 1;
+}
+
+/**
  * JS/TS linter — uses new Function() to detect syntax errors.
  * Very lightweight, catches obvious syntax issues.
  */
@@ -70,11 +90,13 @@ function jsLinter(view: EditorView): Diagnostic[] {
   } catch (e) {
     // new Function errors look like "Unexpected token '}' (1:15)"
     const match = (e as Error).message.match(/\((\d+):(\d+)\)/);
-    let lineNum = 1;
+    let lineNum: number;
     let col = 0;
     if (match) {
       lineNum = parseInt(match[1], 10);
       col = parseInt(match[2], 10);
+    } else {
+      lineNum = inferLineFromErrorMessage(text, (e as Error).message);
     }
 
     const line = view.state.doc.line(Math.min(lineNum, view.state.doc.lines));
