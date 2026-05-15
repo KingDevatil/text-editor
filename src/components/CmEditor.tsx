@@ -23,7 +23,7 @@ import { searchHighlight } from '../utils/searchHighlight';
 import { signatureHelp } from '../utils/signatureHelp';
 import { perf } from '../utils/perf';
 import { isTauri } from '@tauri-apps/api/core';
-import { columnAlignExtension, setColumnAlign, createColumnDragLayer } from '../utils/columnAlign';
+import { columnAlignExtension, setColumnAlign, createColumnDragLayer, columnAlignTabCommand } from '../utils/columnAlign';
 import type { Language, ThemeColors } from '../types';
 import {
   getEditorState,
@@ -432,6 +432,7 @@ function buildBaseExtensions(
     }),
     keymap.of([...defaultKeymap, ...historyKeymap, ...closeBracketsKeymap]),
     keymap.of([
+      { key: 'Tab', run: columnAlignTabCommand },
       { key: 'Tab', run: indentMore, shift: indentLess },
       { key: 'Mod-d', run: selectNextOccurrence, preventDefault: true },
       { key: 'Shift-Mod-l', run: selectSelectionMatches, preventDefault: true },

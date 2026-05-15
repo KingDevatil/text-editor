@@ -6,7 +6,7 @@ import {
   type DecorationSet,
   WidgetType,
 } from '@codemirror/view';
-import { StateField, StateEffect, RangeSetBuilder } from '@codemirror/state';
+import { StateField, StateEffect, RangeSetBuilder, EditorSelection } from '@codemirror/state';
 
 const DEFAULT_COL_WIDTH = 120;
 const MIN_COL_WIDTH = 40;
@@ -16,7 +16,6 @@ const TAB_REGEX = /\t/g;
 export interface ColumnAlignConfig {
   enabled: boolean;
   widths: number[];
-  computedWidths?: number[];
 }
 
 export const setColumnAlign = StateEffect.define<ColumnAlignConfig>();
@@ -57,45 +56,6 @@ class ColumnSpacerWidget extends WidgetType {
   }
 }
 
-let measureCtx: CanvasRenderingContext2D | null = null;
-let lastFont = '';
-
-function getMeasureContext(view: EditorView): CanvasRenderingContext2D | null {
-  if (typeof document === 'undefined') return null;
-  if (!measureCtx) {
-    const canvas = document.createElement('canvas');
-    measureCtx = canvas.getContext('2d');
-  }
-  if (!measureCtx) return null;
-  const contentEl = view.dom.querySelector('.cm-content') as HTMLElement | null;
-  if (contentEl) {
-    const style = window.getComputedStyle(contentEl);
-    const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-    if (font !== lastFont) {
-      measureCtx.font = font;
-      lastFont = font;
-    }
-  }
-  return measureCtx;
-}
-
-function measureText(ctx: CanvasRenderingContext2D | null, text: string, view: EditorView): number {
-  if (!ctx) {
-    const charWidth = view.defaultCharacterWidth || 8;
-    return text.length * charWidth;
-  }
-  const contentEl = view.dom.querySelector('.cm-content') as HTMLElement | null;
-  if (contentEl) {
-    const style = window.getComputedStyle(contentEl);
-    const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-    if (font !== lastFont) {
-      ctx.font = font;
-      lastFont = font;
-    }
-  }
-  return ctx.measureText(text).width;
-}
-
 function getColumnWidth(
   config: ColumnAlignConfig,
   colIndex: number
@@ -103,21 +63,14 @@ function getColumnWidth(
   if (config.widths[colIndex] !== undefined) {
     return Math.max(MIN_COL_WIDTH, config.widths[colIndex]);
   }
-  if (config.computedWidths && config.computedWidths[colIndex] !== undefined) {
-    return Math.max(MIN_COL_WIDTH, config.computedWidths[colIndex]);
-  }
   return DEFAULT_COL_WIDTH;
 }
 
 const columnAlignPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet = Decoration.none;
-    private measuredLineNumbers: Set<number> = new Set();
-    private localComputed: number[] = [];
 
     constructor(view: EditorView) {
-      const computed = this.computeWidths(view);
-      if (computed) this.localComputed = computed;
       this.decorations = this.build(view);
     }
 
@@ -129,66 +82,8 @@ const columnAlignPlugin = ViewPlugin.fromClass(
         update.docChanged ||
         update.viewportChanged
       ) {
-        if (update.docChanged) {
-          this.measuredLineNumbers.clear();
-        }
-        if (update.docChanged || update.viewportChanged) {
-          const computed = this.computeWidths(update.view);
-          if (computed) {
-            this.localComputed = computed;
-            // Delay dispatch to avoid re-entrant update
-            Promise.resolve().then(() => {
-              try {
-                update.view.dispatch({
-                  effects: setColumnAlign.of({
-                    enabled: config.enabled,
-                    widths: config.widths,
-                    computedWidths: computed,
-                  }),
-                });
-              } catch {
-                // view may have been destroyed
-              }
-            });
-          }
-        }
         this.decorations = this.build(update.view);
       }
-    }
-
-    computeWidths(view: EditorView): number[] | null {
-      const ctx = getMeasureContext(view);
-      const config = view.state.field(columnAlignField);
-      const newComputed = [...(config.computedWidths || [])];
-      let changed = false;
-
-      for (let pos = view.viewport.from; pos < view.viewport.to; ) {
-        const line = view.state.doc.lineAt(pos);
-        if (this.measuredLineNumbers.has(line.number)) {
-          pos = line.to + 1;
-          continue;
-        }
-        this.measuredLineNumbers.add(line.number);
-
-        let start = 0;
-        let colIdx = 0;
-        const text = line.text;
-        for (let i = 0; i < text.length; i++) {
-          if (text[i] === '\t') {
-            const content = text.slice(start, i);
-            const width = measureText(ctx, content, view);
-            if (width > (newComputed[colIdx] || 0)) {
-              newComputed[colIdx] = width;
-              changed = true;
-            }
-            start = i + 1;
-            colIdx++;
-          }
-        }
-        pos = line.to + 1;
-      }
-
-      return changed ? newComputed : null;
     }
 
     build(view: EditorView): DecorationSet {
@@ -218,13 +113,7 @@ const columnAlignPlugin = ViewPlugin.fromClass(
         for (let i = 0; i < text.length; i++) {
           if (text[i] === '\t') {
             const tabPos = line.from + i;
-            const targetWidth =
-              config.widths[colIdx] !== undefined
-                ? Math.max(MIN_COL_WIDTH, config.widths[colIdx])
-                : Math.max(
-                    MIN_COL_WIDTH,
-                    this.localComputed[colIdx] || DEFAULT_COL_WIDTH
-                  );
+            const targetWidth = getColumnWidth(config, colIdx);
 
             if (start < i) {
               builder.add(
@@ -275,6 +164,24 @@ export const columnAlignExtension = [
   columnAlignField,
   columnAlignPlugin,
 ];
+
+/**
+ * Tab command for column-align mode: inserts a literal tab character at cursor.
+ * Falls through (returns false) when column align is not active.
+ */
+export function columnAlignTabCommand(view: EditorView): boolean {
+  const config = view.state.field(columnAlignField, false);
+  if (config?.enabled) {
+    const { state } = view;
+    const changes = state.changeByRange((range) => ({
+      changes: { from: range.from, to: range.to, insert: '\t' },
+      range: EditorSelection.cursor(range.from + 1),
+    }));
+    view.dispatch(state.update(changes, { userEvent: 'input' }));
+    return true;
+  }
+  return false;
+}
 
 /**
  * Create a drag handle layer for column resizing.
@@ -364,7 +271,6 @@ export function createColumnDragLayer(
         effects: setColumnAlign.of({
           enabled: cfg.enabled,
           widths: newWidths,
-          computedWidths: cfg.computedWidths,
         }),
       });
       onWidthsChange(newWidths);
