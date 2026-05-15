@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { translateDiagnosticMessage } from './diagnostics';
+import { stripJsonComments } from './lint';
 
 describe('translateDiagnosticMessage', () => {
   it('translates ESM import error', () => {
@@ -113,5 +114,35 @@ export default a`;
       }
     }
     expect(inferredLine).toBe(2);
+  });
+});
+
+describe('stripJsonComments', () => {
+  it('strips single-line comments', () => {
+    const input = '{\n  "a": 1 // comment\n}';
+    expect(JSON.parse(stripJsonComments(input))).toEqual({ a: 1 });
+  });
+
+  it('strips multi-line comments', () => {
+    const input = `{\n  /* comment */\n  "a": 1\n}`;
+    expect(JSON.parse(stripJsonComments(input))).toEqual({ a: 1 });
+  });
+
+  it('does not strip comment-like text inside strings', () => {
+    const input = '{\n  "a": "// not a comment /* also not */"\n}';
+    expect(JSON.parse(stripJsonComments(input))).toEqual({ a: '// not a comment /* also not */' });
+  });
+
+  it('handles real tsconfig-like JSONC', () => {
+    const input = `{\n  "compilerOptions": {\n    "target": "es2023"\n  },\n  /* Bundler mode */\n  "moduleResolution": "bundler"\n}`;
+    expect(JSON.parse(stripJsonComments(input))).toEqual({
+      compilerOptions: { target: 'es2023' },
+      moduleResolution: 'bundler',
+    });
+  });
+
+  it('still reports real JSON syntax errors after stripping comments', () => {
+    const input = '{\n  "a": 1,\n  /* comment */\n  "b"\n}';
+    expect(() => JSON.parse(stripJsonComments(input))).toThrow();
   });
 });

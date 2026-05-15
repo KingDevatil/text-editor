@@ -6,7 +6,53 @@ import { registerDiagnosticEngine, getDiagnosticEngine, translateDiagnosticMessa
 const LINT_MAX_SIZE = 2_000_000; // Skip linting for files > 2MB
 
 /**
+ * Strip JSON single-line and multi-line comments while preserving strings.
+ * Handles escaped quotes inside strings.
+ */
+export function stripJsonComments(text: string): string {
+  let result = '';
+  let inString = false;
+  let escapeNext = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escapeNext) {
+      result += ch;
+      escapeNext = false;
+      continue;
+    }
+    if (ch === '\\') {
+      result += ch;
+      escapeNext = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      result += ch;
+      continue;
+    }
+    if (inString) {
+      result += ch;
+      continue;
+    }
+    if (ch === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i++;
+      result += '\n';
+      continue;
+    }
+    if (ch === '/' && text[i + 1] === '*') {
+      i += 2;
+      while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) i++;
+      i++; // skip trailing /
+      continue;
+    }
+    result += ch;
+  }
+  return result;
+}
+
+/**
  * JSON linter — uses JSON.parse() to detect syntax errors.
+ * Supports JSON with Comments (JSONC) by stripping comments first.
  */
 function jsonLinter(view: EditorView): Diagnostic[] {
   if (view.state.doc.length > LINT_MAX_SIZE) return [];
@@ -17,6 +63,14 @@ function jsonLinter(view: EditorView): Diagnostic[] {
     JSON.parse(text);
     return [];
   } catch (e) {
+    // JSONC: try stripping comments first to avoid false positives
+    try {
+      JSON.parse(stripJsonComments(text));
+      return [];
+    } catch {
+      // real syntax error, proceed with original error
+    }
+
     // Try to extract position from error message
     const match = (e as Error).message.match(/position (\d+)/i);
     let pos = 0;
