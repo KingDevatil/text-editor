@@ -97,6 +97,7 @@ interface EditorState {
   projectPath: string | null;
   largeFileOptimize: boolean;
   readerTocVisible: boolean;
+  diagnosticsPanelVisible: boolean;
 }
 
 interface EditorActions {
@@ -148,6 +149,7 @@ interface EditorActions {
   customKeybindings: Record<string, string>;
   setCustomKeybinding: (command: string, key: string) => void;
   resetKeybindings: () => void;
+  setDiagnosticsPanelVisible: (visible: boolean) => void;
 }
 
 const loaded = loadSettings();
@@ -174,6 +176,7 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
   scrollPastEnd: loaded.scrollPastEnd ?? true,
   minimapVisible: loaded.minimapVisible ?? true,
   readerTocVisible: loaded.readerTocVisible ?? true,
+  diagnosticsPanelVisible: false,
   diffMode: false,
   diffLeftTabId: null,
   diffRightTabId: null,
@@ -510,6 +513,7 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
       customKeybindings: { ...state.customKeybindings, [command]: key },
     })),
   resetKeybindings: () => set({ customKeybindings: {} }),
+  setDiagnosticsPanelVisible: (visible) => set({ diagnosticsPanelVisible: visible }),
 }));
 
 useEditorStore.subscribe(debounce(saveSettings, 300));

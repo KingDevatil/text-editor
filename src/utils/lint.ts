@@ -1,8 +1,9 @@
 import { linter, type Diagnostic } from '@codemirror/lint';
 import type { EditorView } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
+import { registerDiagnosticEngine } from './diagnostics';
 
-const LINT_MAX_SIZE = 500_000; // Skip linting for files > 500KB
+const LINT_MAX_SIZE = 2_000_000; // Skip linting for files > 2MB
 
 /**
  * JSON linter — uses JSON.parse() to detect syntax errors.
@@ -161,22 +162,17 @@ function cssLinter(view: EditorView): Diagnostic[] {
   return diagnostics;
 }
 
+// Register built-in diagnostic engines
+registerDiagnosticEngine({ name: 'json', supportedLanguages: ['json'], run: jsonLinter });
+registerDiagnosticEngine({ name: 'js-ts', supportedLanguages: ['javascript', 'typescript'], run: jsLinter });
+registerDiagnosticEngine({ name: 'xml-html', supportedLanguages: ['xml', 'html'], run: xmlLinter });
+registerDiagnosticEngine({ name: 'css', supportedLanguages: ['css'], run: cssLinter });
+
 /**
  * Return a CM6 linter extension for the given language, or null if none available.
  */
 export function getLinterExtension(language: string): Extension | null {
-  switch (language) {
-    case 'json':
-      return linter(jsonLinter);
-    case 'javascript':
-    case 'typescript':
-      return linter(jsLinter);
-    case 'xml':
-    case 'html':
-      return linter(xmlLinter);
-    case 'css':
-      return linter(cssLinter);
-    default:
-      return null;
-  }
+  const engine = getDiagnosticEngine(language);
+  if (!engine) return null;
+  return linter(engine.run);
 }

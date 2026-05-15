@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { FileType, ChevronUp } from 'lucide-react';
+import { FileType, ChevronUp, AlertCircle } from 'lucide-react';
+import { forEachDiagnostic } from '@codemirror/lint';
 import type { EditorTab, Encoding, Language } from '../types';
-import { getEditorContent, getEditorLineCount, getEditorValueLength } from '../hooks/useEditorStatePool';
+import { getEditorContent, getEditorLineCount, getEditorValueLength, getActiveView } from '../hooks/useEditorStatePool';
 
 interface StatusBarProps {
   activeTab: EditorTab | null;
@@ -14,6 +15,8 @@ interface StatusBarProps {
   onToggleShowWhitespace?: () => void;
   minimapVisible?: boolean;
   onToggleMinimap?: () => void;
+  diagnosticsPanelVisible?: boolean;
+  onToggleDiagnosticsPanel?: () => void;
 }
 
 const ENCODINGS: Encoding[] = [
@@ -81,10 +84,13 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
   activeTab, onEncodingChange, onLanguageChange,
   wordWrap, onToggleWordWrap, showWhitespace, onToggleShowWhitespace,
   minimapVisible, onToggleMinimap,
+  diagnosticsPanelVisible, onToggleDiagnosticsPanel,
 }) => {
   const [wordCount, setWordCount] = useState(0);
   const [calculating, setCalculating] = useState(false);
+  const [diagnosticCount, setDiagnosticCount] = useState(0);
   const rafRef = useRef<number | null>(null);
+  const diagRef = useRef<number | null>(null);
   const lastContentRef = useRef('');
 
   // Quick stats from state pool — read directly so they update on every render
@@ -127,6 +133,32 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
     return () => {
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, [activeTab?.id]);
+
+  // Diagnostic count polling
+  useEffect(() => {
+    if (!activeTab) {
+      setDiagnosticCount(0);
+      return;
+    }
+    const poll = () => {
+      const view = getActiveView(activeTab.id);
+      if (!view) {
+        setDiagnosticCount(0);
+        return;
+      }
+      let count = 0;
+      forEachDiagnostic(view.state, () => { count++; });
+      setDiagnosticCount(count);
+    };
+    poll();
+    diagRef.current = window.setInterval(poll, 500);
+    return () => {
+      if (diagRef.current !== null) {
+        clearInterval(diagRef.current);
+        diagRef.current = null;
       }
     };
   }, [activeTab?.id]);
@@ -233,6 +265,22 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
             >
               缩略图
             </button>
+            {onToggleDiagnosticsPanel && (
+              <button
+                onClick={onToggleDiagnosticsPanel}
+                className="px-1.5 py-0.5 rounded transition-colors cursor-pointer text-[10px] font-medium hover:opacity-80 flex items-center gap-1"
+                style={diagnosticsPanelVisible
+                  ? { backgroundColor: 'color-mix(in srgb, var(--te-primary) 15%, transparent)', color: 'var(--te-primary)' }
+                  : diagnosticCount > 0
+                    ? { color: 'var(--te-error, #ef4444)' }
+                    : { color: 'var(--te-text-secondary)' }
+                }
+                title="问题面板"
+              >
+                <AlertCircle size={10} />
+                {diagnosticCount > 0 ? `${diagnosticCount} 个问题` : '无问题'}
+              </button>
+            )}
           </>
         )}
         <div className="relative" ref={encRef}>

@@ -28,6 +28,7 @@ import CmEditor from './components/CmEditor';
 import DiffEditor from './components/DiffEditor';
 import CommandPalette from './components/CommandPalette';
 import TitleBar from './components/TitleBar';
+import DiagnosticsPanel from './components/DiagnosticsPanel';
 
 function App() {
   const tabs = useEditorStore((s) => s.tabs);
@@ -66,6 +67,8 @@ function App() {
   const diffLeftTabId = useEditorStore((s) => s.diffLeftTabId);
   const diffRightTabId = useEditorStore((s) => s.diffRightTabId);
   const readMode = useEditorStore((s) => s.readMode);
+  const diagnosticsPanelVisible = useEditorStore((s) => s.diagnosticsPanelVisible);
+  const setDiagnosticsPanelVisible = useEditorStore((s) => s.setDiagnosticsPanelVisible);
   const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId) || null);
 
   const setActiveTabId = useEditorStore((s) => s.setActiveTabId);
@@ -919,6 +922,12 @@ function App() {
       {/* Settings Panel overlay */}
       <SettingsPanel visible={settingsVisible} onClose={() => setSettingsVisible(false)} />
 
+          <DiagnosticsPanel
+            tabId={activeTabId}
+            visible={diagnosticsPanelVisible}
+            language={activeTab?.language || null}
+          />
+
           <StatusBar
             activeTab={activeTab}
             theme={theme}
@@ -943,6 +952,8 @@ function App() {
               const next = !minimapVisible;
               useEditorStore.getState().setMinimapVisible(next);
             }}
+            diagnosticsPanelVisible={diagnosticsPanelVisible}
+            onToggleDiagnosticsPanel={() => setDiagnosticsPanelVisible(!diagnosticsPanelVisible)}
           />
         </div>
       </div>
