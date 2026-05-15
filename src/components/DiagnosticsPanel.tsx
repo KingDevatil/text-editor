@@ -162,16 +162,18 @@ const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = React.memo(({ tabId, v
         ) : (
           <div className="py-1">
             {items.map((item, idx) => (
-              <button
+              <div
                 key={`${item.from}-${item.to}-${idx}`}
-                className="w-full flex items-start gap-2 px-3 py-1.5 text-left text-xs hover:opacity-80 transition-opacity"
+                className="w-full flex items-start gap-2 px-3 py-1.5 text-left text-xs hover:opacity-80 transition-opacity select-text cursor-pointer"
                 style={{
                   color: 'var(--te-text-primary)',
                   backgroundColor: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
                 }}
-                onClick={() => handleJump(item)}
+                onClick={() => {
+                  const sel = window.getSelection()?.toString();
+                  if (sel) return;
+                  handleJump(item);
+                }}
               >
                 {item.severity === 'error' ? (
                   <AlertCircle size={13} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--te-error, #ef4444)' }} />
@@ -184,7 +186,7 @@ const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = React.memo(({ tabId, v
                 <span className="flex-1 truncate" title={item.message}>
                   {item.message}
                 </span>
-              </button>
+              </div>
             ))}
           </div>
         )}

@@ -146,3 +146,88 @@ describe('stripJsonComments', () => {
     expect(() => JSON.parse(stripJsonComments(input))).toThrow();
   });
 });
+
+describe('translateDiagnosticMessage JSON Expected', () => {
+  it('translates Expected double-quoted property name in JSON', () => {
+    const result = translateDiagnosticMessage('Expected double-quoted property name in JSON at position 222');
+    expect(result).toBe('JSON 语法错误：第 222 个字符处应为双引号包裹的属性名');
+  });
+
+  it('translates Expected colon after property name in JSON', () => {
+    const result = translateDiagnosticMessage("Expected ':' after property name in JSON at position 10");
+    expect(result).toBe('JSON 语法错误：第 10 个字符处属性名后应为冒号');
+  });
+});
+
+describe('cssLinter false positive fixes', () => {
+  it('does not false positive on braces inside strings', () => {
+    const code = 'body::before { content: "{"; }';
+    let depth = 0;
+    let inString: false | "'" | '"' = false;
+    for (let i = 0; i < code.length; i++) {
+      const ch = code[i];
+      if (inString) {
+        if (ch === inString) inString = false;
+        continue;
+      }
+      if (ch === '"' || ch === "'") { inString = ch; continue; }
+      if (ch === '{') depth++;
+      else if (ch === '}') depth--;
+    }
+    expect(depth).toBe(0);
+  });
+
+  it('does not false positive on braces inside comments', () => {
+    const code = 'body { /* { */ color: red; }';
+    let depth = 0;
+    let inComment = false;
+    for (let i = 0; i < code.length; i++) {
+      const ch = code[i];
+      const next = code[i + 1];
+      if (inComment) {
+        if (ch === '*' && next === '/') { inComment = false; i++; }
+        continue;
+      }
+      if (ch === '/' && next === '*') { inComment = true; i++; continue; }
+      if (ch === '{') depth++;
+      else if (ch === '}') depth--;
+    }
+    expect(depth).toBe(0);
+  });
+});
+
+describe('xmlLinter false positive fixes', () => {
+  it('does not false positive on tags inside comments', () => {
+    const html = '<div><!-- <span>comment</span> --></div>';
+    const tagRegex = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)[^>]*?\/?>/g;
+    let m: RegExpExecArray | null;
+    const matchedTags: string[] = [];
+    while ((m = tagRegex.exec(html)) !== null) {
+      const pos = m.index;
+      const before = html.lastIndexOf('<!--', pos);
+      if (before !== -1) {
+        const after = html.indexOf('-->', before);
+        if (after === -1 || after > pos) continue;
+      }
+      matchedTags.push(m[2]);
+    }
+    expect(matchedTags).toEqual(['div', 'div']);
+  });
+
+  it('does not false positive on tags inside script', () => {
+    const html = '<script>const html = "<div>hello</div>";</script>';
+    const tagRegex = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)[^>]*?\/?>/g;
+    let m: RegExpExecArray | null;
+    const matchedTags: string[] = [];
+    while ((m = tagRegex.exec(html)) !== null) {
+      const pos = m.index;
+      const scriptStart = html.lastIndexOf('<script', pos);
+      if (scriptStart !== -1 && scriptStart !== pos) {
+        const scriptEnd = html.indexOf('</script>', scriptStart);
+        if (scriptEnd === -1 || scriptEnd > pos) continue;
+      }
+      matchedTags.push(m[2]);
+    }
+    expect(matchedTags).toEqual(['script', 'script']);
+  });
+});

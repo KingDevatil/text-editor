@@ -69,10 +69,37 @@ export function translateDiagnosticMessage(message: string): string {
   if (/Unexpected .* in JSON at position \d+/i.test(m)) {
     return m.replace(/Unexpected (.*?) in JSON at position (\d+)/i, 'JSON 语法错误：第 $2 个字符处出现意外的 $1');
   }
+  if (/Expected double-quoted property name in JSON at position (\d+)/i.test(m)) {
+    return `JSON 语法错误：第 ${m.match(/position (\d+)/i)![1]} 个字符处应为双引号包裹的属性名`;
+  }
+  if (/Expected ',' or '}' after property value in JSON at position (\d+)/i.test(m)) {
+    return `JSON 语法错误：第 ${m.match(/position (\d+)/i)![1]} 个字符处属性值后应为逗号或右花括号`;
+  }
+  if (/Expected ':' after property name in JSON at position (\d+)/i.test(m)) {
+    return `JSON 语法错误：第 ${m.match(/position (\d+)/i)![1]} 个字符处属性名后应为冒号`;
+  }
+  if (/Expected property name or '}' in JSON at position (\d+)/i.test(m)) {
+    return `JSON 语法错误：第 ${m.match(/position (\d+)/i)![1]} 个字符处应为属性名或右花括号`;
+  }
+  if (/Expected (.*?) in JSON at position (\d+)/i.test(m)) {
+    return m.replace(/Expected (.*?) in JSON at position (\d+)/i, 'JSON 语法错误：第 $2 个字符处应为 $1');
+  }
+  if (/Bad (.*?) in JSON at position (\d+)/i.test(m)) {
+    return m.replace(/Bad (.*?) in JSON at position (\d+)/i, 'JSON 语法错误：第 $2 个字符处存在错误的 $1');
+  }
 
   // JS/TS syntax errors from new Function()
   if (/Unexpected token ['"]?(.+?)['"]?/i.test(m) && !m.includes('JSON')) {
     return m.replace(/Unexpected token ['"]?(.+?)['"]?/i, "意外的符号 '$1'");
+  }
+  if (/Missing \) after argument list/i.test(m)) {
+    return '参数列表后缺少右括号';
+  }
+  if (/Missing ; before statement/i.test(m)) {
+    return '语句前缺少分号';
+  }
+  if (/Unterminated string constant/i.test(m)) {
+    return '字符串未闭合';
   }
   if (/Unexpected identifier/i.test(m)) {
     return '意外的标识符';

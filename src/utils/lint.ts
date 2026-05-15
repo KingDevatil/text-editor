@@ -168,7 +168,36 @@ function jsLinter(view: EditorView): Diagnostic[] {
 }
 
 /**
+ * Check if a position is inside an XML/HTML comment.
+ */
+function isInsideComment(text: string, pos: number): boolean {
+  const before = text.lastIndexOf('<!--', pos);
+  if (before === -1) return false;
+  const after = text.indexOf('-->', before);
+  return after === -1 || after > pos;
+}
+
+/**
+ * Check if a position is inside a <script> or <style> block.
+ * Excludes the opening/closing tags themselves.
+ */
+function isInsideScriptOrStyle(text: string, pos: number): boolean {
+  const scriptStart = text.lastIndexOf('<script', pos);
+  if (scriptStart !== -1 && scriptStart !== pos) {
+    const scriptEnd = text.indexOf('</script>', scriptStart);
+    if (scriptEnd === -1 || scriptEnd > pos) return true;
+  }
+  const styleStart = text.lastIndexOf('<style', pos);
+  if (styleStart !== -1 && styleStart !== pos) {
+    const styleEnd = text.indexOf('</style>', styleStart);
+    if (styleEnd === -1 || styleEnd > pos) return true;
+  }
+  return false;
+}
+
+/**
  * Simple XML/HTML linter — checks for basic tag mismatch.
+ * Skips comments and script/style content to reduce false positives.
  */
 function xmlLinter(view: EditorView): Diagnostic[] {
   if (view.state.doc.length > LINT_MAX_SIZE) return [];
@@ -181,9 +210,13 @@ function xmlLinter(view: EditorView): Diagnostic[] {
   let m: RegExpExecArray | null;
 
   while ((m = tagRegex.exec(text)) !== null) {
+    const pos = m.index;
+    if (isInsideComment(text, pos) || isInsideScriptOrStyle(text, pos)) {
+      continue;
+    }
+
     const isClose = m[1] === '/';
     const tag = m[2].toLowerCase();
-    const pos = m.index;
 
     if (isClose) {
       const last = stack.pop();
@@ -219,17 +252,53 @@ function xmlLinter(view: EditorView): Diagnostic[] {
 }
 
 /**
- * Simple CSS linter — checks brace balance.
+ * Simple CSS linter — checks brace balance, skipping strings and comments.
  */
 function cssLinter(view: EditorView): Diagnostic[] {
   if (view.state.doc.length > LINT_MAX_SIZE) return [];
   const text = view.state.doc.toString();
   let depth = 0;
   const diagnostics: Diagnostic[] = [];
+  let inString: false | "'" | '"' = false;
+  let inComment = false;
 
   for (let i = 0; i < text.length; i++) {
-    if (text[i] === '{') depth++;
-    else if (text[i] === '}') {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (inComment) {
+      if (ch === '*' && next === '/') {
+        inComment = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (inString) {
+      if (ch === '\\') {
+        i++;
+      } else if (ch === inString) {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '/' && next === '*') {
+      inComment = true;
+      i++;
+      continue;
+    }
+    if (ch === '/' && next === '/') {
+      while (i < text.length && text[i] !== '\n') i++;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      inString = ch;
+      continue;
+    }
+
+    if (ch === '{') depth++;
+    else if (ch === '}') {
       if (depth === 0) {
         const line = view.state.doc.lineAt(i);
         diagnostics.push({
