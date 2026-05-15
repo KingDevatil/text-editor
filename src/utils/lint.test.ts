@@ -50,8 +50,7 @@ describe('jsLinter preprocessing', () => {
 const x = 1;`;
     // After stripping comments and preprocessing ESM, this should be valid JS
     expect(() => {
-      const stripped = code.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-      const processed = stripped.replace(/^(\s*)(import|export)\b.*$/gm, '$1');
+      const processed = code.replace(/^(\s*)(import|export)\b.*$/gm, '$1');
       new Function(processed);
     }).not.toThrow();
   });
@@ -60,8 +59,7 @@ const x = 1;`;
     const code = `import typography from '@tailwindcss/typography'
 const x = 1;`;
     expect(() => {
-      const stripped = code.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-      const processed = stripped.replace(/^(\s*)(import|export)\b.*$/gm, '$1');
+      const processed = code.replace(/^(\s*)(import|export)\b.*$/gm, '$1');
       new Function(processed);
     }).not.toThrow();
   });
@@ -69,8 +67,7 @@ const x = 1;`;
   it('does not report false positive for export default', () => {
     const code = `export default { a: 1 }`;
     expect(() => {
-      const stripped = code.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-      const processed = stripped.replace(/^(\s*)(import|export)\b.*$/gm, '$1');
+      const processed = code.replace(/^(\s*)(import|export)\b.*$/gm, '$1');
       new Function(processed);
     }).not.toThrow();
   });
@@ -78,8 +75,7 @@ const x = 1;`;
   it('still reports real syntax errors after preprocessing', () => {
     const code = `const x = {`;
     expect(() => {
-      const stripped = code.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-      const processed = stripped.replace(/^(\s*)(import|export)\b.*$/gm, '$1');
+      const processed = code.replace(/^(\s*)(import|export)\b.*$/gm, '$1');
       new Function(processed);
     }).toThrow();
   });

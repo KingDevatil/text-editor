@@ -91,11 +91,54 @@ function jsonLinter(view: EditorView): Diagnostic[] {
 }
 
 /**
- * Strip JS single-line and multi-line comments.
- * Lightweight — may affect strings containing comment markers, but acceptable for a linter.
+ * Strip JS single-line and multi-line comments while preserving strings.
+ * Handles single/double quotes and template literals (backticks).
  */
-function stripComments(code: string): string {
-  return code.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+function stripJsComments(code: string): string {
+  let result = '';
+  let i = 0;
+  while (i < code.length) {
+    const ch = code[i];
+    const next = code[i + 1];
+
+    // String / template literal
+    if (ch === '"' || ch === "'" || ch === '`') {
+      const quote = ch;
+      result += ch;
+      i++;
+      while (i < code.length) {
+        if (code[i] === '\\') {
+          result += code[i++];
+          if (i < code.length) result += code[i++];
+        } else if (code[i] === quote) {
+          result += code[i++];
+          break;
+        } else {
+          result += code[i++];
+        }
+      }
+      continue;
+    }
+
+    // Single-line comment
+    if (ch === '/' && next === '/') {
+      while (i < code.length && code[i] !== '\n') i++;
+      if (i < code.length) result += code[i++];
+      continue;
+    }
+
+    // Multi-line comment
+    if (ch === '/' && next === '*') {
+      i += 2;
+      while (i < code.length && !(code[i] === '*' && code[i + 1] === '/')) i++;
+      i += 2;
+      continue;
+    }
+
+    result += ch;
+    i++;
+  }
+  return result;
 }
 
 /**
@@ -136,7 +179,7 @@ function jsLinter(view: EditorView): Diagnostic[] {
   if (!text.trim()) return [];
 
   // Remove comments and preprocess ESM statements to reduce false positives
-  const codeToLint = preprocessESM(stripComments(text));
+  const codeToLint = preprocessESM(stripJsComments(text));
 
   try {
     new Function(codeToLint);
