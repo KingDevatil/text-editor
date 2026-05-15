@@ -41,13 +41,19 @@ describe('columnAlignExtension', () => {
       ranges.push({ from, to });
     });
 
-    // Should have 2 decorations for 2 tabs
-    expect(ranges.length).toBe(2);
-    // First tab at position 1, second at position 3
-    expect(ranges[0].from).toBe(1);
-    expect(ranges[0].to).toBe(2);
-    expect(ranges[1].from).toBe(3);
-    expect(ranges[1].to).toBe(4);
+    // 2 tabs -> 1 nowrap line + 2 cell marks + 2 spacers = 5 decorations
+    expect(ranges.length).toBe(5);
+    // First cell mark 'a' at [0,1], spacer at [1,2], second cell mark 'b' at [2,3], spacer at [3,4]
+    expect(ranges[0].from).toBe(0);
+    expect(ranges[0].to).toBe(0); // line decoration
+    expect(ranges[1].from).toBe(0);
+    expect(ranges[1].to).toBe(1); // mark 'a'
+    expect(ranges[2].from).toBe(1);
+    expect(ranges[2].to).toBe(2); // spacer 1
+    expect(ranges[3].from).toBe(2);
+    expect(ranges[3].to).toBe(3); // mark 'b'
+    expect(ranges[4].from).toBe(3);
+    expect(ranges[4].to).toBe(4); // spacer 2
     view.destroy();
   });
 
@@ -71,8 +77,10 @@ describe('columnAlignExtension', () => {
       ranges.push({ from, to });
     });
 
-    // Line 1: 1 tab, Line 2: 2 tabs, Line 3: 0 tabs = 3 total
-    expect(ranges.length).toBe(3);
+    // Line 1: 1 tab -> 1 line + 1 mark + 1 spacer = 3
+    // Line 2: 2 tabs -> 1 line + 2 marks + 2 spacers = 5
+    // Line 3: 0 tabs -> 0
+    expect(ranges.length).toBe(8);
     view.destroy();
   });
 
@@ -107,7 +115,8 @@ describe('columnAlignExtension', () => {
       ranges.push({ from, to });
     });
 
-    expect(ranges.length).toBe(2);
+    // 2 tabs -> 1 line + 2 marks + 2 spacers = 5
+    expect(ranges.length).toBe(5);
     view.destroy();
   });
 
