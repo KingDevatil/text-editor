@@ -142,11 +142,24 @@ function stripJsComments(code: string): string {
 }
 
 /**
- * Replace ESM import/export statements with empty lines to avoid false positives
- * from new Function() running in script mode (non-module).
+ * Replace ESM import/export statements so new Function() can parse the code.
+ * - import ... -> empty line
+ * - export default <expr> -> return (<expr>)
+ * - export const/let/var/function/class -> const/let/var/function/class
+ * - export { ... } -> empty line
  */
 function preprocessESM(code: string): string {
-  return code.replace(/^(\s*)(import|export)\b.*$/gm, '$1');
+  // export default <expr> -> return <expr>
+  code = code.replace(/^(\s*)export\s+default\s+/gm, '$1return ');
+  // export const/let/var/function/class -> const/let/var/function/class
+  code = code.replace(/^(\s*)export\s+(const|let|var|function|class)\b/gm, '$1$2');
+  // export { ... } -> remove
+  code = code.replace(/^(\s*)export\s*\{[^}]*\}\s*;?/gm, '$1');
+  // remove remaining export statements
+  code = code.replace(/^(\s*)export\b.*$/gm, '$1');
+  // remove import statements
+  code = code.replace(/^(\s*)import\b.*$/gm, '$1');
+  return code;
 }
 
 /**

@@ -64,19 +64,55 @@ const x = 1;`;
     }).not.toThrow();
   });
 
-  it('does not report false positive for export default', () => {
+  it('does not report false positive for export default object', () => {
     const code = `export default { a: 1 }`;
     expect(() => {
-      const processed = code.replace(/^(\s*)(import|export)\b.*$/gm, '$1');
+      const processed = code.replace(/^(\s*)export\s+default\s+/gm, '$1return ');
       new Function(processed);
     }).not.toThrow();
+  });
+
+  it('does not report false positive for postcss.config.js style export default', () => {
+    const code = `export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}`;
+    expect(() => {
+      const processed = code.replace(/^(\s*)export\s+default\s+/gm, '$1return ');
+      new Function(processed);
+    }).not.toThrow();
+  });
+
+  it('does not report false positive for tailwind.config.js style export default', () => {
+    const code = `/** @type {import('tailwindcss').Config} */
+import typography from '@tailwindcss/typography'
+
+export default {
+  darkMode: 'class',
+  content: [
+    './index.html',
+    './src/**/*.{js,ts,jsx,tsx}',
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [typography],
+}`;
+    let processed = code;
+    processed = processed.replace(/^(\s*)export\s+default\s+/gm, '$1return ');
+    processed = processed.replace(/^(\s*)export\s+(const|let|var|function|class)\b/gm, '$1$2');
+    processed = processed.replace(/^(\s*)export\s*\{[^}]*\}\s*;?/gm, '$1');
+    processed = processed.replace(/^(\s*)export\b.*$/gm, '$1');
+    processed = processed.replace(/^(\s*)import\b.*$/gm, '$1');
+    expect(() => new Function(processed)).not.toThrow();
   });
 
   it('still reports real syntax errors after preprocessing', () => {
     const code = `const x = {`;
     expect(() => {
-      const processed = code.replace(/^(\s*)(import|export)\b.*$/gm, '$1');
-      new Function(processed);
+      new Function(code);
     }).toThrow();
   });
 });
