@@ -23,6 +23,7 @@ import { searchHighlight } from '../utils/searchHighlight';
 import { signatureHelp } from '../utils/signatureHelp';
 import { perf } from '../utils/perf';
 import { isTauri } from '@tauri-apps/api/core';
+import { columnAlignExtension, setColumnAlign, createColumnDragLayer } from '../utils/columnAlign';
 import type { Language, ThemeColors } from '../types';
 import {
   getEditorState,
@@ -51,6 +52,8 @@ interface CmEditorProps {
   scrollPastEnd?: boolean;
   minimapVisible?: boolean;
   unicodeHighlight?: boolean;
+  columnAlignEnabled?: boolean;
+  onHasTabsChange?: (hasTabs: boolean) => void;
 }
 
 // Compartments allow dynamic reconfiguration without recreating the state.
@@ -63,6 +66,7 @@ const autocompleteCompartment = new Compartment();
 const wordWrapCompartment = new Compartment();
 const unicodeHighlightCompartment = new Compartment();
 const largeFileCompartment = new Compartment();
+const columnAlignCompartment = new Compartment();
 
 const FORMATTABLE_LANGUAGES = new Set(['json', 'xml', 'html', 'css', 'javascript', 'typescript', 'sql']);
 
@@ -473,6 +477,7 @@ function buildBaseExtensions(
   exts.push(bracketColorization);
   exts.push(signatureHelp());
   exts.push(...searchHighlight);
+  exts.push(columnAlignCompartment.of([]));
 
   return exts;
 }
@@ -490,6 +495,8 @@ const CmEditor: React.FC<CmEditorProps> = ({
   scrollPastEnd: enableScrollPastEnd = true,
   minimapVisible = true,
   unicodeHighlight: enableUnicodeHighlight = false,
+  columnAlignEnabled = false,
+  onHasTabsChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -532,6 +539,9 @@ const CmEditor: React.FC<CmEditorProps> = ({
             setEditorState(tabId, update.state);
             if (update.docChanged) {
               useEditorStore.getState().markTabDirty(tabId, true);
+              // Notify parent whether document contains tabs
+              const hasTabs = update.state.doc.toString().includes('\t');
+              onHasTabsChange?.(hasTabs);
             }
           }),
         ],
@@ -552,6 +562,11 @@ const CmEditor: React.FC<CmEditorProps> = ({
     });
     viewRef.current = view;
     setActiveView(tabId, view);
+
+    // Notify parent whether initial document contains tabs
+    // (docChanged listener only fires on edits, not on initial load)
+    const initialHasTabs = view.state.doc.toString().includes('\t');
+    onHasTabsChange?.(initialHasTabs);
 
     // Restore previous scroll position for this tab
     const savedScrollTop = getEditorScrollTop(tabId);
@@ -730,6 +745,74 @@ const CmEditor: React.FC<CmEditorProps> = ({
     });
     setEditorState(tabId, view.state);
   }, [largeFileOptimize, tabId]);
+
+  // Notify parent when this editor becomes the active tab
+  // (onHasTabsChange switches from undefined to the setter)
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !onHasTabsChange) return;
+    const hasTabs = view.state.doc.toString().includes('\t');
+    onHasTabsChange(hasTabs);
+  }, [onHasTabsChange]);
+
+  // Dynamic reconfiguration: column align
+  const dragLayerCleanupRef = useRef<(() => void) | null>(null);
+  const tabColumnWidthsRef = useRef<Record<string, number[]>>(
+    (() => {
+      try {
+        return JSON.parse(localStorage.getItem('te2-column-widths') || '{}');
+      } catch {
+        return {};
+      }
+    })()
+  );
+
+  // Effect 1: Reconfigure compartment and restore per-tab widths
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: columnAlignCompartment.reconfigure(
+        columnAlignEnabled ? columnAlignExtension : []
+      ),
+    });
+    if (columnAlignEnabled) {
+      const savedWidths = tabColumnWidthsRef.current[tabId] || [];
+      view.dispatch({
+        effects: setColumnAlign.of({ enabled: true, widths: savedWidths }),
+      });
+    }
+    setEditorState(tabId, view.state);
+  }, [columnAlignEnabled, tabId]);
+
+  // Effect 2: Manage drag layer lifecycle
+  useEffect(() => {
+    const view = viewRef.current;
+    const container = containerRef.current;
+    if (!view || !container) return;
+
+    if (columnAlignEnabled) {
+      dragLayerCleanupRef.current = createColumnDragLayer(container, view, (widths) => {
+        tabColumnWidthsRef.current[tabId] = widths;
+        try {
+          localStorage.setItem('te2-column-widths', JSON.stringify(tabColumnWidthsRef.current));
+        } catch {
+          // ignore
+        }
+        view.dispatch({
+          effects: setColumnAlign.of({ enabled: true, widths }),
+        });
+      });
+    } else {
+      dragLayerCleanupRef.current?.();
+      dragLayerCleanupRef.current = null;
+    }
+
+    return () => {
+      dragLayerCleanupRef.current?.();
+      dragLayerCleanupRef.current = null;
+    };
+  }, [columnAlignEnabled, tabId]);
 
   // Build context menu items based on current editor state
   const buildMenuItems = useCallback((): ContextMenuItem[] => {

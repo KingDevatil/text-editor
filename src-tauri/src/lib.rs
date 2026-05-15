@@ -17,6 +17,8 @@ use serde::Serialize;
 fn get_encoding(name: &str) -> Result<&'static Encoding, String> {
     match name.to_lowercase().as_str() {
         "utf-8" | "utf8" | "utf-8 bom" => Ok(UTF_8),
+        "utf-16" | "utf-16le" | "utf-16 le" => Ok(encoding_rs::UTF_16LE),
+        "utf-16be" | "utf-16 be" => Ok(encoding_rs::UTF_16BE),
         "ansi" => Ok(WINDOWS_1252),
         "gbk" | "gb2312" => Ok(GBK),
         "gb18030" => Ok(encoding_rs::GB18030),
@@ -106,26 +108,38 @@ fn try_decode(bytes: &[u8], encoding: &'static Encoding) -> Option<String> {
 /// 3. chardetng statistical detection (fallback)
 /// 4. If chardetng result has decoding errors, try GBK/UTF-8 as final fallback
 fn smart_detect_encoding(bytes: &[u8]) -> (String, String) {
-    // 1. Check UTF-8 BOM first
+    // 1. Check UTF-16 LE BOM first (common for Chinese Excel exports)
+    if bytes.starts_with(&[0xFF, 0xFE]) {
+        let (cow, _, _) = encoding_rs::UTF_16LE.decode(&bytes[2..]);
+        return (cow.into_owned(), "UTF-16".to_string());
+    }
+
+    // 2. Check UTF-16 BE BOM
+    if bytes.starts_with(&[0xFE, 0xFF]) {
+        let (cow, _, _) = encoding_rs::UTF_16BE.decode(&bytes[2..]);
+        return (cow.into_owned(), "UTF-16".to_string());
+    }
+
+    // 3. Check UTF-8 BOM
     if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
         let (cow, _, _) = UTF_8.decode(&bytes[3..]);
         return (cow.into_owned(), "UTF-8 BOM".to_string());
     }
 
-    // 2. Try UTF-8 first (most common) - use full bytes, no sample truncation.
+    // 4. Try UTF-8 first (most common) - use full bytes, no sample truncation.
     // Sample truncation was cutting GBK/UTF-8 multi-byte sequences at 64KB boundaries,
     // causing false negatives and chardetng fallback to Windows-1252.
     if let Some(text) = try_decode(bytes, UTF_8) {
         return (text, "UTF-8".to_string());
     }
 
-    // 3. Try GB18030 first (superset of GBK, avoids misidentifying GB18030 as GBK)
+    // 5. Try GB18030 first (superset of GBK, avoids misidentifying GB18030 as GBK)
     let gb18030 = encoding_rs::GB18030;
     if let Some(text) = try_decode(bytes, gb18030) {
         return (text, "GB18030".to_string());
     }
 
-    // 4. Try GBK (Chinese Windows legacy) - use full bytes
+    // 6. Try GBK (Chinese Windows legacy) - use full bytes
     if let Some(text) = try_decode(bytes, GBK) {
         return (text, "GBK".to_string());
     }
@@ -279,6 +293,20 @@ fn read_file_head_bytes(path: &str, max_bytes: usize) -> Result<Vec<u8>, String>
 fn read_file_with_encoding(path: String, encoding: String) -> Result<String, String> {
     let bytes = read_file_bytes_inner(&path)?;
 
+    // Handle UTF-16 LE BOM
+    if encoding.to_lowercase().starts_with("utf-16") && bytes.starts_with(&[0xFF, 0xFE]) {
+        let encoding_obj = get_encoding("utf-16")?;
+        let (cow, _, _) = encoding_obj.decode(&bytes[2..]);
+        return Ok(cow.into_owned());
+    }
+
+    // Handle UTF-16 BE BOM
+    if encoding.to_lowercase().starts_with("utf-16") && bytes.starts_with(&[0xFE, 0xFF]) {
+        let encoding_obj = get_encoding("utf-16be")?;
+        let (cow, _, _) = encoding_obj.decode(&bytes[2..]);
+        return Ok(cow.into_owned());
+    }
+
     // Handle UTF-8 BOM
     if encoding.to_lowercase().starts_with("utf-8") && bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
         let encoding_obj = get_encoding("utf-8")?;
@@ -298,7 +326,25 @@ fn read_file_with_encoding(path: String, encoding: String) -> Result<String, Str
 fn read_file_auto_detect(path: String) -> Result<ReadFileResult, String> {
     let bytes = read_file_bytes_inner(&path)?;
 
-    // Check UTF-8 BOM first
+    // Check UTF-16 LE BOM first (common for Chinese Excel exports)
+    if bytes.starts_with(&[0xFF, 0xFE]) {
+        let (cow, _, _) = encoding_rs::UTF_16LE.decode(&bytes[2..]);
+        return Ok(ReadFileResult {
+            text: cow.into_owned(),
+            encoding: "UTF-16".to_string(),
+        });
+    }
+
+    // Check UTF-16 BE BOM
+    if bytes.starts_with(&[0xFE, 0xFF]) {
+        let (cow, _, _) = encoding_rs::UTF_16BE.decode(&bytes[2..]);
+        return Ok(ReadFileResult {
+            text: cow.into_owned(),
+            encoding: "UTF-16".to_string(),
+        });
+    }
+
+    // Check UTF-8 BOM
     if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
         let (cow, _, _) = UTF_8.decode(&bytes[3..]);
         return Ok(ReadFileResult {
@@ -328,7 +374,13 @@ fn read_file_meta(path: String) -> Result<FileMeta, String> {
     const HEAD_BYTES: usize = 256 * 1024;
     let bytes = read_file_head_bytes(&path, HEAD_BYTES)?;
 
-    let (text, encoding) = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+    let (text, encoding) = if bytes.starts_with(&[0xFF, 0xFE]) {
+        let (cow, _, _) = encoding_rs::UTF_16LE.decode(&bytes[2..]);
+        (cow.into_owned(), "UTF-16".to_string())
+    } else if bytes.starts_with(&[0xFE, 0xFF]) {
+        let (cow, _, _) = encoding_rs::UTF_16BE.decode(&bytes[2..]);
+        (cow.into_owned(), "UTF-16".to_string())
+    } else if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
         let (cow, _, _) = UTF_8.decode(&bytes[3..]);
         (cow.into_owned(), "UTF-8 BOM".to_string())
     } else {

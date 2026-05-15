@@ -15,6 +15,7 @@ import {
   Columns2,
   Eye,
   Settings,
+  Table,
 } from 'lucide-react';
 import type { ThemeMode } from '../types';
 
@@ -31,6 +32,7 @@ interface ToolbarProps {
   onToggleSplit: () => void;
   onToggleReadMode: () => void;
   onToggleSettings: () => void;
+  onToggleColumnAlign: () => void;
   canFormat: boolean;
   canPreview: boolean;
   previewActive: boolean;
@@ -38,6 +40,8 @@ interface ToolbarProps {
   splitActive: boolean;
   canReadMode: boolean;
   readModeActive: boolean;
+  columnAlignActive: boolean;
+  canColumnAlign?: boolean;
   theme: ThemeMode;
 }
 
@@ -54,6 +58,7 @@ const Toolbar: React.FC<ToolbarProps> = React.memo(({
   onToggleSplit,
   onToggleReadMode,
   onToggleSettings,
+  onToggleColumnAlign,
   canFormat,
   canPreview,
   previewActive,
@@ -61,6 +66,8 @@ const Toolbar: React.FC<ToolbarProps> = React.memo(({
   splitActive,
   canReadMode,
   readModeActive,
+  columnAlignActive,
+  canColumnAlign,
   theme,
 }) => {
   const btnBase =
@@ -125,6 +132,16 @@ const Toolbar: React.FC<ToolbarProps> = React.memo(({
         >
           <Braces size={16} />
           <span className="hidden sm:inline font-medium">格式化</span>
+        </button>
+        <button
+          className={`${btnBase} ${canColumnAlign === false ? 'opacity-40 cursor-not-allowed active:scale-100' : ''}`}
+          style={columnAlignActive ? activeStyle : btnStyle}
+          onClick={onToggleColumnAlign}
+          disabled={canColumnAlign === false}
+          title={canColumnAlign === false ? '当前文件不含制表符' : '列对齐'}
+        >
+          <Table size={16} />
+          <span className="hidden sm:inline font-medium">列对齐</span>
         </button>
       </div>
 

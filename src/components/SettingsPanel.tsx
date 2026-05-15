@@ -63,6 +63,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
   const setShowWhitespace = useEditorStore((s) => s.setShowWhitespace);
   const scrollPastEnd = useEditorStore((s) => s.scrollPastEnd);
   const setScrollPastEnd = useEditorStore((s) => s.setScrollPastEnd);
+  const columnAlignEnabled = useEditorStore((s) => s.columnAlignEnabled);
+  const setColumnAlignEnabled = useEditorStore((s) => s.setColumnAlignEnabled);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -208,6 +210,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
                     <ToggleRow label="滚动超出末尾" checked={scrollPastEnd} onChange={setScrollPastEnd} />
                     <ToggleRow label="大文件性能优化" checked={largeFileOptimize} onChange={setLargeFileOptimize} title="打开大文件时自动禁用高亮、折叠等功能以提升性能" />
                     <ToggleRow label="全角半角检测" checked={unicodeHighlight} onChange={setUnicodeHighlight} />
+                    <ToggleRow label="列对齐" checked={columnAlignEnabled} onChange={setColumnAlignEnabled} title="将制表符分隔的内容按固定列宽对齐显示" />
                   </div>
                 </div>
               </div>

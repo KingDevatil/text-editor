@@ -17,11 +17,14 @@ interface StatusBarProps {
   onToggleMinimap?: () => void;
   diagnosticsPanelVisible?: boolean;
   onToggleDiagnosticsPanel?: () => void;
+  columnAlignEnabled?: boolean;
+  onToggleColumnAlign?: () => void;
 }
 
 const ENCODINGS: Encoding[] = [
   'UTF-8',
   'UTF-8 BOM',
+  'UTF-16',
   'ANSI',
   'GBK',
   'GB2312',
@@ -85,6 +88,7 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
   wordWrap, onToggleWordWrap, showWhitespace, onToggleShowWhitespace,
   minimapVisible, onToggleMinimap,
   diagnosticsPanelVisible, onToggleDiagnosticsPanel,
+  columnAlignEnabled, onToggleColumnAlign,
 }) => {
   const [wordCount, setWordCount] = useState(0);
   const [calculating, setCalculating] = useState(false);
@@ -279,6 +283,19 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
               >
                 <AlertCircle size={10} />
                 {diagnosticCount > 0 ? `${diagnosticCount} 个问题` : '无问题'}
+              </button>
+            )}
+            {onToggleColumnAlign && (
+              <button
+                onClick={onToggleColumnAlign}
+                className="px-1.5 py-0.5 rounded transition-colors cursor-pointer text-[10px] font-medium hover:opacity-80"
+                style={columnAlignEnabled
+                  ? { backgroundColor: 'color-mix(in srgb, var(--te-primary) 15%, transparent)', color: 'var(--te-primary)' }
+                  : { color: 'var(--te-text-secondary)' }
+                }
+                title="列对齐"
+              >
+                列对齐
               </button>
             )}
           </>
