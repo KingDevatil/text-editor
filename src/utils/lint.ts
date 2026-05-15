@@ -37,6 +37,22 @@ function jsonLinter(view: EditorView): Diagnostic[] {
 }
 
 /**
+ * Strip JS single-line and multi-line comments.
+ * Lightweight — may affect strings containing comment markers, but acceptable for a linter.
+ */
+function stripComments(code: string): string {
+  return code.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+/**
+ * Replace ESM import/export statements with empty lines to avoid false positives
+ * from new Function() running in script mode (non-module).
+ */
+function preprocessESM(code: string): string {
+  return code.replace(/^(\s*)(import|export)\b.*$/gm, '$1');
+}
+
+/**
  * JS/TS linter — uses new Function() to detect syntax errors.
  * Very lightweight, catches obvious syntax issues.
  */
@@ -45,8 +61,11 @@ function jsLinter(view: EditorView): Diagnostic[] {
   const text = view.state.doc.toString();
   if (!text.trim()) return [];
 
+  // Remove comments and preprocess ESM statements to reduce false positives
+  const codeToLint = preprocessESM(stripComments(text));
+
   try {
-    new Function(text);
+    new Function(codeToLint);
     return [];
   } catch (e) {
     // new Function errors look like "Unexpected token '}' (1:15)"

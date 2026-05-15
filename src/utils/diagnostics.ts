@@ -104,6 +104,12 @@ export function translateDiagnosticMessage(message: string): string {
   if (/Invalid regular expression/i.test(m)) {
     return '无效的正则表达式';
   }
+  if (/Cannot use import statement outside a module/i.test(m)) {
+    return '不能在模块外部使用 import 语句（检测器不支持 ESM 模块语法）';
+  }
+  if (/Unexpected token 'import'/i.test(m)) {
+    return "意外的符号 'import'（检测器不支持 ESM 模块语法）";
+  }
 
   return m;
 }
