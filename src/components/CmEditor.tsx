@@ -23,7 +23,7 @@ import { searchHighlight } from '../utils/searchHighlight';
 import { signatureHelp } from '../utils/signatureHelp';
 import { perf } from '../utils/perf';
 import { isTauri } from '@tauri-apps/api/core';
-import { columnAlignExtension, setColumnAlign, createColumnDragLayer, columnAlignTabCommand } from '../utils/columnAlign';
+import { columnAlignExtension, setColumnAlign, createColumnDragLayer, columnAlignTabCommand, columnAlignField } from '../utils/columnAlign';
 import type { Language, ThemeColors } from '../types';
 import {
   getEditorState,
@@ -478,7 +478,7 @@ function buildBaseExtensions(
   exts.push(bracketColorization);
   exts.push(signatureHelp());
   exts.push(...searchHighlight);
-  exts.push(columnAlignCompartment.of([]));
+  exts.push(columnAlignCompartment.of([columnAlignField]));
 
   return exts;
 }

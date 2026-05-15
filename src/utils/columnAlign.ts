@@ -20,7 +20,7 @@ export interface ColumnAlignConfig {
 
 export const setColumnAlign = StateEffect.define<ColumnAlignConfig>();
 
-const columnAlignField = StateField.define<ColumnAlignConfig>({
+export const columnAlignField = StateField.define<ColumnAlignConfig>({
   create() {
     return { enabled: false, widths: [] };
   },
@@ -175,7 +175,7 @@ export function columnAlignTabCommand(view: EditorView): boolean {
     const { state } = view;
     const changes = state.changeByRange((range) => ({
       changes: { from: range.from, to: range.to, insert: '\t' },
-      range: EditorSelection.cursor(range.from + 1),
+      range: EditorSelection.range(range.from + 1, range.from + 1),
     }));
     view.dispatch(state.update(changes, { userEvent: 'input' }));
     return true;
