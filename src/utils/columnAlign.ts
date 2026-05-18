@@ -105,8 +105,7 @@ const columnAlignPlugin = ViewPlugin.fromClass(
       const prevConfig = update.startState.field(columnAlignField);
       if (
         config !== prevConfig ||
-        update.docChanged ||
-        update.viewportChanged
+        update.docChanged
       ) {
         this.decorations = this.build(update.view);
       }
@@ -118,7 +117,7 @@ const columnAlignPlugin = ViewPlugin.fromClass(
 
       const builder = new RangeSetBuilder<Decoration>();
 
-      for (let pos = view.viewport.from; pos < view.viewport.to; ) {
+      for (let pos = 0; pos < view.state.doc.length; ) {
         const line = view.state.doc.lineAt(pos);
         const text = line.text;
 
