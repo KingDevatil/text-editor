@@ -327,14 +327,14 @@ function xmlLinter(view: EditorView): Diagnostic[] {
       }
     } else if (!m[0].endsWith('/>')) {
       // Duplicate open tag detection: if there's already an unclosed tag with the same name,
-      // warn at the current position so the user knows earlier.
+      // report it as info so the user knows earlier without cluttering warnings.
       const existingIdx = stack.findIndex((s) => s.tag === tag);
       if (existingIdx !== -1) {
         const line = view.state.doc.lineAt(pos);
         diagnostics.push({
           from: line.from,
           to: line.to,
-          severity: 'warning',
+          severity: 'info',
           message: `标签 <${tag}> 未闭合，遇到同名开启标签`,
         });
       }

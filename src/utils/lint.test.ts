@@ -284,7 +284,7 @@ const x = 2`;
 });
 
 describe('xmlLinter duplicate open tag detection', () => {
-  it('warns when a duplicate open tag appears before the previous one is closed', () => {
+  it('reports info when a duplicate open tag appears before the previous one is closed', () => {
     // Simulates the user deleting a closing tag: <Rule> ... <Rule> (missing </Rule>)
     const html = `<RuleData>
   <Rule>
@@ -330,15 +330,15 @@ describe('xmlLinter duplicate open tag detection', () => {
       } else if (!m[0].endsWith('/>')) {
         const existingIdx = stack.findIndex((s) => s.tag === tag);
         if (existingIdx !== -1) {
-          diagnostics.push({ severity: 'warning', message: `duplicate <${tag}>`, line: lineNum });
+          diagnostics.push({ severity: 'info', message: `duplicate <${tag}>`, line: lineNum });
         }
         stack.push({ tag, line: lineNum });
       }
     }
 
-    // Should warn at line 5 (second <Rule>) because first <Rule> at line 2 is unclosed
-    const dupWarning = diagnostics.find((d) => d.severity === 'warning' && d.line === 5);
-    expect(dupWarning).toBeDefined();
+    // Should report info at line 5 (second <Rule>) because first <Rule> at line 2 is unclosed
+    const dupInfo = diagnostics.find((d) => d.severity === 'info' && d.line === 5);
+    expect(dupInfo).toBeDefined();
 
     // Should report unclosed first <Rule> at line 2 when </RuleData> is encountered
     const unclosedRule = diagnostics.find((d) => d.severity === 'warning' && d.line === 2);
