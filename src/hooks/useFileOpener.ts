@@ -3,6 +3,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { Encoding, Language } from '../types';
 import { EXT_TO_LANGUAGE } from '../types';
 import { useEditorStore } from './useEditorStore';
+import { useSettingsStore } from './useSettingsStore';
 import { updateEditorContent } from './useEditorStatePool';
 import { perf } from '../utils/perf';
 
@@ -120,7 +121,7 @@ export function useFileOpener() {
 
           if (isLarge) {
             const targetLang = getLanguageFromFileName(fileName);
-            const shouldSwitchLang = targetLang !== 'plaintext' && !useEditorStore.getState().largeFileOptimize;
+            const shouldSwitchLang = targetLang !== 'plaintext' && !useSettingsStore.getState().largeFileOptimize;
             if (shouldSwitchLang) {
               runBackground(() => {
                 setTabLanguage(useEditorStore.getState().tabs.find((t) => t.filePath === filePath)?.id || '', targetLang);

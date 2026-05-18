@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 import { getEditorContent } from '../hooks/useEditorStatePool';
-import { useEditorStore } from '../hooks/useEditorStore';
+import { useSettingsStore } from '../hooks/useSettingsStore';
 import type { ThemeMode } from '../types';
 import { generateHeadingSlugs, slugify } from '../utils/slugify';
 
@@ -39,8 +39,8 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
   const [content, setContent] = useState('');
   const [readerFontSize, setReaderFontSize] = useState(16);
   const [readerWidth, setReaderWidth] = useState<'default' | 'wide' | 'full'>('default');
-  const tocVisible = useEditorStore((s) => s.readerTocVisible);
-  const setReaderTocVisible = useEditorStore((s) => s.setReaderTocVisible);
+  const tocVisible = useSettingsStore((s) => s.readerTocVisible);
+  const setReaderTocVisible = useSettingsStore((s) => s.setReaderTocVisible);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const rafRef = useRef<number | null>(null);

@@ -1,4 +1,5 @@
 import React, { useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface ContextMenuItem {
   id: string;
@@ -49,7 +50,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }) => {
   const posX = Math.min(x, window.innerWidth - menuWidth - 8);
   const posY = Math.min(y, window.innerHeight - menuHeight - 8);
 
-  return (
+  return createPortal(
     <div
       ref={menuRef}
       className="fixed z-50 py-1.5 min-w-[180px] rounded-lg border border-[var(--te-border)] shadow-lg bg-[var(--te-bg-tertiary)] animate-in fade-in zoom-in-95 duration-100"
@@ -94,7 +95,8 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }) => {
           </button>
         );
       })}
-    </div>
+    </div>,
+    document.body
   );
 };
 

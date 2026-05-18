@@ -5,6 +5,7 @@ import { lineNumbers, keymap, EditorView } from '@codemirror/view';
 import { buildDynamicTheme, syntaxHighlightExtension } from '../utils/themes';
 import { resolveThemeColors } from '../utils/themeResolver';
 import type { ThemeMode } from '../types';
+import { useSettingsStore } from '../hooks/useSettingsStore';
 import { useEditorStore } from '../hooks/useEditorStore';
 import { X } from 'lucide-react';
 
@@ -19,9 +20,9 @@ const DiffEditor: React.FC<DiffEditorProps> = ({ leftContent, rightContent, them
   const mergeViewRef = useRef<MergeView | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
-  const lightCustomColors = useEditorStore((s) => s.lightCustomColors);
-  const darkCustomColors = useEditorStore((s) => s.darkCustomColors);
-  const customColors = useEditorStore((s) => s.customColors);
+  const lightCustomColors = useSettingsStore((s) => s.lightCustomColors);
+  const darkCustomColors = useSettingsStore((s) => s.darkCustomColors);
+  const customColors = useSettingsStore((s) => s.customColors);
 
   useEffect(() => {
     const container = containerRef.current;

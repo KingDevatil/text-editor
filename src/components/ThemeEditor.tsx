@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { X, RotateCcw, Download, Upload, Check } from 'lucide-react';
 import type { ThemeColors, ThemeMode, PartialThemeColors } from '../types';
 import { defaultLightColors, defaultDarkColors } from '../utils/themeDefaults';
-import { useEditorStore } from '../hooks/useEditorStore';
+import { useSettingsStore } from '../hooks/useSettingsStore';
 
 interface ThemeEditorProps {
   onClose: () => void;
@@ -97,15 +97,15 @@ const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState('');
 
-  const lightCustom = useEditorStore((s) => s.lightCustomColors);
-  const darkCustom = useEditorStore((s) => s.darkCustomColors);
-  const custom = useEditorStore((s) => s.customColors);
-  const setLightColor = useEditorStore((s) => s.setLightCustomColor);
-  const setDarkColor = useEditorStore((s) => s.setDarkCustomColor);
-  const setCustomColor = useEditorStore((s) => s.setCustomColor);
-  const resetLight = useEditorStore((s) => s.resetLightCustomColors);
-  const resetDark = useEditorStore((s) => s.resetDarkCustomColors);
-  const resetCustom = useEditorStore((s) => s.resetCustomColors);
+  const lightCustom = useSettingsStore((s) => s.lightCustomColors);
+  const darkCustom = useSettingsStore((s) => s.darkCustomColors);
+  const custom = useSettingsStore((s) => s.customColors);
+  const setLightColor = useSettingsStore((s) => s.setLightCustomColor);
+  const setDarkColor = useSettingsStore((s) => s.setDarkCustomColor);
+  const setCustomColor = useSettingsStore((s) => s.setCustomColor);
+  const resetLight = useSettingsStore((s) => s.resetLightCustomColors);
+  const resetDark = useSettingsStore((s) => s.resetDarkCustomColors);
+  const resetCustom = useSettingsStore((s) => s.resetCustomColors);
 
   const defaults = tab === 'light' ? defaultLightColors : tab === 'dark' ? defaultDarkColors : defaultLightColors;
   const customColors = tab === 'light' ? lightCustom : tab === 'dark' ? darkCustom : custom;

@@ -6,6 +6,8 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open, confirm, message } from '@tauri-apps/plugin-dialog';
 import { useEditorStore } from './hooks/useEditorStore';
+import { useSettingsStore } from './hooks/useSettingsStore';
+import { useUIStore } from './hooks/useUIStore';
 import { useFileOpener } from './hooks/useFileOpener';
 import { useFileWatcher } from './hooks/useFileWatcher';
 import { getEditorContent, updateEditorContent, getActiveView } from './hooks/useEditorStatePool';
@@ -35,14 +37,14 @@ function App() {
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const activeGroup1TabId = useEditorStore((s) => s.activeGroup1TabId);
   const activeGroup2TabId = useEditorStore((s) => s.activeGroup2TabId);
-  const theme = useEditorStore((s) => s.theme);
-  const lightCustomColors = useEditorStore((s) => s.lightCustomColors);
-  const darkCustomColors = useEditorStore((s) => s.darkCustomColors);
-  const customColors = useEditorStore((s) => s.customColors);
-  const sidebarVisible = useEditorStore((s) => s.sidebarVisible);
-  const findReplaceVisible = useEditorStore((s) => s.findReplaceVisible);
-  const unicodeHighlight = useEditorStore((s) => s.unicodeHighlight);
-  const fontSize = useEditorStore((s) => s.fontSize);
+  const theme = useSettingsStore((s) => s.theme);
+  const lightCustomColors = useSettingsStore((s) => s.lightCustomColors);
+  const darkCustomColors = useSettingsStore((s) => s.darkCustomColors);
+  const customColors = useSettingsStore((s) => s.customColors);
+  const sidebarVisible = useUIStore((s) => s.sidebarVisible);
+  const findReplaceVisible = useUIStore((s) => s.findReplaceVisible);
+  const unicodeHighlight = useSettingsStore((s) => s.unicodeHighlight);
+  const fontSize = useSettingsStore((s) => s.fontSize);
 
   // Refs for keyboard shortcuts — always point to latest callbacks
   const handleNewFileRef = useRef<(() => void) | null>(null);
@@ -63,32 +65,32 @@ function App() {
   useEffect(() => {
     columnAlignSupportedRef.current = columnAlignSupported;
   });
-  const previewVisible = useEditorStore((s) => s.previewVisible);
+  const previewVisible = useUIStore((s) => s.previewVisible);
   const splitMode = useEditorStore((s) => s.splitMode);
   const projectPath = useEditorStore((s) => s.projectPath);
-  const largeFileOptimize = useEditorStore((s) => s.largeFileOptimize);
-  const wordWrap = useEditorStore((s) => s.wordWrap);
-  const showWhitespace = useEditorStore((s) => s.showWhitespace);
-  const scrollPastEnd = useEditorStore((s) => s.scrollPastEnd);
-  const minimapVisible = useEditorStore((s) => s.minimapVisible);
+  const largeFileOptimize = useSettingsStore((s) => s.largeFileOptimize);
+  const wordWrap = useSettingsStore((s) => s.wordWrap);
+  const showWhitespace = useSettingsStore((s) => s.showWhitespace);
+  const scrollPastEnd = useSettingsStore((s) => s.scrollPastEnd);
+  const minimapVisible = useSettingsStore((s) => s.minimapVisible);
   const diffMode = useEditorStore((s) => s.diffMode);
   const diffLeftTabId = useEditorStore((s) => s.diffLeftTabId);
   const diffRightTabId = useEditorStore((s) => s.diffRightTabId);
-  const readMode = useEditorStore((s) => s.readMode);
-  const diagnosticsPanelVisible = useEditorStore((s) => s.diagnosticsPanelVisible);
-  const setDiagnosticsPanelVisible = useEditorStore((s) => s.setDiagnosticsPanelVisible);
-  const columnAlignEnabled = useEditorStore((s) => s.columnAlignEnabled);
-  const setColumnAlignEnabled = useEditorStore((s) => s.setColumnAlignEnabled);
-  const columnAlignSupported = useEditorStore((s) => s.columnAlignSupported);
+  const readMode = useUIStore((s) => s.readMode);
+  const diagnosticsPanelVisible = useUIStore((s) => s.diagnosticsPanelVisible);
+  const setDiagnosticsPanelVisible = useUIStore((s) => s.setDiagnosticsPanelVisible);
+  const columnAlignEnabled = useSettingsStore((s) => s.columnAlignEnabled);
+  const setColumnAlignEnabled = useSettingsStore((s) => s.setColumnAlignEnabled);
+  const columnAlignSupported = useSettingsStore((s) => s.columnAlignSupported);
   const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId) || null);
 
   const setActiveTabId = useEditorStore((s) => s.setActiveTabId);
   const setActiveGroup1TabId = useEditorStore((s) => s.setActiveGroup1TabId);
   const setActiveGroup2TabId = useEditorStore((s) => s.setActiveGroup2TabId);
-  const setTheme = useEditorStore((s) => s.setTheme);
-  const setSidebarVisible = useEditorStore((s) => s.setSidebarVisible);
-  const setFindReplaceVisible = useEditorStore((s) => s.setFindReplaceVisible);
-  const setPreviewVisible = useEditorStore((s) => s.setPreviewVisible);
+  const setTheme = useSettingsStore((s) => s.setTheme);
+  const setSidebarVisible = useUIStore((s) => s.setSidebarVisible);
+  const setFindReplaceVisible = useUIStore((s) => s.setFindReplaceVisible);
+  const setPreviewVisible = useUIStore((s) => s.setPreviewVisible);
   const setSplitMode = useEditorStore((s) => s.setSplitMode);
   const setProjectPath = useEditorStore((s) => s.setProjectPath);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -102,7 +104,7 @@ function App() {
   const renameTab = useEditorStore((s) => s.renameTab);
   const moveTabToGroup = useEditorStore((s) => s.moveTabToGroup);
   const reorderTab = useEditorStore((s) => s.reorderTab);
-  const setReadMode = useEditorStore((s) => s.setReadMode);
+  const setReadMode = useUIStore((s) => s.setReadMode);
 
   const openFile = useFileOpener();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -226,11 +228,11 @@ function App() {
       // Read mode toggle: Ctrl+Shift+V
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
         e.preventDefault();
-        const state = useEditorStore.getState();
-        if (state.readMode) {
+        const ui = useUIStore.getState();
+        if (ui.readMode) {
           setReadMode(false);
         } else {
-          const tab = state.tabs.find((t) => t.id === state.activeTabId);
+          const tab = activeTabRef.current;
           if (tab?.language === 'markdown' || tab?.language === 'html') {
             setReadMode(true);
           } else {
@@ -672,18 +674,17 @@ function App() {
   }, []);
 
   const handleToggleReadMode = useCallback(() => {
-    const state = useEditorStore.getState();
+    const state = useUIStore.getState();
     if (state.readMode) {
       setReadMode(false);
     } else {
-      const tab = state.tabs.find((t) => t.id === state.activeTabId);
-      if (tab?.language === 'markdown' || tab?.language === 'html') {
+      if (activeTab?.language === 'markdown' || activeTab?.language === 'html') {
         setReadMode(true);
       } else {
         console.warn('[ReadMode] 仅对 Markdown 和 HTML 文件可用');
       }
     }
-  }, [setReadMode]);
+  }, [setReadMode, activeTab]);
 
   const handleReaderExit = useCallback(() => setReadMode(false), [setReadMode]);
   const handleReaderToggleTheme = useCallback(() => handleCycleTheme(), [handleCycleTheme]);
@@ -718,8 +719,8 @@ function App() {
     { id: 'format', label: '格式化文档', shortcut: 'Shift+Alt+F', icon: <Braces size={16} />, action: handleFormat },
     { id: 'sidebar', label: sidebarVisible ? '隐藏侧边栏' : '显示侧边栏', icon: <PanelLeft size={16} />, action: () => setSidebarVisible(!sidebarVisible) },
     { id: 'theme', label: `切换主题 (${theme})`, icon: isDark ? <Sun size={16} /> : <Moon size={16} />, action: handleCycleTheme },
-    { id: 'wordwrap', label: wordWrap ? '关闭自动换行' : '开启自动换行', icon: <WrapText size={16} />, action: () => useEditorStore.getState().setWordWrap(!wordWrap) },
-    { id: 'whitespace', label: showWhitespace ? '隐藏空白字符' : '显示空白字符', icon: <Space size={16} />, action: () => useEditorStore.getState().setShowWhitespace(!showWhitespace) },
+    { id: 'wordwrap', label: wordWrap ? '关闭自动换行' : '开启自动换行', icon: <WrapText size={16} />, action: () => useSettingsStore.getState().setWordWrap(!wordWrap) },
+    { id: 'whitespace', label: showWhitespace ? '隐藏空白字符' : '显示空白字符', icon: <Space size={16} />, action: () => useSettingsStore.getState().setShowWhitespace(!showWhitespace) },
     { id: 'preview', label: previewVisible ? '关闭预览' : '开启预览', icon: <BookOpen size={16} />, action: () => setPreviewVisible(!previewVisible) },
     { id: 'readmode', label: readMode ? '退出阅读模式' : '阅读模式', shortcut: 'Ctrl+Shift+V', icon: <Eye size={16} />, action: handleToggleReadMode },
     { id: 'split', label: splitMode ? '关闭分屏' : '开启分屏', icon: <Columns2 size={16} />, action: handleToggleSplit },
@@ -965,17 +966,17 @@ function App() {
             wordWrap={wordWrap}
             onToggleWordWrap={() => {
               const next = !wordWrap;
-              useEditorStore.getState().setWordWrap(next);
+              useSettingsStore.getState().setWordWrap(next);
             }}
             showWhitespace={showWhitespace}
             onToggleShowWhitespace={() => {
               const next = !showWhitespace;
-              useEditorStore.getState().setShowWhitespace(next);
+              useSettingsStore.getState().setShowWhitespace(next);
             }}
             minimapVisible={minimapVisible}
             onToggleMinimap={() => {
               const next = !minimapVisible;
-              useEditorStore.getState().setMinimapVisible(next);
+              useSettingsStore.getState().setMinimapVisible(next);
             }}
             diagnosticsPanelVisible={diagnosticsPanelVisible}
             onToggleDiagnosticsPanel={() => setDiagnosticsPanelVisible(!diagnosticsPanelVisible)}

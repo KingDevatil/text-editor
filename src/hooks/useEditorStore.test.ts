@@ -287,7 +287,6 @@ describe('useEditorStore', () => {
     expect(state.activeGroup1TabId).toBeNull();
     expect(state.activeGroup2TabId).toBeNull();
     expect(state.splitMode).toBe(false);
-    expect(state.previewVisible).toBe(false);
   });
 
   // ── createTab ──
@@ -329,7 +328,6 @@ describe('useEditorStore', () => {
     expect(state.tabs.find((t) => t.id === 'tab-a')?.group).toBe(2);
     expect(state.activeGroup2TabId).toBe('tab-a');
     expect(state.activeGroup1TabId).toBe('tab-b');
-    expect(state.previewVisible).toBe(false);
   });
 
   it('setSplitMode(true) is no-op when fewer than 2 tabs', () => {

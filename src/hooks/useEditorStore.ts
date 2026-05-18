@@ -1,8 +1,7 @@
 import { create } from 'zustand';
-import type { EditorTab, Language, Encoding, ThemeMode, PartialThemeColors, ThemeColors } from '../types';
+import type { EditorTab, Language, Encoding } from '../types';
 import { EXT_TO_LANGUAGE } from '../types';
 import { deleteEditorState } from './useEditorStatePool';
-import { debounce } from '../utils/debounce';
 
 let tabCounter = 0;
 
@@ -15,95 +14,16 @@ function getLanguageFromFileName(fileName: string): Language {
   return EXT_TO_LANGUAGE[ext] || 'plaintext';
 }
 
-const SETTINGS_KEY = 'te2-settings';
-
-interface PersistedSettings {
-  theme?: 'vs' | 'vs-dark' | 'light' | 'dark' | 'custom';
-  lightCustomColors?: PartialThemeColors;
-  darkCustomColors?: PartialThemeColors;
-  customColors?: PartialThemeColors;
-  sidebarVisible?: boolean;
-  findReplaceVisible?: boolean;
-  unicodeHighlight?: boolean;
-  fontSize?: number;
-  previewVisible?: boolean;
-  largeFileOptimize?: boolean;
-  wordWrap?: boolean;
-  showWhitespace?: boolean;
-  scrollPastEnd?: boolean;
-  minimapVisible?: boolean;
-  readMode?: boolean;
-  readerTocVisible?: boolean;
-  customKeybindings?: Record<string, string>;
-  columnAlignEnabled?: boolean;
-  columnAlignSupported?: boolean;
-}
-
-function migrateThemeMode(theme: string | undefined): ThemeMode {
-  if (theme === 'vs') return 'light';
-  if (theme === 'vs-dark') return 'dark';
-  if (theme === 'light' || theme === 'dark' || theme === 'custom') return theme;
-  return 'dark';
-}
-
-function loadSettings(): PersistedSettings {
-  try {
-    return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
-  } catch {
-    return {};
-  }
-}
-
-function saveSettings(state: EditorState & EditorActions) {
-  try {
-    const payload: PersistedSettings = {
-      theme: state.theme,
-      lightCustomColors: state.lightCustomColors,
-      darkCustomColors: state.darkCustomColors,
-      customColors: state.customColors,
-      sidebarVisible: state.sidebarVisible,
-      findReplaceVisible: state.findReplaceVisible,
-      unicodeHighlight: state.unicodeHighlight,
-      fontSize: state.fontSize,
-      previewVisible: state.previewVisible,
-      largeFileOptimize: state.largeFileOptimize,
-      wordWrap: state.wordWrap,
-      showWhitespace: state.showWhitespace,
-      scrollPastEnd: state.scrollPastEnd,
-      minimapVisible: state.minimapVisible,
-      readMode: state.readMode,
-      readerTocVisible: state.readerTocVisible,
-      customKeybindings: state.customKeybindings,
-      columnAlignEnabled: state.columnAlignEnabled,
-      columnAlignSupported: state.columnAlignSupported,
-    };
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload));
-  } catch {
-    // ignore
-  }
-}
-
 interface EditorState {
   tabs: EditorTab[];
   activeTabId: string | null;
   activeGroup1TabId: string | null;
   activeGroup2TabId: string | null;
-  theme: ThemeMode;
-  lightCustomColors: PartialThemeColors;
-  darkCustomColors: PartialThemeColors;
-  customColors: PartialThemeColors;
-  sidebarVisible: boolean;
-  findReplaceVisible: boolean;
-  unicodeHighlight: boolean;
-  fontSize: number;
-  previewVisible: boolean;
   splitMode: boolean;
   projectPath: string | null;
-  largeFileOptimize: boolean;
-  readerTocVisible: boolean;
-  diagnosticsPanelVisible: boolean;
-  columnAlignEnabled: boolean;
-  columnAlignSupported: boolean;
+  diffMode: boolean;
+  diffLeftTabId: string | null;
+  diffRightTabId: string | null;
 }
 
 interface EditorActions {
@@ -122,76 +42,21 @@ interface EditorActions {
   setActiveTabId: (id: string | null) => void;
   setActiveGroup1TabId: (id: string | null) => void;
   setActiveGroup2TabId: (id: string | null) => void;
-  setTheme: (theme: ThemeMode | ((prev: ThemeMode) => ThemeMode)) => void;
-  setLightCustomColor: (key: keyof ThemeColors, value: string) => void;
-  setDarkCustomColor: (key: keyof ThemeColors, value: string) => void;
-  setCustomColor: (key: keyof ThemeColors, value: string) => void;
-  resetLightCustomColors: () => void;
-  resetDarkCustomColors: () => void;
-  resetCustomColors: () => void;
-  setSidebarVisible: (visible: boolean) => void;
-  setFindReplaceVisible: (visible: boolean) => void;
-  setUnicodeHighlight: (highlight: boolean) => void;
-  setFontSize: (size: number) => void;
-  setPreviewVisible: (visible: boolean) => void;
   setProjectPath: (path: string | null) => void;
-  setLargeFileOptimize: (optimize: boolean) => void;
-  wordWrap: boolean;
-  setWordWrap: (wrap: boolean) => void;
-  showWhitespace: boolean;
-  setShowWhitespace: (show: boolean) => void;
-  scrollPastEnd: boolean;
-  setScrollPastEnd: (scroll: boolean) => void;
-  minimapVisible: boolean;
-  setMinimapVisible: (visible: boolean) => void;
-  setReaderTocVisible: (visible: boolean) => void;
-  diffMode: boolean;
-  diffLeftTabId: string | null;
-  diffRightTabId: string | null;
   setDiffMode: (mode: boolean) => void;
   setDiffPair: (left: string | null, right: string | null) => void;
-  readMode: boolean;
-  setReadMode: (mode: boolean) => void;
-  customKeybindings: Record<string, string>;
-  setCustomKeybinding: (command: string, key: string) => void;
-  resetKeybindings: () => void;
-  setDiagnosticsPanelVisible: (visible: boolean) => void;
-  setColumnAlignEnabled: (enabled: boolean) => void;
-  setColumnAlignSupported: (supported: boolean) => void;
 }
-
-const loaded = loadSettings();
 
 const useEditorStore = create<EditorState & EditorActions>((set) => ({
   tabs: [],
   activeTabId: null,
   activeGroup1TabId: null,
   activeGroup2TabId: null,
-  theme: migrateThemeMode(loaded.theme) ?? 'dark',
-  lightCustomColors: loaded.lightCustomColors ?? {},
-  darkCustomColors: loaded.darkCustomColors ?? {},
-  customColors: loaded.customColors ?? {},
-  sidebarVisible: loaded.sidebarVisible ?? true,
-  findReplaceVisible: loaded.findReplaceVisible ?? false,
-  unicodeHighlight: loaded.unicodeHighlight ?? false,
-  fontSize: loaded.fontSize ?? 14,
-  previewVisible: loaded.previewVisible ?? false,
   splitMode: false,
   projectPath: null,
-  largeFileOptimize: loaded.largeFileOptimize ?? false,
-  wordWrap: loaded.wordWrap ?? false,
-  showWhitespace: loaded.showWhitespace ?? false,
-  scrollPastEnd: loaded.scrollPastEnd ?? true,
-  minimapVisible: loaded.minimapVisible ?? true,
-  readerTocVisible: loaded.readerTocVisible ?? true,
-  diagnosticsPanelVisible: false,
-  columnAlignEnabled: loaded.columnAlignEnabled ?? false,
-  columnAlignSupported: loaded.columnAlignSupported ?? false,
   diffMode: false,
   diffLeftTabId: null,
   diffRightTabId: null,
-  readMode: false,
-  customKeybindings: {},
 
   createTab: (title = 'Untitled', language, filePath, group = 1, encoding = 'UTF-8', initialContent = '') => {
     const lang = language || getLanguageFromFileName(title);
@@ -318,7 +183,6 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
         activeGroup1TabId: null,
         activeGroup2TabId: null,
         splitMode: false,
-        previewVisible: false,
       };
     });
   },
@@ -454,7 +318,6 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
       }
       return {
         splitMode: true,
-        previewVisible: false,
         tabs: nextTabs,
         activeGroup1TabId: nextActiveGroup1Id,
         activeGroup2TabId: nextActiveGroup2Id || state.activeTabId,
@@ -476,64 +339,9 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
   setActiveGroup1TabId: (id) => set({ activeGroup1TabId: id }),
   setActiveGroup2TabId: (id) => set({ activeGroup2TabId: id }),
 
-  setTheme: (theme) => {
-    if (typeof theme === 'function') {
-      set((state) => ({ theme: theme(state.theme) }));
-    } else {
-      set({ theme });
-    }
-  },
-
-  setLightCustomColor: (key, value) =>
-    set((state) => ({
-      lightCustomColors: { ...state.lightCustomColors, [key]: value },
-    })),
-
-  setDarkCustomColor: (key, value) =>
-    set((state) => ({
-      darkCustomColors: { ...state.darkCustomColors, [key]: value },
-    })),
-
-  setCustomColor: (key, value) =>
-    set((state) => ({
-      customColors: { ...state.customColors, [key]: value },
-    })),
-
-  resetLightCustomColors: () => set({ lightCustomColors: {} }),
-  resetDarkCustomColors: () => set({ darkCustomColors: {} }),
-  resetCustomColors: () => set({ customColors: {} }),
-
-  setSidebarVisible: (visible) => set({ sidebarVisible: visible }),
-  setFindReplaceVisible: (visible) => set({ findReplaceVisible: visible }),
-  setUnicodeHighlight: (highlight) => set({ unicodeHighlight: highlight }),
-  setFontSize: (size) => set({ fontSize: size }),
-  setPreviewVisible: (visible) => set({ previewVisible: visible }),
   setProjectPath: (path) => set({ projectPath: path }),
-  setLargeFileOptimize: (optimize) => set({ largeFileOptimize: optimize }),
-  setWordWrap: (wrap) => set({ wordWrap: wrap }),
-  setShowWhitespace: (show) => set({ showWhitespace: show }),
-  setScrollPastEnd: (scroll) => set({ scrollPastEnd: scroll }),
-  setMinimapVisible: (visible) => set({ minimapVisible: visible }),
-  setReaderTocVisible: (visible) => set({ readerTocVisible: visible }),
   setDiffMode: (mode) => set({ diffMode: mode }),
   setDiffPair: (left, right) => set({ diffLeftTabId: left, diffRightTabId: right }),
-  setReadMode: (mode) => set({ readMode: mode }),
-  setCustomKeybinding: (command, key) =>
-    set((state) => ({
-      customKeybindings: { ...state.customKeybindings, [command]: key },
-    })),
-  resetKeybindings: () => set({ customKeybindings: {} }),
-  setDiagnosticsPanelVisible: (visible) => set({ diagnosticsPanelVisible: visible }),
-  setColumnAlignEnabled: (enabled) => set({ columnAlignEnabled: enabled }),
-  setColumnAlignSupported: (supported) =>
-    set(() => ({
-      columnAlignSupported: supported,
-      // Turning off support also deactivates column align so it doesn't
-      // re-activate immediately when support is toggled back on.
-      ...(supported ? {} : { columnAlignEnabled: false }),
-    })),
 }));
-
-useEditorStore.subscribe(debounce(saveSettings, 300));
 
 export { useEditorStore };

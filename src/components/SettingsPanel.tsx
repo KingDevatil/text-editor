@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { X, Pencil, Palette, Star, Sun, Moon, Sparkles, HelpCircle, Puzzle } from 'lucide-react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { useEditorStore } from '../hooks/useEditorStore';
+import { useSettingsStore } from '../hooks/useSettingsStore';
 import ThemeEditor from './ThemeEditor';
 import EditorHelp from './EditorHelp';
 import type { ThemeMode } from '../types';
@@ -47,25 +47,25 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
   const [showThemeEditor, setShowThemeEditor] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
-  const theme = useEditorStore((s) => s.theme);
-  const setTheme = useEditorStore((s) => s.setTheme);
+  const theme = useSettingsStore((s) => s.theme);
+  const setTheme = useSettingsStore((s) => s.setTheme);
 
-  const unicodeHighlight = useEditorStore((s) => s.unicodeHighlight);
-  const setUnicodeHighlight = useEditorStore((s) => s.setUnicodeHighlight);
-  const fontSize = useEditorStore((s) => s.fontSize);
-  const setFontSize = useEditorStore((s) => s.setFontSize);
-  const largeFileOptimize = useEditorStore((s) => s.largeFileOptimize);
-  const setLargeFileOptimize = useEditorStore((s) => s.setLargeFileOptimize);
-  const minimapVisible = useEditorStore((s) => s.minimapVisible);
-  const setMinimapVisible = useEditorStore((s) => s.setMinimapVisible);
-  const wordWrap = useEditorStore((s) => s.wordWrap);
-  const setWordWrap = useEditorStore((s) => s.setWordWrap);
-  const showWhitespace = useEditorStore((s) => s.showWhitespace);
-  const setShowWhitespace = useEditorStore((s) => s.setShowWhitespace);
-  const scrollPastEnd = useEditorStore((s) => s.scrollPastEnd);
-  const setScrollPastEnd = useEditorStore((s) => s.setScrollPastEnd);
-  const columnAlignSupported = useEditorStore((s) => s.columnAlignSupported);
-  const setColumnAlignSupported = useEditorStore((s) => s.setColumnAlignSupported);
+  const unicodeHighlight = useSettingsStore((s) => s.unicodeHighlight);
+  const setUnicodeHighlight = useSettingsStore((s) => s.setUnicodeHighlight);
+  const fontSize = useSettingsStore((s) => s.fontSize);
+  const setFontSize = useSettingsStore((s) => s.setFontSize);
+  const largeFileOptimize = useSettingsStore((s) => s.largeFileOptimize);
+  const setLargeFileOptimize = useSettingsStore((s) => s.setLargeFileOptimize);
+  const minimapVisible = useSettingsStore((s) => s.minimapVisible);
+  const setMinimapVisible = useSettingsStore((s) => s.setMinimapVisible);
+  const wordWrap = useSettingsStore((s) => s.wordWrap);
+  const setWordWrap = useSettingsStore((s) => s.setWordWrap);
+  const showWhitespace = useSettingsStore((s) => s.showWhitespace);
+  const setShowWhitespace = useSettingsStore((s) => s.setShowWhitespace);
+  const scrollPastEnd = useSettingsStore((s) => s.scrollPastEnd);
+  const setScrollPastEnd = useSettingsStore((s) => s.setScrollPastEnd);
+  const columnAlignSupported = useSettingsStore((s) => s.columnAlignSupported);
+  const setColumnAlignSupported = useSettingsStore((s) => s.setColumnAlignSupported);
 
   const handleClose = useCallback(() => {
     onClose();

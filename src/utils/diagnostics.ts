@@ -66,6 +66,9 @@ export function translateDiagnosticMessage(message: string): string {
   if (/Unexpected end of JSON input/i.test(m)) {
     return 'JSON 语法错误：输入意外结束';
   }
+  if (/Unexpected non-whitespace character after JSON at position (\d+)/i.test(m)) {
+    return `JSON 语法错误：第 ${m.match(/position (\d+)/i)![1]} 个字符处出现意外的非空白字符（可能是 JSON Lines 格式，建议改用 .jsonl 后缀）`;
+  }
   if (/Unexpected .* in JSON at position \d+/i.test(m)) {
     return m.replace(/Unexpected (.*?) in JSON at position (\d+)/i, 'JSON 语法错误：第 $2 个字符处出现意外的 $1');
   }
