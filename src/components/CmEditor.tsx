@@ -23,7 +23,7 @@ import { searchHighlight } from '../utils/searchHighlight';
 import { signatureHelp } from '../utils/signatureHelp';
 import { perf } from '../utils/perf';
 import { isTauri } from '@tauri-apps/api/core';
-import { columnAlignExtension, setColumnAlign, createColumnDragLayer } from '../utils/columnAlign';
+import { columnAlignExtension, setColumnAlign, createColumnDragLayer, columnAlignTabCommand, columnAlignShiftTabCommand } from '../utils/columnAlign';
 import type { Language, ThemeColors } from '../types';
 import {
   getEditorState,
@@ -437,7 +437,13 @@ function buildBaseExtensions(
       { key: 'Shift-Mod-l', run: selectSelectionMatches, preventDefault: true },
     ]),
     tabBehaviorCompartment.of(
-      keymap.of([{ key: 'Tab', run: indentMore, shift: indentLess }])
+      keymap.of([
+        {
+          key: 'Tab',
+          run: (view) => columnAlignTabCommand(view) || indentMore(view),
+          shift: (view) => columnAlignShiftTabCommand(view) || indentLess(view),
+        },
+      ])
     ),
     markedLinesField,
     pairGutter,
@@ -770,48 +776,11 @@ const CmEditor: React.FC<CmEditorProps> = ({
     })()
   );
 
-  // Effect 1: Toggle column-align via state effect + Tab keymap
+  // Effect 1: Toggle column-align via state effect
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
-    const effects: StateEffect<unknown>[] = [
-      tabBehaviorCompartment.reconfigure(
-        keymap.of([
-          {
-            key: 'Tab',
-            run: columnAlignEnabled
-              ? (view) => {
-                  const { state } = view;
-                  const changes = state.changeByRange((range) => ({
-                    changes: { from: range.from, to: range.to, insert: '\t' },
-                    range: EditorSelection.range(range.from + 1, range.from + 1),
-                  }));
-                  view.dispatch(state.update(changes, { userEvent: 'input' }));
-                  return true;
-                }
-              : indentMore,
-            shift: columnAlignEnabled
-              ? (view) => {
-                  const { state } = view;
-                  const pos = state.selection.main.head;
-                  const line = state.doc.lineAt(pos);
-                  const relPos = pos - line.from;
-                  const prevTab = line.text.lastIndexOf('\t', relPos - 1);
-                  if (prevTab !== -1) {
-                    view.dispatch({
-                      changes: { from: line.from + prevTab, to: line.from + prevTab + 1 },
-                      selection: EditorSelection.cursor(line.from + prevTab),
-                      userEvent: 'input',
-                    });
-                    return true;
-                  }
-                  return true;
-                }
-              : indentLess,
-          },
-        ])
-      ),
-    ];
+    const effects: StateEffect<unknown>[] = [];
     if (columnAlignEnabled) {
       const savedWidths = tabColumnWidthsRef.current[tabId] || [];
       effects.push(setColumnAlign.of({ enabled: true, widths: savedWidths }));

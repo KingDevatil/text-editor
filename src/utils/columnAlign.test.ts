@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EditorState, EditorSelection } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { columnAlignExtension, columnAlignDecorations, setColumnAlign, createColumnDragLayer, columnAlignTabCommand } from './columnAlign';
+import { columnAlignExtension, columnAlignDecorations, setColumnAlign, createColumnDragLayer, columnAlignTabCommand, columnAlignShiftTabCommand } from './columnAlign';
 
 function createView(doc: string, enabled = true) {
   const state = EditorState.create({
@@ -134,6 +134,30 @@ describe('columnAlignExtension', () => {
     expect(decorations).toBeDefined();
     view.destroy();
   });
+
+  it('renders empty columns for consecutive tabs', () => {
+    const view = createView('\t\t0\t0', true);
+    const decorations = view.state.field(columnAlignDecorations);
+    const ranges: Array<{ from: number; to: number }> = [];
+    decorations.between(0, view.state.doc.length, (from, to) => {
+      ranges.push({ from, to });
+    });
+    // 3 tabs -> 1 line + 4 cells + 3 spacers = 8
+    expect(ranges.length).toBe(8);
+    view.destroy();
+  });
+
+  it('renders trailing empty column when line ends with tab', () => {
+    const view = createView('a\tb\t', true);
+    const decorations = view.state.field(columnAlignDecorations);
+    const ranges: Array<{ from: number; to: number }> = [];
+    decorations.between(0, view.state.doc.length, (from, to) => {
+      ranges.push({ from, to });
+    });
+    // 2 tabs -> 1 line + 3 cells + 2 spacers = 6 (last cell is empty trailing)
+    expect(ranges.length).toBe(6);
+    view.destroy();
+  });
 });
 
 describe('columnAlignTabCommand', () => {
@@ -175,6 +199,45 @@ describe('columnAlignTabCommand', () => {
     const handled = columnAlignTabCommand(view);
     expect(handled).toBe(false);
     expect(view.state.doc.toString()).toBe('hello world');
+    view.destroy();
+  });
+});
+
+describe('columnAlignShiftTabCommand', () => {
+  it('deletes previous tab when enabled', () => {
+    const state = EditorState.create({
+      doc: 'a\tb\tc',
+      extensions: columnAlignExtension,
+    });
+    const view = new EditorView({ state });
+    view.dispatch({
+      effects: setColumnAlign.of({ enabled: true, widths: [] }),
+    });
+    // Place cursor after second tab, before 'c' (position 4)
+    view.dispatch({
+      selection: EditorSelection.cursor(4),
+    });
+
+    const handled = columnAlignShiftTabCommand(view);
+    expect(handled).toBe(true);
+    expect(view.state.doc.toString()).toBe('a\tbc');
+    expect(view.state.selection.main.head).toBe(3);
+    view.destroy();
+  });
+
+  it('falls through when disabled', () => {
+    const state = EditorState.create({
+      doc: 'a\tb\tc',
+      extensions: columnAlignExtension,
+    });
+    const view = new EditorView({ state });
+    view.dispatch({
+      selection: EditorSelection.cursor(4),
+    });
+
+    const handled = columnAlignShiftTabCommand(view);
+    expect(handled).toBe(false);
+    expect(view.state.doc.toString()).toBe('a\tb\tc');
     view.destroy();
   });
 });

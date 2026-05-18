@@ -32,14 +32,17 @@ export const columnAlignField = StateField.define<ColumnAlignConfig>({
   },
 });
 
-class ColumnSpacerWidget extends WidgetType {
-  constructor(private width: number) {
+class InlineBlockWidget extends WidgetType {
+  constructor(
+    private width: number,
+    private className: string
+  ) {
     super();
   }
 
   toDOM() {
     const span = document.createElement('span');
-    span.className = 'cm-column-spacer';
+    span.className = this.className;
     span.style.display = 'inline-block';
     span.style.width = `${this.width}px`;
     // Zero-width space gives the cursor a text node to anchor on
@@ -47,32 +50,8 @@ class ColumnSpacerWidget extends WidgetType {
     return span;
   }
 
-  eq(other: ColumnSpacerWidget) {
-    return this.width === other.width;
-  }
-
-  ignoreEvent() {
-    return true;
-  }
-}
-
-/** Empty-cell placeholder so consecutive tabs produce aligned columns. */
-class EmptyCellWidget extends WidgetType {
-  constructor(private width: number) {
-    super();
-  }
-
-  toDOM() {
-    const span = document.createElement('span');
-    span.className = 'cm-column-cell cm-column-empty';
-    span.style.display = 'inline-block';
-    span.style.width = `${this.width}px`;
-    span.textContent = '\u200B';
-    return span;
-  }
-
-  eq(other: EmptyCellWidget) {
-    return this.width === other.width;
+  eq(other: InlineBlockWidget) {
+    return this.width === other.width && this.className === other.className;
   }
 
   ignoreEvent() {
@@ -88,6 +67,10 @@ function getColumnWidth(
     return Math.max(MIN_COL_WIDTH, config.widths[colIndex]);
   }
   return DEFAULT_COL_WIDTH;
+}
+
+function cellMarkStyle(width: number): string {
+  return `display:inline-block;width:${width}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top;`;
 }
 
 function buildDecorations(state: EditorState): DecorationSet {
@@ -126,7 +109,7 @@ function buildDecorations(state: EditorState): DecorationSet {
             Decoration.mark({
               class: 'cm-column-cell',
               attributes: {
-                style: `display:inline-block;width:${targetWidth}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top;`,
+                style: cellMarkStyle(targetWidth),
               },
             })
           );
@@ -136,7 +119,7 @@ function buildDecorations(state: EditorState): DecorationSet {
             tabPos,
             tabPos,
             Decoration.widget({
-              widget: new EmptyCellWidget(targetWidth),
+              widget: new InlineBlockWidget(targetWidth, 'cm-column-cell cm-column-empty'),
               side: -1,
             })
           );
@@ -146,7 +129,7 @@ function buildDecorations(state: EditorState): DecorationSet {
           tabPos,
           tabPos + 1,
           Decoration.replace({
-            widget: new ColumnSpacerWidget(COL_PADDING),
+            widget: new InlineBlockWidget(COL_PADDING, 'cm-column-spacer'),
           })
         );
 
@@ -164,7 +147,7 @@ function buildDecorations(state: EditorState): DecorationSet {
         Decoration.mark({
           class: 'cm-column-cell',
           attributes: {
-            style: `display:inline-block;width:${getColumnWidth(config, colIdx)}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top;`,
+            style: cellMarkStyle(getColumnWidth(config, colIdx)),
           },
         })
       );
@@ -176,7 +159,7 @@ function buildDecorations(state: EditorState): DecorationSet {
         line.to,
         line.to,
         Decoration.widget({
-          widget: new EmptyCellWidget(getColumnWidth(config, colIdx)),
+          widget: new InlineBlockWidget(getColumnWidth(config, colIdx), 'cm-column-cell cm-column-empty'),
           side: 1,
         })
       );
@@ -233,6 +216,31 @@ export function columnAlignTabCommand(view: EditorView): boolean {
       range: EditorSelection.range(range.from + 1, range.from + 1),
     }));
     view.dispatch(state.update(changes, { userEvent: 'input' }));
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Shift+Tab command for column-align mode: deletes the previous tab character.
+ * Falls through (returns false) when column align is not active.
+ */
+export function columnAlignShiftTabCommand(view: EditorView): boolean {
+  const config = view.state.field(columnAlignField, false);
+  if (config?.enabled) {
+    const { state } = view;
+    const pos = state.selection.main.head;
+    const line = state.doc.lineAt(pos);
+    const relPos = pos - line.from;
+    const prevTab = line.text.lastIndexOf('\t', relPos - 1);
+    if (prevTab !== -1) {
+      view.dispatch({
+        changes: { from: line.from + prevTab, to: line.from + prevTab + 1 },
+        selection: EditorSelection.cursor(line.from + prevTab),
+        userEvent: 'input',
+      });
+      return true;
+    }
     return true;
   }
   return false;
