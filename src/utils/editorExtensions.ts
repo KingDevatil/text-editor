@@ -3,7 +3,7 @@ import { EditorState, Compartment, EditorSelection, type Extension } from '@code
 import { defaultKeymap, history, historyKeymap, indentMore, indentLess } from '@codemirror/commands';
 import { selectNextOccurrence, selectSelectionMatches, highlightSelectionMatches } from '@codemirror/search';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
-import { foldGutter, foldKeymap, indentOnInput, indentService, IndentContext, indentUnit } from '@codemirror/language';
+import { foldGutter, foldKeymap, indentOnInput, indentUnit } from '@codemirror/language';
 import { unicodeHighlight as unicodeHighlightExt } from './unicodeHighlight';
 import { loadLanguageExtensions, getLanguageExtensionsSync } from './languageExtensions';
 import { buildDynamicTheme, syntaxHighlightExtension } from './themes';
@@ -80,13 +80,6 @@ export function buildBaseExtensions(
     crosshairCursor(),
     ctrlClickMultiCursor,
     indentUnit.of('\t'),
-    indentService.of((context: IndentContext, pos: number) => {
-      const line = context.state.doc.lineAt(pos);
-      const prevLine = context.state.doc.line(Math.max(1, line.number - 1));
-      const indent = prevLine.text.match(/^\s*/)?.[0] || '';
-      if (!indent) return null;
-      return context.column(prevLine.from + indent.length);
-    }),
     keymap.of([...defaultKeymap, ...historyKeymap, ...closeBracketsKeymap]),
     keymap.of([
       { key: 'Mod-d', run: selectNextOccurrence, preventDefault: true },

@@ -94,7 +94,7 @@ function jsonLinter(view: EditorView): Diagnostic[] {
  * Strip JS single-line and multi-line comments while preserving strings.
  * Handles single/double quotes and template literals (backticks).
  */
-function stripJsComments(code: string): string {
+export function stripJsComments(code: string): string {
   let result = '';
   let i = 0;
   while (i < code.length) {
@@ -127,11 +127,20 @@ function stripJsComments(code: string): string {
       continue;
     }
 
-    // Multi-line comment
+    // Multi-line comment — replace content with spaces (preserve newlines and
+    // roughly preserve column positions) so that line numbers from new Function()
+    // still map correctly back to the original source.
     if (ch === '/' && next === '*') {
       i += 2;
-      while (i < code.length && !(code[i] === '*' && code[i + 1] === '/')) i++;
-      i += 2;
+      while (i < code.length && !(code[i] === '*' && code[i + 1] === '/')) {
+        result += code[i] === '\n' ? '\n' : ' ';
+        i++;
+      }
+      if (i + 1 < code.length) {
+        result += ' '; // *
+        result += ' '; // /
+        i += 2;
+      }
       continue;
     }
 
@@ -148,7 +157,7 @@ function stripJsComments(code: string): string {
  * - export const/let/var/function/class -> const/let/var/function/class
  * - export { ... } -> empty line
  */
-function preprocessESM(code: string): string {
+export function preprocessESM(code: string): string {
   // export default <expr> -> return <expr>
   code = code.replace(/^(\s*)export\s+default\s+/gm, '$1return ');
   // export const/let/var/function/class -> const/let/var/function/class
@@ -275,20 +284,60 @@ function xmlLinter(view: EditorView): Diagnostic[] {
     const tag = m[2].toLowerCase();
 
     if (isClose) {
-      const last = stack.pop();
-      if (!last || last.tag !== tag) {
+      // Find the nearest (top-most) matching open tag
+      let matchIdx = -1;
+      for (let i = stack.length - 1; i >= 0; i--) {
+        if (stack[i].tag === tag) {
+          matchIdx = i;
+          break;
+        }
+      }
+      if (matchIdx === -1) {
+        // No matching open tag
         const line = view.state.doc.lineAt(pos);
         diagnostics.push({
           from: line.from,
           to: line.to,
           severity: 'error',
-          message: last
-            ? `标签不匹配：应为 </${last.tag}>，但遇到 </${tag}>`
-            : `意外的关闭标签 </${tag}>`,
+          message: `意外的关闭标签 </${tag}>`,
         });
+      } else if (matchIdx !== stack.length - 1) {
+        // Found but not at top — tags in between are unclosed
+        const line = view.state.doc.lineAt(pos);
+        diagnostics.push({
+          from: line.from,
+          to: line.to,
+          severity: 'error',
+          message: `标签不匹配：应为 </${stack[stack.length - 1].tag}>，但遇到 </${tag}>`,
+        });
+        while (stack.length > matchIdx + 1) {
+          const skipped = stack.pop()!;
+          const skippedLine = view.state.doc.lineAt(skipped.from);
+          diagnostics.push({
+            from: skippedLine.from,
+            to: skippedLine.to,
+            severity: 'warning',
+            message: `未闭合标签 <${skipped.tag}>`,
+          });
+        }
+        stack.pop(); // pop the matched open tag
+      } else {
+        // Normal match
+        stack.pop();
       }
     } else if (!m[0].endsWith('/>')) {
-      // Self-closing tags don't need matching close
+      // Duplicate open tag detection: if there's already an unclosed tag with the same name,
+      // warn at the current position so the user knows earlier.
+      const existingIdx = stack.findIndex((s) => s.tag === tag);
+      if (existingIdx !== -1) {
+        const line = view.state.doc.lineAt(pos);
+        diagnostics.push({
+          from: line.from,
+          to: line.to,
+          severity: 'warning',
+          message: `标签 <${tag}> 未闭合，遇到同名开启标签`,
+        });
+      }
       stack.push({ tag, from: pos });
     }
   }

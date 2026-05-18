@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { translateDiagnosticMessage } from './diagnostics';
-import { stripJsonComments } from './lint';
+import { stripJsonComments, stripJsComments, preprocessESM } from './lint';
 
 describe('translateDiagnosticMessage', () => {
   it('translates ESM import error', () => {
@@ -225,6 +225,124 @@ describe('cssLinter false positive fixes', () => {
       else if (ch === '}') depth--;
     }
     expect(depth).toBe(0);
+  });
+});
+
+describe('stripJsComments line number preservation', () => {
+  it('preserves line count when stripping multi-line comments', () => {
+    const code = `const a = 1;
+/* comment
+   spanning
+   lines */
+const b = 2;`;
+    const stripped = stripJsComments(code);
+    // Original and stripped should have the same number of lines so that
+    // new Function() error line numbers map back correctly.
+    expect(stripped.split('\n').length).toBe(code.split('\n').length);
+    // The line after the comment should still be 'const b = 2;'
+    expect(stripped.split('\n')[4].trim()).toBe('const b = 2;');
+  });
+
+  it('preserves column roughly for inline multi-line comments', () => {
+    const code = 'const x = /* comment */ 1;';
+    const stripped = stripJsComments(code);
+    // Should be valid JS after stripping
+    expect(() => new Function(stripped)).not.toThrow();
+  });
+
+  it('does not strip comment-like text inside strings', () => {
+    const code = 'const a = "/* not a comment */";';
+    const stripped = stripJsComments(code);
+    expect(stripped).toBe(code);
+  });
+
+  it('preserves line count with nested-looking comments inside strings', () => {
+    const code = `const a = "/* not a comment";
+/* real comment
+   spanning */
+const b = 2;`;
+    const stripped = stripJsComments(code);
+    expect(stripped.split('\n').length).toBe(code.split('\n').length);
+    expect(() => new Function(stripped)).not.toThrow();
+  });
+});
+
+describe('preprocessESM line number preservation', () => {
+  it('does not change line count when removing imports', () => {
+    const code = `import { a } from 'a'
+const x = 1`;
+    const processed = preprocessESM(code);
+    expect(processed.split('\n').length).toBe(code.split('\n').length);
+  });
+
+  it('does not change line count when converting export default', () => {
+    const code = `export default { a: 1 }
+const x = 2`;
+    const processed = preprocessESM(code);
+    expect(processed.split('\n').length).toBe(code.split('\n').length);
+  });
+});
+
+describe('xmlLinter duplicate open tag detection', () => {
+  it('warns when a duplicate open tag appears before the previous one is closed', () => {
+    // Simulates the user deleting a closing tag: <Rule> ... <Rule> (missing </Rule>)
+    const html = `<RuleData>
+  <Rule>
+    <SubRule></SubRule>
+  
+  <Rule>
+    <SubRule></SubRule>
+  </Rule>
+</RuleData>`;
+    const diagnostics: { severity: string; message: string; line: number }[] = [];
+    const stack: { tag: string; line: number }[] = [];
+    const tagRegex = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)[^>]*?\/?>/g;
+    let m: RegExpExecArray | null;
+    let lineNum = 1;
+    let lastIndex = 0;
+
+    while ((m = tagRegex.exec(html)) !== null) {
+      // track line number
+      while (lastIndex < m.index) {
+        if (html[lastIndex] === '\n') lineNum++;
+        lastIndex++;
+      }
+      const isClose = m[1] === '/';
+      const tag = m[2].toLowerCase();
+
+      if (isClose) {
+        let matchIdx = -1;
+        for (let i = stack.length - 1; i >= 0; i--) {
+          if (stack[i].tag === tag) { matchIdx = i; break; }
+        }
+        if (matchIdx === -1) {
+          diagnostics.push({ severity: 'error', message: `unexpected </${tag}>`, line: lineNum });
+        } else if (matchIdx !== stack.length - 1) {
+          diagnostics.push({ severity: 'error', message: `mismatch </${tag}>`, line: lineNum });
+          while (stack.length > matchIdx + 1) {
+            const skipped = stack.pop()!;
+            diagnostics.push({ severity: 'warning', message: `unclosed <${skipped.tag}>`, line: skipped.line });
+          }
+          stack.pop();
+        } else {
+          stack.pop();
+        }
+      } else if (!m[0].endsWith('/>')) {
+        const existingIdx = stack.findIndex((s) => s.tag === tag);
+        if (existingIdx !== -1) {
+          diagnostics.push({ severity: 'warning', message: `duplicate <${tag}>`, line: lineNum });
+        }
+        stack.push({ tag, line: lineNum });
+      }
+    }
+
+    // Should warn at line 5 (second <Rule>) because first <Rule> at line 2 is unclosed
+    const dupWarning = diagnostics.find((d) => d.severity === 'warning' && d.line === 5);
+    expect(dupWarning).toBeDefined();
+
+    // Should report unclosed first <Rule> at line 2 when </RuleData> is encountered
+    const unclosedRule = diagnostics.find((d) => d.severity === 'warning' && d.line === 2);
+    expect(unclosedRule).toBeDefined();
   });
 });
 
