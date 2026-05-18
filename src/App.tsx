@@ -51,6 +51,7 @@ function App() {
   const handleFormatRef = useRef<(() => void) | null>(null);
   const findReplaceVisibleRef = useRef(findReplaceVisible);
   const columnAlignEnabledRef = useRef(false);
+  const columnAlignSupportedRef = useRef(false);
 
   // Keep all callback refs up-to-date outside of render phase
   useEffect(() => {
@@ -58,6 +59,9 @@ function App() {
   });
   useEffect(() => {
     columnAlignEnabledRef.current = columnAlignEnabled;
+  });
+  useEffect(() => {
+    columnAlignSupportedRef.current = columnAlignSupported;
   });
   const previewVisible = useEditorStore((s) => s.previewVisible);
   const splitMode = useEditorStore((s) => s.splitMode);
@@ -75,8 +79,8 @@ function App() {
   const setDiagnosticsPanelVisible = useEditorStore((s) => s.setDiagnosticsPanelVisible);
   const columnAlignEnabled = useEditorStore((s) => s.columnAlignEnabled);
   const setColumnAlignEnabled = useEditorStore((s) => s.setColumnAlignEnabled);
+  const columnAlignSupported = useEditorStore((s) => s.columnAlignSupported);
   const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId) || null);
-  const [activeTabHasTabs, setActiveTabHasTabs] = useState(false);
 
   const setActiveTabId = useEditorStore((s) => s.setActiveTabId);
   const setActiveGroup1TabId = useEditorStore((s) => s.setActiveGroup1TabId);
@@ -234,8 +238,8 @@ function App() {
           }
         }
       }
-      // Column align toggle: Ctrl+Shift+T
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 't') {
+      // Column align toggle: Ctrl+Shift+T (only when supported)
+      if (columnAlignSupportedRef.current && (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 't') {
         e.preventDefault();
         setColumnAlignEnabled(!columnAlignEnabledRef.current);
       }
@@ -720,7 +724,13 @@ function App() {
     { id: 'readmode', label: readMode ? '退出阅读模式' : '阅读模式', shortcut: 'Ctrl+Shift+V', icon: <Eye size={16} />, action: handleToggleReadMode },
     { id: 'split', label: splitMode ? '关闭分屏' : '开启分屏', icon: <Columns2 size={16} />, action: handleToggleSplit },
     { id: 'diff', label: diffMode ? '退出对比' : '对比文件', icon: diffMode ? <X size={16} /> : <GitCompare size={16} />, action: handleToggleDiff },
-    { id: 'columnAlign', label: columnAlignEnabled ? '关闭列对齐' : '开启列对齐', shortcut: 'Ctrl+Shift+T', icon: <Table size={16} />, action: () => setColumnAlignEnabled(!columnAlignEnabled) },
+    ...(columnAlignSupported ? [{
+      id: 'columnAlign',
+      label: columnAlignEnabled ? '关闭列对齐' : '开启列对齐',
+      shortcut: 'Ctrl+Shift+T',
+      icon: <Table size={16} />,
+      action: () => setColumnAlignEnabled(!columnAlignEnabled),
+    }] : []),
     ...(activeTab?.filePath ? [{
       id: 'reveal',
       label: '在文件夹中显示',
@@ -733,7 +743,7 @@ function App() {
         }
       },
     }] : []),
-  ], [handleNewFile, handleOpenFile, handleSaveFile, handleFormat, handleCycleTheme, handleToggleSplit, handleToggleDiff, handleToggleReadMode, findReplaceVisible, setFindReplaceVisible, sidebarVisible, setSidebarVisible, isDark, wordWrap, showWhitespace, previewVisible, setPreviewVisible, splitMode, diffMode, readMode, activeTab, theme, columnAlignEnabled, setColumnAlignEnabled]);
+  ], [handleNewFile, handleOpenFile, handleSaveFile, handleFormat, handleCycleTheme, handleToggleSplit, handleToggleDiff, handleToggleReadMode, findReplaceVisible, setFindReplaceVisible, sidebarVisible, setSidebarVisible, isDark, wordWrap, showWhitespace, previewVisible, setPreviewVisible, splitMode, diffMode, readMode, activeTab, theme, columnAlignEnabled, setColumnAlignEnabled, columnAlignSupported]);
 
   return (
     <div className={`flex flex-col h-screen ${theme !== 'light' ? 'dark' : ''}`}>
@@ -760,7 +770,6 @@ function App() {
         onToggleSplit={handleToggleSplit}
         onToggleReadMode={handleToggleReadMode}
         onToggleSettings={() => setSettingsVisible((v) => !v)}
-        onToggleColumnAlign={() => setColumnAlignEnabled(!columnAlignEnabled)}
         canFormat={canFormat}
         canPreview={canPreview}
         previewActive={previewVisible}
@@ -768,8 +777,6 @@ function App() {
         splitActive={splitMode}
         canReadMode={!!activeTab && (activeTab.language === 'markdown' || activeTab.language === 'html')}
         readModeActive={readMode}
-        columnAlignActive={columnAlignEnabled}
-        canColumnAlign={activeTabHasTabs}
         theme={theme}
       />
 
@@ -838,8 +845,7 @@ function App() {
                       scrollPastEnd={scrollPastEnd}
                       minimapVisible={minimapVisible}
                       unicodeHighlight={unicodeHighlight}
-                      columnAlignEnabled={columnAlignEnabled}
-                      onHasTabsChange={tab.id === activeTabId ? setActiveTabHasTabs : undefined}
+                      columnAlignEnabled={columnAlignSupported && columnAlignEnabled}
                     />
                   </div>
                 ))}
@@ -866,8 +872,7 @@ function App() {
                                 scrollPastEnd={scrollPastEnd}
                                 minimapVisible={minimapVisible}
                                 unicodeHighlight={unicodeHighlight}
-                                columnAlignEnabled={columnAlignEnabled}
-                                onHasTabsChange={tab.id === activeTabId ? setActiveTabHasTabs : undefined}
+                                columnAlignEnabled={columnAlignSupported && columnAlignEnabled}
                               />
                             </div>
                           ))
@@ -976,6 +981,7 @@ function App() {
             onToggleDiagnosticsPanel={() => setDiagnosticsPanelVisible(!diagnosticsPanelVisible)}
             columnAlignEnabled={columnAlignEnabled}
             onToggleColumnAlign={() => setColumnAlignEnabled(!columnAlignEnabled)}
+            columnAlignSupported={columnAlignSupported}
           />
         </div>
       </div>

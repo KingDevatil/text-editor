@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { X, Pencil, Palette, Star, Sun, Moon, Sparkles, HelpCircle } from 'lucide-react';
+import { X, Pencil, Palette, Star, Sun, Moon, Sparkles, HelpCircle, Puzzle } from 'lucide-react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { useEditorStore } from '../hooks/useEditorStore';
 import ThemeEditor from './ThemeEditor';
@@ -11,11 +11,12 @@ interface SettingsPanelProps {
   onClose: () => void;
 }
 
-type SettingsCategory = 'editor' | 'appearance' | 'application';
+type SettingsCategory = 'editor' | 'appearance' | 'application' | 'extension';
 
 const CATEGORIES: { key: SettingsCategory; label: string; icon: React.ReactNode }[] = [
   { key: 'editor', label: '编辑器', icon: <Pencil size={16} /> },
   { key: 'appearance', label: '外观', icon: <Palette size={16} /> },
+  { key: 'extension', label: '扩展', icon: <Puzzle size={16} /> },
   { key: 'application', label: '应用', icon: <Star size={16} /> },
 ];
 
@@ -63,8 +64,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
   const setShowWhitespace = useEditorStore((s) => s.setShowWhitespace);
   const scrollPastEnd = useEditorStore((s) => s.scrollPastEnd);
   const setScrollPastEnd = useEditorStore((s) => s.setScrollPastEnd);
-  const columnAlignEnabled = useEditorStore((s) => s.columnAlignEnabled);
-  const setColumnAlignEnabled = useEditorStore((s) => s.setColumnAlignEnabled);
+  const columnAlignSupported = useEditorStore((s) => s.columnAlignSupported);
+  const setColumnAlignSupported = useEditorStore((s) => s.setColumnAlignSupported);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -210,7 +211,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
                     <ToggleRow label="滚动超出末尾" checked={scrollPastEnd} onChange={setScrollPastEnd} />
                     <ToggleRow label="大文件性能优化" checked={largeFileOptimize} onChange={setLargeFileOptimize} title="打开大文件时自动禁用高亮、折叠等功能以提升性能" />
                     <ToggleRow label="全角半角检测" checked={unicodeHighlight} onChange={setUnicodeHighlight} />
-                    <ToggleRow label="列对齐" checked={columnAlignEnabled} onChange={setColumnAlignEnabled} title="将制表符分隔的内容按固定列宽对齐显示" />
                   </div>
                 </div>
               </div>
@@ -278,6 +278,24 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
                         </button>
                       </div>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeCategory === 'extension' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: 'var(--te-text-secondary)' }}>
+                    扩展
+                  </label>
+                  <div className="rounded-lg p-4 border space-y-1" style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)' }}>
+                    <ToggleRow
+                      label="支持列对齐"
+                      checked={columnAlignSupported}
+                      onChange={setColumnAlignSupported}
+                      title="勾选后显示列对齐状态栏按钮，可开启列对齐"
+                    />
                   </div>
                 </div>
               </div>

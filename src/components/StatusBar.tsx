@@ -19,6 +19,7 @@ interface StatusBarProps {
   onToggleDiagnosticsPanel?: () => void;
   columnAlignEnabled?: boolean;
   onToggleColumnAlign?: () => void;
+  columnAlignSupported?: boolean;
 }
 
 const ENCODINGS: Encoding[] = [
@@ -89,6 +90,7 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
   minimapVisible, onToggleMinimap,
   diagnosticsPanelVisible, onToggleDiagnosticsPanel,
   columnAlignEnabled, onToggleColumnAlign,
+  columnAlignSupported,
 }) => {
   const [wordCount, setWordCount] = useState(0);
   const [calculating, setCalculating] = useState(false);
@@ -285,7 +287,7 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
                 {diagnosticCount > 0 ? `${diagnosticCount} 个问题` : '无问题'}
               </button>
             )}
-            {onToggleColumnAlign && (
+            {columnAlignSupported && onToggleColumnAlign && (
               <button
                 onClick={onToggleColumnAlign}
                 className="px-1.5 py-0.5 rounded transition-colors cursor-pointer text-[10px] font-medium hover:opacity-80"

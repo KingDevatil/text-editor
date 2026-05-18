@@ -36,6 +36,7 @@ interface PersistedSettings {
   readerTocVisible?: boolean;
   customKeybindings?: Record<string, string>;
   columnAlignEnabled?: boolean;
+  columnAlignSupported?: boolean;
 }
 
 function migrateThemeMode(theme: string | undefined): ThemeMode {
@@ -74,6 +75,7 @@ function saveSettings(state: EditorState & EditorActions) {
       readerTocVisible: state.readerTocVisible,
       customKeybindings: state.customKeybindings,
       columnAlignEnabled: state.columnAlignEnabled,
+      columnAlignSupported: state.columnAlignSupported,
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload));
   } catch {
@@ -101,6 +103,7 @@ interface EditorState {
   readerTocVisible: boolean;
   diagnosticsPanelVisible: boolean;
   columnAlignEnabled: boolean;
+  columnAlignSupported: boolean;
 }
 
 interface EditorActions {
@@ -154,6 +157,7 @@ interface EditorActions {
   resetKeybindings: () => void;
   setDiagnosticsPanelVisible: (visible: boolean) => void;
   setColumnAlignEnabled: (enabled: boolean) => void;
+  setColumnAlignSupported: (supported: boolean) => void;
 }
 
 const loaded = loadSettings();
@@ -182,6 +186,7 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
   readerTocVisible: loaded.readerTocVisible ?? true,
   diagnosticsPanelVisible: false,
   columnAlignEnabled: loaded.columnAlignEnabled ?? false,
+  columnAlignSupported: loaded.columnAlignSupported ?? false,
   diffMode: false,
   diffLeftTabId: null,
   diffRightTabId: null,
@@ -520,6 +525,7 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
   resetKeybindings: () => set({ customKeybindings: {} }),
   setDiagnosticsPanelVisible: (visible) => set({ diagnosticsPanelVisible: visible }),
   setColumnAlignEnabled: (enabled) => set({ columnAlignEnabled: enabled }),
+  setColumnAlignSupported: (supported) => set({ columnAlignSupported: supported }),
 }));
 
 useEditorStore.subscribe(debounce(saveSettings, 300));
