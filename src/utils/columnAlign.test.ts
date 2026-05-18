@@ -41,9 +41,9 @@ describe('columnAlignExtension', () => {
       ranges.push({ from, to });
     });
 
-    // 2 tabs -> 1 nowrap line + 2 cell marks + 2 spacers = 5 decorations
-    expect(ranges.length).toBe(5);
-    // First cell mark 'a' at [0,1], spacer at [1,2], second cell mark 'b' at [2,3], spacer at [3,4]
+    // 2 tabs -> 1 nowrap line + 3 cell marks + 2 spacers = 6 decorations
+    expect(ranges.length).toBe(6);
+    // First cell mark 'a' at [0,1], spacer at [1,2], second cell mark 'b' at [2,3], spacer at [3,4], third cell mark 'c' at [4,5]
     expect(ranges[0].from).toBe(0);
     expect(ranges[0].to).toBe(0); // line decoration
     expect(ranges[1].from).toBe(0);
@@ -54,6 +54,8 @@ describe('columnAlignExtension', () => {
     expect(ranges[3].to).toBe(3); // mark 'b'
     expect(ranges[4].from).toBe(3);
     expect(ranges[4].to).toBe(4); // spacer 2
+    expect(ranges[5].from).toBe(4);
+    expect(ranges[5].to).toBe(5); // mark 'c'
     view.destroy();
   });
 
@@ -77,10 +79,10 @@ describe('columnAlignExtension', () => {
       ranges.push({ from, to });
     });
 
-    // Line 1: 1 tab -> 1 line + 1 mark + 1 spacer = 3
-    // Line 2: 2 tabs -> 1 line + 2 marks + 2 spacers = 5
+    // Line 1: 1 tab -> 1 line + 2 marks + 1 spacer = 4 (trailing text after last tab also gets a cell)
+    // Line 2: 2 tabs -> 1 line + 3 marks + 2 spacers = 6
     // Line 3: 0 tabs -> 0
-    expect(ranges.length).toBe(8);
+    expect(ranges.length).toBe(10);
     view.destroy();
   });
 
@@ -115,8 +117,8 @@ describe('columnAlignExtension', () => {
       ranges.push({ from, to });
     });
 
-    // 2 tabs -> 1 line + 2 marks + 2 spacers = 5
-    expect(ranges.length).toBe(5);
+    // 2 tabs -> 1 line + 3 marks + 2 spacers = 6
+    expect(ranges.length).toBe(6);
     view.destroy();
   });
 

@@ -44,6 +44,8 @@ class ColumnSpacerWidget extends WidgetType {
     span.className = 'cm-column-spacer';
     span.style.display = 'inline-block';
     span.style.width = `${this.width}px`;
+    // Zero-width space gives the cursor a text node to anchor on
+    span.textContent = '\u200B';
     return span;
   }
 
@@ -139,6 +141,21 @@ const columnAlignPlugin = ViewPlugin.fromClass(
             start = i + 1;
             colIdx++;
           }
+        }
+
+        // Handle trailing text after the last tab so the final column also
+        // gets a fixed-width cell (fixes cursor display and column layout).
+        if (colIdx > 0 && start < text.length) {
+          builder.add(
+            line.from + start,
+            line.to,
+            Decoration.mark({
+              class: 'cm-column-cell',
+              attributes: {
+                style: `display:inline-block;width:${getColumnWidth(config, colIdx)}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top;`,
+              },
+            })
+          );
         }
 
         pos = line.to + 1;
