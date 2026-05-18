@@ -69,8 +69,13 @@ function getColumnWidth(
   return DEFAULT_COL_WIDTH;
 }
 
-function cellMarkStyle(width: number): string {
-  return `display:inline-block;width:${width}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top;`;
+function cellMarkStyle(width: number, isLast = false): string {
+  const base = 'display:inline-block;vertical-align:top;';
+  if (isLast) {
+    // Last column: no fixed width so text flows naturally instead of being clipped
+    return base;
+  }
+  return `${base}width:${width}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
 }
 
 function buildDecorations(state: EditorState): DecorationSet {
@@ -138,8 +143,8 @@ function buildDecorations(state: EditorState): DecorationSet {
       }
     }
 
-    // Handle trailing text after the last tab so the final column also
-    // gets a fixed-width cell (fixes cursor display and column layout).
+    // Handle trailing text after the last tab — final column has no fixed width
+    // so long text is not clipped.
     if (colIdx > 0 && start < text.length) {
       builder.add(
         line.from + start,
@@ -147,7 +152,7 @@ function buildDecorations(state: EditorState): DecorationSet {
         Decoration.mark({
           class: 'cm-column-cell',
           attributes: {
-            style: cellMarkStyle(getColumnWidth(config, colIdx)),
+            style: cellMarkStyle(getColumnWidth(config, colIdx), true),
           },
         })
       );

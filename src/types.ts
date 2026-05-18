@@ -7,6 +7,7 @@ export interface EditorTab {
   encoding: Encoding;
   group?: 1 | 2;
   initialContent?: string;
+  columnAlignEnabled?: boolean;
 }
 
 export type Encoding =

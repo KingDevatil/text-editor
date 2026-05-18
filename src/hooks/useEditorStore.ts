@@ -36,6 +36,7 @@ interface EditorActions {
   renameTab: (tabId: string, newTitle: string, newFilePath?: string) => void;
   setTabEncoding: (tabId: string, encoding: Encoding) => void;
   setTabLanguage: (tabId: string, language: Language) => void;
+  setTabColumnAlign: (tabId: string, enabled: boolean) => void;
   moveTabToGroup: (tabId: string, group: 1 | 2) => void;
   reorderTab: (tabId: string, group: 1 | 2, targetGroupIndex: number) => void;
   setSplitMode: (mode: boolean) => void;
@@ -211,6 +212,12 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
   setTabLanguage: (tabId, language) => {
     set((state) => ({
       tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, language } : tab)),
+    }));
+  },
+
+  setTabColumnAlign: (tabId, enabled) => {
+    set((state) => ({
+      tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, columnAlignEnabled: enabled } : tab)),
     }));
   },
 

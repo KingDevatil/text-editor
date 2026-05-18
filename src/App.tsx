@@ -52,15 +52,11 @@ function App() {
   const handleSaveFileRef = useRef<(() => void) | null>(null);
   const handleFormatRef = useRef<(() => void) | null>(null);
   const findReplaceVisibleRef = useRef(findReplaceVisible);
-  const columnAlignEnabledRef = useRef(false);
   const columnAlignSupportedRef = useRef(false);
 
   // Keep all callback refs up-to-date outside of render phase
   useEffect(() => {
     findReplaceVisibleRef.current = findReplaceVisible;
-  });
-  useEffect(() => {
-    columnAlignEnabledRef.current = columnAlignEnabled;
   });
   useEffect(() => {
     columnAlignSupportedRef.current = columnAlignSupported;
@@ -79,10 +75,10 @@ function App() {
   const readMode = useUIStore((s) => s.readMode);
   const diagnosticsPanelVisible = useUIStore((s) => s.diagnosticsPanelVisible);
   const setDiagnosticsPanelVisible = useUIStore((s) => s.setDiagnosticsPanelVisible);
-  const columnAlignEnabled = useSettingsStore((s) => s.columnAlignEnabled);
-  const setColumnAlignEnabled = useSettingsStore((s) => s.setColumnAlignEnabled);
   const columnAlignSupported = useSettingsStore((s) => s.columnAlignSupported);
   const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId) || null);
+  const columnAlignEnabled = activeTab?.columnAlignEnabled ?? false;
+  const setTabColumnAlign = useEditorStore((s) => s.setTabColumnAlign);
 
   const setActiveTabId = useEditorStore((s) => s.setActiveTabId);
   const setActiveGroup1TabId = useEditorStore((s) => s.setActiveGroup1TabId);
@@ -243,7 +239,10 @@ function App() {
       // Column align toggle: Ctrl+Shift+T (only when supported)
       if (columnAlignSupportedRef.current && (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 't') {
         e.preventDefault();
-        setColumnAlignEnabled(!columnAlignEnabledRef.current);
+        const tab = activeTabRef.current;
+        if (tab) {
+          setTabColumnAlign(tab.id, !(tab.columnAlignEnabled ?? false));
+        }
       }
       // Go to definition shortcut (only intercept in Tauri; let F12 open DevTools in browser)
       if (e.key === 'F12' && isTauri()) {
@@ -725,12 +724,12 @@ function App() {
     { id: 'readmode', label: readMode ? '退出阅读模式' : '阅读模式', shortcut: 'Ctrl+Shift+V', icon: <Eye size={16} />, action: handleToggleReadMode },
     { id: 'split', label: splitMode ? '关闭分屏' : '开启分屏', icon: <Columns2 size={16} />, action: handleToggleSplit },
     { id: 'diff', label: diffMode ? '退出对比' : '对比文件', icon: diffMode ? <X size={16} /> : <GitCompare size={16} />, action: handleToggleDiff },
-    ...(columnAlignSupported ? [{
+    ...(columnAlignSupported && activeTab ? [{
       id: 'columnAlign',
-      label: columnAlignEnabled ? '关闭列对齐' : '开启列对齐',
+      label: (activeTab.columnAlignEnabled ?? false) ? '关闭列对齐' : '开启列对齐',
       shortcut: 'Ctrl+Shift+T',
       icon: <Table size={16} />,
-      action: () => setColumnAlignEnabled(!columnAlignEnabled),
+      action: () => setTabColumnAlign(activeTab.id, !(activeTab.columnAlignEnabled ?? false)),
     }] : []),
     ...(activeTab?.filePath ? [{
       id: 'reveal',
@@ -744,7 +743,7 @@ function App() {
         }
       },
     }] : []),
-  ], [handleNewFile, handleOpenFile, handleSaveFile, handleFormat, handleCycleTheme, handleToggleSplit, handleToggleDiff, handleToggleReadMode, findReplaceVisible, setFindReplaceVisible, sidebarVisible, setSidebarVisible, isDark, wordWrap, showWhitespace, previewVisible, setPreviewVisible, splitMode, diffMode, readMode, activeTab, theme, columnAlignEnabled, setColumnAlignEnabled, columnAlignSupported]);
+  ], [handleNewFile, handleOpenFile, handleSaveFile, handleFormat, handleCycleTheme, handleToggleSplit, handleToggleDiff, handleToggleReadMode, findReplaceVisible, setFindReplaceVisible, sidebarVisible, setSidebarVisible, isDark, wordWrap, showWhitespace, previewVisible, setPreviewVisible, splitMode, diffMode, readMode, activeTab, theme, columnAlignSupported, setTabColumnAlign]);
 
   return (
     <div className={`flex flex-col h-screen ${theme !== 'light' ? 'dark' : ''}`}>
@@ -846,7 +845,7 @@ function App() {
                       scrollPastEnd={scrollPastEnd}
                       minimapVisible={minimapVisible}
                       unicodeHighlight={unicodeHighlight}
-                      columnAlignEnabled={columnAlignSupported && columnAlignEnabled}
+                      columnAlignEnabled={columnAlignSupported && (tab.columnAlignEnabled ?? false)}
                     />
                   </div>
                 ))}
@@ -873,7 +872,7 @@ function App() {
                                 scrollPastEnd={scrollPastEnd}
                                 minimapVisible={minimapVisible}
                                 unicodeHighlight={unicodeHighlight}
-                                columnAlignEnabled={columnAlignSupported && columnAlignEnabled}
+                                columnAlignEnabled={columnAlignSupported && (tab.columnAlignEnabled ?? false)}
                               />
                             </div>
                           ))
@@ -981,7 +980,11 @@ function App() {
             diagnosticsPanelVisible={diagnosticsPanelVisible}
             onToggleDiagnosticsPanel={() => setDiagnosticsPanelVisible(!diagnosticsPanelVisible)}
             columnAlignEnabled={columnAlignEnabled}
-            onToggleColumnAlign={() => setColumnAlignEnabled(!columnAlignEnabled)}
+            onToggleColumnAlign={() => {
+              if (activeTab) {
+                setTabColumnAlign(activeTab.id, !columnAlignEnabled);
+              }
+            }}
             columnAlignSupported={columnAlignSupported}
           />
         </div>

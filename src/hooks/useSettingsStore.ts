@@ -17,7 +17,6 @@ interface SettingsState {
   minimapVisible: boolean;
   largeFileOptimize: boolean;
   unicodeHighlight: boolean;
-  columnAlignEnabled: boolean;
   columnAlignSupported: boolean;
   readerTocVisible: boolean;
   customKeybindings: Record<string, string>;
@@ -38,7 +37,6 @@ interface SettingsActions {
   setMinimapVisible: (visible: boolean) => void;
   setLargeFileOptimize: (optimize: boolean) => void;
   setUnicodeHighlight: (highlight: boolean) => void;
-  setColumnAlignEnabled: (enabled: boolean) => void;
   setColumnAlignSupported: (supported: boolean) => void;
   setReaderTocVisible: (visible: boolean) => void;
   setCustomKeybinding: (command: string, key: string) => void;
@@ -84,7 +82,6 @@ const useSettingsStore = create<SettingsState & SettingsActions>((set) => ({
   minimapVisible: loaded.minimapVisible ?? true,
   largeFileOptimize: loaded.largeFileOptimize ?? false,
   unicodeHighlight: loaded.unicodeHighlight ?? false,
-  columnAlignEnabled: loaded.columnAlignEnabled ?? false,
   columnAlignSupported: loaded.columnAlignSupported ?? false,
   readerTocVisible: loaded.readerTocVisible ?? true,
   customKeybindings: loaded.customKeybindings ?? {},
@@ -112,12 +109,7 @@ const useSettingsStore = create<SettingsState & SettingsActions>((set) => ({
   setMinimapVisible: (visible) => set({ minimapVisible: visible }),
   setLargeFileOptimize: (optimize) => set({ largeFileOptimize: optimize }),
   setUnicodeHighlight: (highlight) => set({ unicodeHighlight: highlight }),
-  setColumnAlignEnabled: (enabled) => set({ columnAlignEnabled: enabled }),
-  setColumnAlignSupported: (supported) =>
-    set(() => ({
-      columnAlignSupported: supported,
-      ...(supported ? {} : { columnAlignEnabled: false }),
-    })),
+  setColumnAlignSupported: (supported) => set({ columnAlignSupported: supported }),
   setReaderTocVisible: (visible) => set({ readerTocVisible: visible }),
   setCustomKeybinding: (command, key) =>
     set((state) => ({ customKeybindings: { ...state.customKeybindings, [command]: key } })),
@@ -140,7 +132,6 @@ function saveSettings(state: SettingsState) {
         minimapVisible: state.minimapVisible,
         largeFileOptimize: state.largeFileOptimize,
         unicodeHighlight: state.unicodeHighlight,
-        columnAlignEnabled: state.columnAlignEnabled,
         columnAlignSupported: state.columnAlignSupported,
         readerTocVisible: state.readerTocVisible,
         customKeybindings: state.customKeybindings,
