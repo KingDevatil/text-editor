@@ -156,7 +156,9 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
         return;
       }
       let count = 0;
-      forEachDiagnostic(view.state, () => { count++; });
+      forEachDiagnostic(view.state, (d) => {
+        if (d.severity !== 'info') count++;
+      });
       setDiagnosticCount(count);
     };
     poll();
