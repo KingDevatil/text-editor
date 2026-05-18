@@ -58,6 +58,30 @@ class ColumnSpacerWidget extends WidgetType {
   }
 }
 
+/** Empty-cell placeholder so consecutive tabs produce aligned columns. */
+class EmptyCellWidget extends WidgetType {
+  constructor(private width: number) {
+    super();
+  }
+
+  toDOM() {
+    const span = document.createElement('span');
+    span.className = 'cm-column-cell cm-column-empty';
+    span.style.display = 'inline-block';
+    span.style.width = `${this.width}px`;
+    span.textContent = '\u200B';
+    return span;
+  }
+
+  eq(other: EmptyCellWidget) {
+    return this.width === other.width;
+  }
+
+  ignoreEvent() {
+    return true;
+  }
+}
+
 function getColumnWidth(
   config: ColumnAlignConfig,
   colIndex: number
@@ -128,6 +152,16 @@ const columnAlignPlugin = ViewPlugin.fromClass(
                   },
                 })
               );
+            } else {
+              // Consecutive tabs (or leading tab) => empty column placeholder
+              builder.add(
+                tabPos,
+                tabPos,
+                Decoration.widget({
+                  widget: new EmptyCellWidget(targetWidth),
+                  side: -1,
+                })
+              );
             }
 
             builder.add(
@@ -154,6 +188,18 @@ const columnAlignPlugin = ViewPlugin.fromClass(
               attributes: {
                 style: `display:inline-block;width:${getColumnWidth(config, colIdx)}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top;`,
               },
+            })
+          );
+        }
+
+        // Handle trailing empty column when line ends with a tab.
+        if (colIdx > 0 && start === text.length) {
+          builder.add(
+            line.to,
+            line.to,
+            Decoration.widget({
+              widget: new EmptyCellWidget(getColumnWidth(config, colIdx)),
+              side: 1,
             })
           );
         }
