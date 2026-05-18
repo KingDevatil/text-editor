@@ -786,17 +786,6 @@ const CmEditor: React.FC<CmEditorProps> = ({
               run: columnAlignEnabled
                 ? (view) => {
                     const { state } = view;
-                    const pos = state.selection.main.head;
-                    const line = state.doc.lineAt(pos);
-                    const relPos = pos - line.from;
-                    const nextTab = line.text.indexOf('\t', relPos);
-                    if (nextTab !== -1) {
-                      view.dispatch({
-                        selection: EditorSelection.cursor(line.from + nextTab + 1),
-                        userEvent: 'select',
-                      });
-                      return true;
-                    }
                     const changes = state.changeByRange((range) => ({
                       changes: { from: range.from, to: range.to, insert: '\t' },
                       range: EditorSelection.range(range.from + 1, range.from + 1),
@@ -813,18 +802,13 @@ const CmEditor: React.FC<CmEditorProps> = ({
                     const relPos = pos - line.from;
                     const prevTab = line.text.lastIndexOf('\t', relPos - 1);
                     if (prevTab !== -1) {
-                      const prevPrevTab = line.text.lastIndexOf('\t', prevTab - 1);
-                      const target = prevPrevTab !== -1 ? line.from + prevPrevTab + 1 : line.from;
                       view.dispatch({
-                        selection: EditorSelection.cursor(target),
-                        userEvent: 'select',
+                        changes: { from: line.from + prevTab, to: line.from + prevTab + 1 },
+                        selection: EditorSelection.cursor(line.from + prevTab),
+                        userEvent: 'input',
                       });
                       return true;
                     }
-                    view.dispatch({
-                      selection: EditorSelection.cursor(line.from),
-                      userEvent: 'select',
-                    });
                     return true;
                   }
                 : indentLess,
