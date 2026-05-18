@@ -170,6 +170,8 @@ const columnAlignPlugin = ViewPlugin.fromClass(
 const COLUMN_ALIGN_THEME = EditorView.theme({
   '.cm-column-spacer': {
     verticalAlign: 'bottom',
+    background: 'color-mix(in srgb, var(--te-border) 15%, transparent)',
+    borderRadius: '2px',
   },
   '.cm-column-cell': {
     verticalAlign: 'top',
