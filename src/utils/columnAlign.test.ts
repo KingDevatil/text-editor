@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EditorState, EditorSelection } from '@codemirror/state';
-import { EditorView, type DecorationSet } from '@codemirror/view';
-import { columnAlignExtension, setColumnAlign, createColumnDragLayer, columnAlignTabCommand } from './columnAlign';
+import { EditorView } from '@codemirror/view';
+import { columnAlignExtension, columnAlignDecorations, setColumnAlign, createColumnDragLayer, columnAlignTabCommand } from './columnAlign';
 
 function createView(doc: string, enabled = true) {
   const state = EditorState.create({
@@ -20,11 +20,11 @@ function createView(doc: string, enabled = true) {
 describe('columnAlignExtension', () => {
   it('does not decorate when disabled', () => {
     const view = createView('a\tb\tc', false);
-    const decorations = view.plugin(columnAlignExtension[2] as unknown as { decorations: DecorationSet })?.decorations;
+    const decorations = view.state.field(columnAlignDecorations);
     expect(decorations).toBeDefined();
     // When disabled, decorations should be empty (Decoration.none)
     let hasDecorations = false;
-    decorations?.between(0, view.state.doc.length, () => {
+    decorations.between(0, view.state.doc.length, () => {
       hasDecorations = true;
     });
     expect(hasDecorations).toBe(false);
@@ -33,11 +33,11 @@ describe('columnAlignExtension', () => {
 
   it('replaces tabs with spacer widgets when enabled', () => {
     const view = createView('a\tb\tc', true);
-    const decorations = view.plugin(columnAlignExtension[2] as unknown as { decorations: DecorationSet })?.decorations;
+    const decorations = view.state.field(columnAlignDecorations);
     expect(decorations).toBeDefined();
 
     const ranges: Array<{ from: number; to: number }> = [];
-    decorations?.between(0, view.state.doc.length, (from, to) => {
+    decorations.between(0, view.state.doc.length, (from, to) => {
       ranges.push({ from, to });
     });
 
@@ -61,9 +61,9 @@ describe('columnAlignExtension', () => {
 
   it('handles lines without tabs', () => {
     const view = createView('no tabs here', true);
-    const decorations = view.plugin(columnAlignExtension[2] as unknown as { decorations: DecorationSet })?.decorations;
+    const decorations = view.state.field(columnAlignDecorations);
     let hasDecorations = false;
-    decorations?.between(0, view.state.doc.length, () => {
+    decorations.between(0, view.state.doc.length, () => {
       hasDecorations = true;
     });
     expect(hasDecorations).toBe(false);
@@ -72,10 +72,10 @@ describe('columnAlignExtension', () => {
 
   it('handles multiple lines with varying tab counts', () => {
     const view = createView('a\tb\n1\t2\t3\nno-tabs', true);
-    const decorations = view.plugin(columnAlignExtension[2] as unknown as { decorations: DecorationSet })?.decorations;
+    const decorations = view.state.field(columnAlignDecorations);
 
     const ranges: Array<{ from: number; to: number }> = [];
-    decorations?.between(0, view.state.doc.length, (from, to) => {
+    decorations.between(0, view.state.doc.length, (from, to) => {
       ranges.push({ from, to });
     });
 
@@ -94,9 +94,9 @@ describe('columnAlignExtension', () => {
       effects: setColumnAlign.of({ enabled: false, widths: [] }),
     });
 
-    const decorations = view.plugin(columnAlignExtension[2] as unknown as { decorations: DecorationSet })?.decorations;
+    const decorations = view.state.field(columnAlignDecorations);
     let hasDecorations = false;
-    decorations?.between(0, view.state.doc.length, () => {
+    decorations.between(0, view.state.doc.length, () => {
       hasDecorations = true;
     });
     expect(hasDecorations).toBe(false);
@@ -111,9 +111,9 @@ describe('columnAlignExtension', () => {
       effects: setColumnAlign.of({ enabled: true, widths: [200, 50] }),
     });
 
-    const decorations = view.plugin(columnAlignExtension[2] as unknown as { decorations: DecorationSet })?.decorations;
+    const decorations = view.state.field(columnAlignDecorations);
     const ranges: Array<{ from: number; to: number }> = [];
-    decorations?.between(0, view.state.doc.length, (from, to) => {
+    decorations.between(0, view.state.doc.length, (from, to) => {
       ranges.push({ from, to });
     });
 
@@ -130,7 +130,7 @@ describe('columnAlignExtension', () => {
       effects: setColumnAlign.of({ enabled: true, widths: [5] }),
     });
 
-    const decorations = view.plugin(columnAlignExtension[2] as unknown as { decorations: DecorationSet })?.decorations;
+    const decorations = view.state.field(columnAlignDecorations);
     expect(decorations).toBeDefined();
     view.destroy();
   });

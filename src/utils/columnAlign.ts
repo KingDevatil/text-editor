@@ -1,12 +1,10 @@
 import {
   EditorView,
   Decoration,
-  ViewPlugin,
-  ViewUpdate,
   type DecorationSet,
   WidgetType,
 } from '@codemirror/view';
-import { StateField, StateEffect, RangeSetBuilder, EditorSelection } from '@codemirror/state';
+import { EditorState, StateField, StateEffect, RangeSetBuilder, EditorSelection } from '@codemirror/state';
 
 const DEFAULT_COL_WIDTH = 120;
 const MIN_COL_WIDTH = 40;
@@ -92,125 +90,118 @@ function getColumnWidth(
   return DEFAULT_COL_WIDTH;
 }
 
-const columnAlignPlugin = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet = Decoration.none;
+function buildDecorations(state: EditorState): DecorationSet {
+  const config = state.field(columnAlignField);
+  if (!config.enabled) return Decoration.none;
 
-    constructor(view: EditorView) {
-      this.decorations = this.build(view);
+  const builder = new RangeSetBuilder<Decoration>();
+
+  for (let pos = 0; pos < state.doc.length; ) {
+    const line = state.doc.lineAt(pos);
+    const text = line.text;
+
+    // Prevent inline-block spacers from wrapping to next visual line
+    if (text.includes('\t')) {
+      builder.add(
+        line.from,
+        line.from,
+        Decoration.line({
+          attributes: { style: 'white-space: nowrap;' },
+        })
+      );
     }
 
-    update(update: ViewUpdate) {
-      const config = update.state.field(columnAlignField);
-      const prevConfig = update.startState.field(columnAlignField);
-      if (
-        config !== prevConfig ||
-        update.docChanged
-      ) {
-        this.decorations = this.build(update.view);
-      }
-    }
+    let start = 0;
+    let colIdx = 0;
 
-    build(view: EditorView): DecorationSet {
-      const config = view.state.field(columnAlignField);
-      if (!config.enabled) return Decoration.none;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === '\t') {
+        const tabPos = line.from + i;
+        const targetWidth = getColumnWidth(config, colIdx);
 
-      const builder = new RangeSetBuilder<Decoration>();
-
-      for (let pos = 0; pos < view.state.doc.length; ) {
-        const line = view.state.doc.lineAt(pos);
-        const text = line.text;
-
-        // Prevent inline-block spacers from wrapping to next visual line
-        if (text.includes('\t')) {
-          builder.add(
-            line.from,
-            line.from,
-            Decoration.line({
-              attributes: { style: 'white-space: nowrap;' },
-            })
-          );
-        }
-
-        let start = 0;
-        let colIdx = 0;
-
-        for (let i = 0; i < text.length; i++) {
-          if (text[i] === '\t') {
-            const tabPos = line.from + i;
-            const targetWidth = getColumnWidth(config, colIdx);
-
-            if (start < i) {
-              builder.add(
-                line.from + start,
-                tabPos,
-                Decoration.mark({
-                  class: 'cm-column-cell',
-                  attributes: {
-                    style: `display:inline-block;width:${targetWidth}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top;`,
-                  },
-                })
-              );
-            } else {
-              // Consecutive tabs (or leading tab) => empty column placeholder
-              builder.add(
-                tabPos,
-                tabPos,
-                Decoration.widget({
-                  widget: new EmptyCellWidget(targetWidth),
-                  side: -1,
-                })
-              );
-            }
-
-            builder.add(
-              tabPos,
-              tabPos + 1,
-              Decoration.replace({
-                widget: new ColumnSpacerWidget(COL_PADDING),
-              })
-            );
-
-            start = i + 1;
-            colIdx++;
-          }
-        }
-
-        // Handle trailing text after the last tab so the final column also
-        // gets a fixed-width cell (fixes cursor display and column layout).
-        if (colIdx > 0 && start < text.length) {
+        if (start < i) {
           builder.add(
             line.from + start,
-            line.to,
+            tabPos,
             Decoration.mark({
               class: 'cm-column-cell',
               attributes: {
-                style: `display:inline-block;width:${getColumnWidth(config, colIdx)}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top;`,
+                style: `display:inline-block;width:${targetWidth}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top;`,
               },
             })
           );
-        }
-
-        // Handle trailing empty column when line ends with a tab.
-        if (colIdx > 0 && start === text.length) {
+        } else {
+          // Consecutive tabs (or leading tab) => empty column placeholder
           builder.add(
-            line.to,
-            line.to,
+            tabPos,
+            tabPos,
             Decoration.widget({
-              widget: new EmptyCellWidget(getColumnWidth(config, colIdx)),
-              side: 1,
+              widget: new EmptyCellWidget(targetWidth),
+              side: -1,
             })
           );
         }
 
-        pos = line.to + 1;
-      }
+        builder.add(
+          tabPos,
+          tabPos + 1,
+          Decoration.replace({
+            widget: new ColumnSpacerWidget(COL_PADDING),
+          })
+        );
 
-      return builder.finish();
+        start = i + 1;
+        colIdx++;
+      }
     }
+
+    // Handle trailing text after the last tab so the final column also
+    // gets a fixed-width cell (fixes cursor display and column layout).
+    if (colIdx > 0 && start < text.length) {
+      builder.add(
+        line.from + start,
+        line.to,
+        Decoration.mark({
+          class: 'cm-column-cell',
+          attributes: {
+            style: `display:inline-block;width:${getColumnWidth(config, colIdx)}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top;`,
+          },
+        })
+      );
+    }
+
+    // Handle trailing empty column when line ends with a tab.
+    if (colIdx > 0 && start === text.length) {
+      builder.add(
+        line.to,
+        line.to,
+        Decoration.widget({
+          widget: new EmptyCellWidget(getColumnWidth(config, colIdx)),
+          side: 1,
+        })
+      );
+    }
+
+    pos = line.to + 1;
+  }
+
+  return builder.finish();
+}
+
+export const columnAlignDecorations = StateField.define<DecorationSet>({
+  create(state) {
+    return buildDecorations(state);
   },
-  { decorations: (v) => v.decorations }
-);
+  update(decorations, tr) {
+    const config = tr.state.field(columnAlignField);
+    const prevConfig = tr.startState.field(columnAlignField);
+    if (config !== prevConfig || tr.docChanged) {
+      return buildDecorations(tr.state);
+    }
+    return decorations;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
 
 const COLUMN_ALIGN_THEME = EditorView.theme({
   '.cm-column-spacer': {
@@ -226,7 +217,7 @@ const COLUMN_ALIGN_THEME = EditorView.theme({
 export const columnAlignExtension = [
   COLUMN_ALIGN_THEME,
   columnAlignField,
-  columnAlignPlugin,
+  columnAlignDecorations,
 ];
 
 /**
@@ -274,9 +265,9 @@ export function createColumnDragLayer(
     const config = view.state.field(columnAlignField);
     if (!config.enabled) return;
 
-    // Find visible lines with tabs to determine column count
+    // Find all lines with tabs to determine column count (global, not viewport-scoped)
     let maxCols = 0;
-    for (let pos = view.viewport.from; pos < view.viewport.to; ) {
+    for (let pos = 0; pos < view.state.doc.length; ) {
       const line = view.state.doc.lineAt(pos);
       const tabCount = (line.text.match(TAB_REGEX) || []).length;
       maxCols = Math.max(maxCols, tabCount);
