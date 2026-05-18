@@ -525,7 +525,13 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
   resetKeybindings: () => set({ customKeybindings: {} }),
   setDiagnosticsPanelVisible: (visible) => set({ diagnosticsPanelVisible: visible }),
   setColumnAlignEnabled: (enabled) => set({ columnAlignEnabled: enabled }),
-  setColumnAlignSupported: (supported) => set({ columnAlignSupported: supported }),
+  setColumnAlignSupported: (supported) =>
+    set(() => ({
+      columnAlignSupported: supported,
+      // Turning off support also deactivates column align so it doesn't
+      // re-activate immediately when support is toggled back on.
+      ...(supported ? {} : { columnAlignEnabled: false }),
+    })),
 }));
 
 useEditorStore.subscribe(debounce(saveSettings, 300));
