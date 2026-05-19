@@ -8,6 +8,7 @@ export interface EditorTab {
   group?: 1 | 2;
   initialContent?: string;
   columnAlignEnabled?: boolean;
+  lineEnding?: LineEnding;
 }
 
 export type Encoding =
@@ -23,6 +24,8 @@ export type Encoding =
   | 'EUC-KR'
   | 'ISO-8859-1'
   | 'Windows-1252';
+
+export type LineEnding = 'CRLF' | 'LF' | 'CR' | 'Mixed';
 
 export interface DirEntry {
   name: string;

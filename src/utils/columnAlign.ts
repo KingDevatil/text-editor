@@ -13,14 +13,6 @@ const MIN_COL_WIDTH = 40;
 const COL_PADDING = 16;
 const TAB_REGEX = /\t/g;
 
-function estimateTextWidth(text: string): number {
-  let width = 0;
-  for (const ch of text) {
-    width += ch.charCodeAt(0) > 127 ? 14 : 7;
-  }
-  return width;
-}
-
 export interface ColumnAlignConfig {
   enabled: boolean;
   widths: number[];
@@ -85,7 +77,10 @@ function cellMarkStyle(width: number, isLast = false): string {
     // Last column: no fixed width so text flows naturally instead of being clipped
     return base;
   }
-  return `${base}max-width:${width}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
+  // Fixed width ensures every row aligns to the same column boundary,
+  // avoiding drift caused by inaccurate text-width estimation or
+  // DOM-measurement failures when other decorations (e.g. showWhitespace) are active.
+  return `${base}width:${width}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
 }
 
 function buildDecorations(state: EditorState): DecorationSet {
@@ -118,12 +113,8 @@ function buildDecorations(state: EditorState): DecorationSet {
         const targetWidth = getColumnWidth(config, colIdx);
 
         if (start < i) {
-          const textSlice = text.slice(start, i);
-          const estimatedWidth = estimateTextWidth(textSlice);
-          const initialSpacerWidth = Math.max(
-            COL_PADDING,
-            targetWidth - estimatedWidth + COL_PADDING
-          );
+          // With fixed-width cells, the spacer is always a constant padding;
+          // text-width estimation and dynamic adjustment are no longer needed.
           builder.add(
             line.from + start,
             tabPos,
@@ -139,7 +130,7 @@ function buildDecorations(state: EditorState): DecorationSet {
             tabPos + 1,
             Decoration.replace({
               widget: new InlineBlockWidget(
-                initialSpacerWidth,
+                COL_PADDING,
                 'cm-column-spacer cm-column-spacer-dynamic'
               ),
             })
@@ -239,57 +230,10 @@ const columnAlignDynamicPlugin = ViewPlugin.fromClass(
     }
 
     adjustSpacers(view: EditorView) {
-      const config = view.state.field(columnAlignField);
-      if (!config.enabled) return;
-
-      const { from, to } = view.viewport;
-      for (let pos = from; pos < to; ) {
-        const line = view.state.doc.lineAt(pos);
-        const text = line.text;
-        if (!text.includes('\t')) {
-          pos = line.to + 1;
-          continue;
-        }
-
-        let start = 0;
-        let colIdx = 0;
-
-        for (let i = 0; i < text.length; i++) {
-          if (text[i] === '\t') {
-            const tabPos = line.from + i;
-            const targetWidth = getColumnWidth(config, colIdx);
-
-            if (start < i) {
-              const startCoords = view.coordsAtPos(line.from + start);
-              const tabCoords = view.coordsAtPos(tabPos);
-              if (startCoords && tabCoords) {
-                const textWidth = tabCoords.left - startCoords.left;
-                const newWidth = Math.max(
-                  COL_PADDING,
-                  targetWidth - textWidth + COL_PADDING
-                );
-
-                const domInfo = view.domAtPos(tabPos);
-                let el: HTMLElement | null = domInfo.node as HTMLElement;
-                while (el && !el.classList.contains('cm-column-spacer-dynamic')) {
-                  el = el.parentElement;
-                }
-                if (el) {
-                  const currentWidth = parseFloat(el.style.width) || 0;
-                  if (Math.abs(currentWidth - newWidth) > 0.5) {
-                    el.style.width = `${newWidth}px`;
-                  }
-                }
-              }
-            }
-
-            start = i + 1;
-            colIdx++;
-          }
-        }
-
-        pos = line.to + 1;
-      }
+      // Spacers are now fixed to COL_PADDING because cells use a fixed width.
+      // Dynamic adjustment is disabled to avoid mis-alignment when other
+      // decorations (e.g. showWhitespace) alter the DOM structure.
+      void view;
     }
 
     destroy() {

@@ -14,6 +14,7 @@ import { getEditorContent, updateEditorContent, getActiveView } from './hooks/us
 import { formatDocument, goToDefinition } from './utils/cmCommands';
 import { perf } from './utils/perf';
 import type { Encoding } from './types';
+import { detectLineEnding } from './utils/lineEnding';
 import { resolveThemeColors } from './utils/themeResolver';
 import { injectThemeVars } from './utils/themeInjector';
 import Toolbar from './components/Toolbar';
@@ -91,6 +92,7 @@ function App() {
   const setProjectPath = useEditorStore((s) => s.setProjectPath);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const setTabEncoding = useEditorStore((s) => s.setTabEncoding);
+  const setTabLineEnding = useEditorStore((s) => s.setTabLineEnding);
   const setTabLanguage = useEditorStore((s) => s.setTabLanguage);
   const createTab = useEditorStore((s) => s.createTab);
   const markTabDirty = useEditorStore((s) => s.markTabDirty);
@@ -129,10 +131,11 @@ function App() {
       updateEditorContent(stillTab.id, result.text);
       markTabSaved(stillTab.id);
       setTabEncoding(stillTab.id, result.encoding as Encoding);
+      setTabLineEnding(stillTab.id, detectLineEnding(result.text));
     } catch (err) {
       console.error('Failed to reload changed file:', err);
     }
-  }, [markTabSaved, setTabEncoding]);
+  }, [markTabSaved, setTabEncoding, setTabLineEnding]);
 
   const { pauseWatch, resumeWatch } = useFileWatcher(tabs, handleFileChanged);
 
@@ -316,11 +319,13 @@ function App() {
               const text = await file.text();
               const currentTabs = useEditorStore.getState().tabs;
               const existing = currentTabs.find((t) => t.title === fileName);
+              const lineEnding = detectLineEnding(text);
               if (existing) {
                 setActiveTabId(existing.id);
+                setTabLineEnding(existing.id, lineEnding);
                 updateEditorContent(existing.id, text);
               } else {
-                createTab(fileName, undefined, undefined, 1, 'UTF-8', text);
+                createTab(fileName, undefined, undefined, 1, 'UTF-8', text, lineEnding);
               }
             }
           } catch (err) {
@@ -338,12 +343,19 @@ function App() {
     [openFile, setActiveTabId, createTab]
   );
 
+  /** Convert normalized LF back to the tab's original line ending before saving. */
+  const normalizeLineEnding = useCallback((text: string, lineEnding: string | undefined): string => {
+    if (lineEnding === 'CRLF') return text.replace(/\n/g, '\r\n');
+    if (lineEnding === 'CR') return text.replace(/\n/g, '\r');
+    return text;
+  }, []);
+
   const handleSaveFile = useCallback(async () => {
     if (!activeTab) return;
 
     try {
       if (isTauri() && activeTab.filePath) {
-        const content = getEditorContent(activeTab.id);
+        const content = normalizeLineEnding(getEditorContent(activeTab.id), activeTab.lineEnding);
         await pauseWatch(activeTab.filePath);
         await invoke('write_file_with_encoding', {
           path: activeTab.filePath,
@@ -368,12 +380,12 @@ function App() {
         // @ts-expect-error showSaveFilePicker is not in standard DOM types yet
         const handle = await window.showSaveFilePicker(pickerOpts);
         const writable = await handle.createWritable();
-        await writable.write(getEditorContent(activeTab.id));
+        await writable.write(normalizeLineEnding(getEditorContent(activeTab.id), activeTab.lineEnding));
         await writable.close();
         markTabSaved(activeTab.id);
         renameTab(activeTab.id, handle.name);
       } else {
-        const blob = new Blob([getEditorContent(activeTab.id)], { type: 'text/plain' });
+        const blob = new Blob([normalizeLineEnding(getEditorContent(activeTab.id), activeTab.lineEnding)], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -605,11 +617,13 @@ function App() {
           const text = await file.text();
           const currentTabs = useEditorStore.getState().tabs;
           const existing = currentTabs.find((t) => t.title === fileName);
+          const lineEnding = detectLineEnding(text);
           if (existing) {
             setActiveTabId(existing.id);
+            setTabLineEnding(existing.id, lineEnding);
             updateEditorContent(existing.id, text);
           } else {
-            createTab(fileName, undefined, undefined, 1, 'UTF-8', text);
+            createTab(fileName, undefined, undefined, 1, 'UTF-8', text, lineEnding);
           }
         } catch (err) {
           console.error('Failed to read dropped file:', fileName, err);
@@ -858,6 +872,7 @@ function App() {
                       minimapVisible={minimapVisible}
                       unicodeHighlight={unicodeHighlight}
                       columnAlignEnabled={columnAlignSupported && (tab.columnAlignEnabled ?? false)}
+                      lineEnding={tab.lineEnding}
                     />
                   </div>
                 ))}
@@ -885,6 +900,7 @@ function App() {
                                 minimapVisible={minimapVisible}
                                 unicodeHighlight={unicodeHighlight}
                                 columnAlignEnabled={columnAlignSupported && (tab.columnAlignEnabled ?? false)}
+                                lineEnding={tab.lineEnding}
                               />
                             </div>
                           ))

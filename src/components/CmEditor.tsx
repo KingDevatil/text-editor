@@ -1,8 +1,9 @@
 import React, { useRef, useEffect } from 'react';
-import { EditorView, keymap } from '@codemirror/view';
+import { EditorView, keymap, highlightWhitespace, highlightTrailingWhitespace } from '@codemirror/view';
 import { EditorState, StateEffect } from '@codemirror/state';
+import { eolMarkers } from '../utils/showInvisibles';
 import { resolveThemeColors } from '../utils/themeResolver';
-import type { ThemeMode } from '../types';
+import type { ThemeMode, LineEnding } from '../types';
 import { perf } from '../utils/perf';
 import { setColumnAlign, createColumnDragLayer } from '../utils/columnAlign';
 import type { Language } from '../types';
@@ -42,6 +43,7 @@ interface CmEditorProps {
   minimapVisible?: boolean;
   unicodeHighlight?: boolean;
   columnAlignEnabled?: boolean;
+  lineEnding?: LineEnding;
 }
 
 const FORMATTABLE_LANGUAGES = new Set(['json', 'jsonl', 'xml', 'html', 'css', 'javascript', 'typescript', 'sql']);
@@ -60,6 +62,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
   minimapVisible = true,
   unicodeHighlight: enableUnicodeHighlight = false,
   columnAlignEnabled = false,
+  lineEnding,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -96,9 +99,16 @@ const CmEditor: React.FC<CmEditorProps> = ({
     let state = getEditorState(tabId);
     if (!state) {
       perf.mark(`editor-init-start-${tabId}`);
+      const lineSepExt = lineEnding === 'CRLF'
+        ? EditorState.lineSeparator.of('\r\n')
+        : lineEnding === 'CR'
+        ? EditorState.lineSeparator.of('\r')
+        : EditorState.lineSeparator.of('\n');
+
       state = EditorState.create({
         doc: initialContent,
         extensions: [
+          compartmentsRef.current!.lineSeparator.of(lineSepExt),
           ...buildBaseExtensions(compartmentsRef.current!, language, resolveThemeColors(theme, lightCustomColors, darkCustomColors, customColors), fontSize, readOnly, largeFileOptimize, wordWrap, showWhitespace, enableScrollPastEnd, tabId, enableUnicodeHighlight, theme !== 'light'),
           EditorView.updateListener.of((update) => {
             // Always save state to pool so that effects (language/theme changes)
@@ -144,6 +154,23 @@ const CmEditor: React.FC<CmEditorProps> = ({
     // Ensure wordWrap is applied even when reusing a pooled state with stale config
     view.dispatch({
       effects: compartmentsRef.current!.wordWrap.reconfigure(wordWrap ? EditorView.lineWrapping : []),
+    });
+
+    // Ensure whitespace visibility is applied even when reusing a pooled state
+    view.dispatch({
+      effects: compartmentsRef.current!.whitespace.reconfigure(
+        showWhitespace ? [highlightWhitespace(), highlightTrailingWhitespace(), eolMarkers] : []
+      ),
+    });
+
+    // Ensure lineSeparator is applied even when reusing a pooled state
+    const lineSepExt = lineEnding === 'CRLF'
+      ? EditorState.lineSeparator.of('\r\n')
+      : lineEnding === 'CR'
+      ? EditorState.lineSeparator.of('\r')
+      : EditorState.lineSeparator.of('\n');
+    view.dispatch({
+      effects: compartmentsRef.current!.lineSeparator.reconfigure(lineSepExt),
     });
 
     // Apply fontSize via CSS variable for instant visual feedback
@@ -296,6 +323,18 @@ const CmEditor: React.FC<CmEditorProps> = ({
     });
     setEditorState(tabId, view.state);
   }, [wordWrap, tabId]);
+
+  // Dynamic reconfiguration: show whitespace
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: compartmentsRef.current!.whitespace.reconfigure(
+        showWhitespace ? [highlightWhitespace(), highlightTrailingWhitespace(), eolMarkers] : []
+      ),
+    });
+    setEditorState(tabId, view.state);
+  }, [showWhitespace, tabId, highlightWhitespace, highlightTrailingWhitespace, eolMarkers]);
 
   // Dynamic reconfiguration: unicode highlight
   useEffect(() => {

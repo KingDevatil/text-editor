@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { EditorTab, Language, Encoding } from '../types';
+import type { EditorTab, Language, Encoding, LineEnding } from '../types';
 import { EXT_TO_LANGUAGE } from '../types';
 import { deleteEditorState } from './useEditorStatePool';
 
@@ -27,7 +27,7 @@ interface EditorState {
 }
 
 interface EditorActions {
-  createTab: (title?: string, language?: Language, filePath?: string, group?: 1 | 2, encoding?: Encoding, initialContent?: string) => EditorTab;
+  createTab: (title?: string, language?: Language, filePath?: string, group?: 1 | 2, encoding?: Encoding, initialContent?: string, lineEnding?: LineEnding) => EditorTab;
   markTabDirty: (tabId: string, isDirty: boolean) => void;
   closeTab: (tabId: string) => void;
   closeTabs: (idsToClose: string[]) => void;
@@ -37,6 +37,7 @@ interface EditorActions {
   setTabEncoding: (tabId: string, encoding: Encoding) => void;
   setTabLanguage: (tabId: string, language: Language) => void;
   setTabColumnAlign: (tabId: string, enabled: boolean) => void;
+  setTabLineEnding: (tabId: string, lineEnding: LineEnding) => void;
   moveTabToGroup: (tabId: string, group: 1 | 2) => void;
   reorderTab: (tabId: string, group: 1 | 2, targetGroupIndex: number) => void;
   setSplitMode: (mode: boolean) => void;
@@ -59,7 +60,7 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
   diffLeftTabId: null,
   diffRightTabId: null,
 
-  createTab: (title = 'Untitled', language, filePath, group = 1, encoding = 'UTF-8', initialContent = '') => {
+  createTab: (title = 'Untitled', language, filePath, group = 1, encoding = 'UTF-8', initialContent = '', lineEnding?: LineEnding) => {
     const lang = language || getLanguageFromFileName(title);
     const id = generateId();
     const newTab: EditorTab = {
@@ -71,6 +72,7 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
       encoding,
       group,
       initialContent,
+      lineEnding,
     };
     set((state) => {
       const nextTabs = [...state.tabs, newTab];
@@ -218,6 +220,12 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
   setTabColumnAlign: (tabId, enabled) => {
     set((state) => ({
       tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, columnAlignEnabled: enabled } : tab)),
+    }));
+  },
+
+  setTabLineEnding: (tabId, lineEnding) => {
+    set((state) => ({
+      tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, lineEnding } : tab)),
     }));
   },
 

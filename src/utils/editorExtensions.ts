@@ -5,6 +5,7 @@ import { selectNextOccurrence, selectSelectionMatches, highlightSelectionMatches
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { foldGutter, foldKeymap, indentOnInput, indentUnit } from '@codemirror/language';
 import { unicodeHighlight as unicodeHighlightExt } from './unicodeHighlight';
+import { eolMarkers } from './showInvisibles';
 import { loadLanguageExtensions, getLanguageExtensionsSync } from './languageExtensions';
 import { buildDynamicTheme, syntaxHighlightExtension } from './themes';
 import { getLinterExtension } from './lint';
@@ -32,6 +33,8 @@ export function createCompartments() {
     largeFile: new Compartment(),
     columnAlign: new Compartment(),
     tabBehavior: new Compartment(),
+    whitespace: new Compartment(),
+    lineSeparator: new Compartment(),
   };
 }
 
@@ -149,9 +152,11 @@ export function buildBaseExtensions(
     )
   );
 
-  if (showWhitespace) {
-    exts.push(highlightWhitespace(), highlightTrailingWhitespace());
-  }
+  exts.push(
+    compartments.whitespace.of(
+      showWhitespace ? [highlightWhitespace(), highlightTrailingWhitespace(), eolMarkers] : []
+    )
+  );
   if (enableScrollPastEnd) {
     exts.push(scrollPastEndExt());
   }

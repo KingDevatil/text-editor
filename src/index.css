@@ -137,6 +137,20 @@ input[type="range"]::-webkit-slider-thumb {
   outline: none !important;
 }
 
+/* Whitespace / EOL visibility: semi-transparent symbols */
+.cm-highlightSpace,
+.cm-highlightTab {
+  color: var(--te-text-tertiary);
+  opacity: 0.55;
+}
+
+.cm-eol-marker {
+  color: var(--te-text-tertiary);
+  opacity: 0.55;
+  pointer-events: none;
+  user-select: none;
+}
+
 /* Subtle divider between line numbers and editor content */
 .cm-gutters {
   box-shadow: inset -1px 0 0 color-mix(in srgb, var(--te-border) 50%, transparent) !important;
@@ -186,11 +200,11 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* Hide native scrollbar when minimap is visible */
 .hide-scrollbar .cm-scroller {
-  scrollbar-width: none; /* Firefox */
+  scrollbar-width: none; /* Firefox: hides all scrollbars (limitation) */
   -ms-overflow-style: none; /* IE/Edge */
 }
 .hide-scrollbar .cm-scroller::-webkit-scrollbar {
-  display: none; /* Chrome/Safari/Edge */
+  width: 0px; /* Chrome/Safari/Edge: hide vertical scrollbar only */
 }
 
 /* Tab dropdown animation */

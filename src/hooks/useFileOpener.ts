@@ -5,6 +5,7 @@ import { EXT_TO_LANGUAGE } from '../types';
 import { useEditorStore } from './useEditorStore';
 import { useSettingsStore } from './useSettingsStore';
 import { updateEditorContent } from './useEditorStatePool';
+import { detectLineEnding } from '../utils/lineEnding';
 import { perf } from '../utils/perf';
 
 const LARGE_FILE_THRESHOLD = 500 * 1024; // 500KB
@@ -44,6 +45,7 @@ export function useFileOpener() {
   const setActiveTabId = useEditorStore((s) => s.setActiveTabId);
   const setTabEncoding = useEditorStore((s) => s.setTabEncoding);
   const setTabLanguage = useEditorStore((s) => s.setTabLanguage);
+  const setTabLineEnding = useEditorStore((s) => s.setTabLineEnding);
 
   const openFile = useCallback(
     async (filePath: string, options?: { text?: string; encoding?: string; fromDrop?: boolean }) => {
@@ -58,15 +60,17 @@ export function useFileOpener() {
           const detectedEncoding = options.encoding || 'UTF-8';
           const fileName = filePath.split(/[\\/]/).pop() || filePath;
           const existing = useEditorStore.getState().tabs.find((t) => t.filePath === filePath);
+          const lineEnding = detectLineEnding(text);
 
           if (existing) {
             setActiveTabId(existing.id);
             setTabEncoding(existing.id, detectedEncoding as Encoding);
+            setTabLineEnding(existing.id, lineEnding);
             updateEditorContent(existing.id, text);
           } else {
             const isLarge = text.length > LARGE_FILE_THRESHOLD;
             const lang = isLarge ? 'plaintext' : getLanguageFromFileName(fileName);
-            createTab(fileName, lang, filePath, 1, detectedEncoding as Encoding, text);
+            createTab(fileName, lang, filePath, 1, detectedEncoding as Encoding, text, lineEnding);
           }
           perf.recordFileOpen(text.length, performance.now() - openStart);
           return;
@@ -80,6 +84,7 @@ export function useFileOpener() {
           const result = await readFileAuto(filePath);
           setActiveTabId(existing.id);
           setTabEncoding(existing.id, result.encoding as Encoding);
+          setTabLineEnding(existing.id, detectLineEnding(result.text));
           updateEditorContent(existing.id, result.text);
           return;
         }
@@ -95,7 +100,8 @@ export function useFileOpener() {
             filePath,
             1,
             meta.encoding as Encoding,
-            meta.first_chunk
+            meta.first_chunk,
+            detectLineEnding(meta.first_chunk)
           );
           perf.recordFileOpen(meta.file_size, performance.now() - openStart);
 
@@ -105,6 +111,7 @@ export function useFileOpener() {
                 const isStillActive = useEditorStore.getState().activeTabId === tab.id;
                 if (!isStillActive) return;
                 updateEditorContent(tab.id, result.text);
+                setTabLineEnding(tab.id, detectLineEnding(result.text));
                 setTabLanguage(tab.id, getLanguageFromFileName(fileName));
               })
               .catch((err) => {
@@ -115,8 +122,9 @@ export function useFileOpener() {
           const result = await readFileAuto(filePath);
           const isLarge = result.text.length > LARGE_FILE_THRESHOLD;
           const lang = isLarge ? 'plaintext' : getLanguageFromFileName(fileName);
+          const lineEnding = detectLineEnding(result.text);
 
-          createTab(fileName, lang, filePath, 1, result.encoding as Encoding, result.text);
+          createTab(fileName, lang, filePath, 1, result.encoding as Encoding, result.text, lineEnding);
           perf.recordFileOpen(result.text.length, performance.now() - openStart);
 
           if (isLarge) {
@@ -133,7 +141,7 @@ export function useFileOpener() {
         console.error('Failed to open file:', filePath, err);
       }
     },
-    [createTab, setActiveTabId, setTabEncoding, setTabLanguage]
+    [createTab, setActiveTabId, setTabEncoding, setTabLanguage, setTabLineEnding]
   );
 
   return openFile;
