@@ -188,7 +188,8 @@ export async function loadLanguageExtensions(lang: Language): Promise<Extension[
       exts = [css()];
       break;
     }
-    case 'json': {
+    case 'json':
+    case 'jsonl': {
       const { json } = await import('@codemirror/lang-json');
       exts = [json()];
       break;

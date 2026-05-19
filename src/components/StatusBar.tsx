@@ -40,6 +40,7 @@ const ENCODINGS: Encoding[] = [
 const LANGUAGES: { id: Language; label: string }[] = [
   { id: 'plaintext', label: 'Plain Text' },
   { id: 'json', label: 'JSON' },
+  { id: 'jsonl', label: 'JSON Lines' },
   { id: 'javascript', label: 'JavaScript' },
   { id: 'typescript', label: 'TypeScript' },
   { id: 'html', label: 'HTML' },

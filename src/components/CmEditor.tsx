@@ -44,7 +44,7 @@ interface CmEditorProps {
   columnAlignEnabled?: boolean;
 }
 
-const FORMATTABLE_LANGUAGES = new Set(['json', 'xml', 'html', 'css', 'javascript', 'typescript', 'sql']);
+const FORMATTABLE_LANGUAGES = new Set(['json', 'jsonl', 'xml', 'html', 'css', 'javascript', 'typescript', 'sql']);
 
 const CmEditor: React.FC<CmEditorProps> = ({
   tabId,

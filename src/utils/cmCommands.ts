@@ -162,6 +162,34 @@ function tryFormat(view: EditorView, format: string, from: number, to: number): 
         return false;
       }
     }
+    case 'jsonl': {
+      const lines = text.split('\n');
+      const formattedLines: string[] = [];
+      let hasError = false;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          formattedLines.push('');
+          continue;
+        }
+        try {
+          const parsed = JSON.parse(trimmed);
+          formattedLines.push(JSON.stringify(parsed, null, 2));
+        } catch {
+          hasError = true;
+          break;
+        }
+      }
+      if (!hasError) {
+        const formatted = formattedLines.join('\n');
+        view.dispatch({
+          changes: { from, to, insert: formatted },
+          selection: EditorSelection.cursor(from + formatted.length),
+        });
+        return true;
+      }
+      return false;
+    }
     case 'xml':
     case 'html': {
       const formatted = formatXMLText(text);

@@ -91,6 +91,53 @@ function jsonLinter(view: EditorView): Diagnostic[] {
 }
 
 /**
+ * JSON Lines linter — validates each line as an independent JSON object.
+ */
+function jsonlLinter(view: EditorView): Diagnostic[] {
+  if (view.state.doc.length > LINT_MAX_SIZE) return [];
+  const text = view.state.doc.toString();
+  if (!text.trim()) return [];
+
+  const diagnostics: Diagnostic[] = [];
+  const lines = text.split('\n');
+  let offset = 0;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      offset += line.length + 1; // +1 for \n
+      continue;
+    }
+
+    try {
+      JSON.parse(trimmed);
+    } catch (e) {
+      const match = (e as Error).message.match(/position (\d+)/i);
+      let pos = 0;
+      if (match) {
+        pos = parseInt(match[1], 10);
+      }
+      // Map position inside trimmed string back to document position
+      const leading = line.length - line.trimStart().length;
+      const errorPos = offset + leading + pos;
+      const docLine = view.state.doc.lineAt(
+        Math.min(errorPos, view.state.doc.length)
+      );
+      diagnostics.push({
+        from: docLine.from,
+        to: docLine.to,
+        severity: 'error',
+        message: translateDiagnosticMessage((e as Error).message),
+      });
+    }
+
+    offset += line.length + 1; // +1 for \n
+  }
+
+  return diagnostics;
+}
+
+/**
  * Strip JS single-line and multi-line comments while preserving strings.
  * Handles single/double quotes and template literals (backticks).
  */
@@ -433,6 +480,7 @@ function cssLinter(view: EditorView): Diagnostic[] {
 
 // Register built-in diagnostic engines
 registerDiagnosticEngine({ name: 'json', supportedLanguages: ['json'], run: jsonLinter });
+registerDiagnosticEngine({ name: 'jsonl', supportedLanguages: ['jsonl'], run: jsonlLinter });
 registerDiagnosticEngine({ name: 'js-ts', supportedLanguages: ['javascript', 'typescript'], run: jsLinter });
 registerDiagnosticEngine({ name: 'xml-html', supportedLanguages: ['xml', 'html'], run: xmlLinter });
 registerDiagnosticEngine({ name: 'css', supportedLanguages: ['css'], run: cssLinter });

@@ -37,6 +37,7 @@ export type Language =
   | 'html'
   | 'css'
   | 'json'
+  | 'jsonl'
   | 'python'
   | 'java'
   | 'cpp'
@@ -104,6 +105,7 @@ export const EXT_TO_LANGUAGE: Record<string, Language> = {
   json: 'json',
   jsonc: 'json',
   json5: 'json',
+  jsonl: 'jsonl',
   py: 'python',
   pyw: 'python',
   java: 'java',
