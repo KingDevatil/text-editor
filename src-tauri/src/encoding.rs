@@ -108,13 +108,13 @@ pub fn smart_detect_encoding(bytes: &[u8]) -> (String, String) {
     // 1. Check UTF-16 LE BOM first
     if bytes.starts_with(&[0xFF, 0xFE]) {
         let (cow, _, _) = encoding_rs::UTF_16LE.decode(&bytes[2..]);
-        return (cow.into_owned(), "UTF-16".to_string());
+        return (cow.into_owned(), "UTF-16LE".to_string());
     }
 
     // 2. Check UTF-16 BE BOM
     if bytes.starts_with(&[0xFE, 0xFF]) {
         let (cow, _, _) = encoding_rs::UTF_16BE.decode(&bytes[2..]);
-        return (cow.into_owned(), "UTF-16".to_string());
+        return (cow.into_owned(), "UTF-16BE".to_string());
     }
 
     // 3. Check UTF-8 BOM

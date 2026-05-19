@@ -131,14 +131,14 @@ fn read_file_with_encoding(path: String, encoding: String) -> Result<String, Str
     let bytes = read_file_bytes_inner(&path)?;
 
     // Handle UTF-16 LE BOM
-    if encoding.to_lowercase().starts_with("utf-16") && bytes.starts_with(&[0xFF, 0xFE]) {
-        let encoding_obj = get_encoding("utf-16")?;
+    if encoding.to_lowercase().starts_with("utf-16le") && bytes.starts_with(&[0xFF, 0xFE]) {
+        let encoding_obj = get_encoding("utf-16le")?;
         let (cow, _, _) = encoding_obj.decode(&bytes[2..]);
         return Ok(cow.into_owned());
     }
 
     // Handle UTF-16 BE BOM
-    if encoding.to_lowercase().starts_with("utf-16") && bytes.starts_with(&[0xFE, 0xFF]) {
+    if encoding.to_lowercase().starts_with("utf-16be") && bytes.starts_with(&[0xFE, 0xFF]) {
         let encoding_obj = get_encoding("utf-16be")?;
         let (cow, _, _) = encoding_obj.decode(&bytes[2..]);
         return Ok(cow.into_owned());
@@ -168,7 +168,7 @@ fn read_file_auto_detect(path: String) -> Result<ReadFileResult, String> {
         let (cow, _, _) = encoding_rs::UTF_16LE.decode(&bytes[2..]);
         return Ok(ReadFileResult {
             text: cow.into_owned(),
-            encoding: "UTF-16".to_string(),
+            encoding: "UTF-16LE".to_string(),
         });
     }
 
@@ -177,7 +177,7 @@ fn read_file_auto_detect(path: String) -> Result<ReadFileResult, String> {
         let (cow, _, _) = encoding_rs::UTF_16BE.decode(&bytes[2..]);
         return Ok(ReadFileResult {
             text: cow.into_owned(),
-            encoding: "UTF-16".to_string(),
+            encoding: "UTF-16BE".to_string(),
         });
     }
 
@@ -213,10 +213,10 @@ fn read_file_meta(path: String) -> Result<FileMeta, String> {
 
     let (text, encoding) = if bytes.starts_with(&[0xFF, 0xFE]) {
         let (cow, _, _) = encoding_rs::UTF_16LE.decode(&bytes[2..]);
-        (cow.into_owned(), "UTF-16".to_string())
+        (cow.into_owned(), "UTF-16LE".to_string())
     } else if bytes.starts_with(&[0xFE, 0xFF]) {
         let (cow, _, _) = encoding_rs::UTF_16BE.decode(&bytes[2..]);
-        (cow.into_owned(), "UTF-16".to_string())
+        (cow.into_owned(), "UTF-16BE".to_string())
     } else if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
         let (cow, _, _) = UTF_8.decode(&bytes[3..]);
         (cow.into_owned(), "UTF-8 BOM".to_string())
@@ -277,9 +277,15 @@ fn write_file_with_encoding(path: String, content: String, encoding: String) -> 
     let encoding_obj = get_encoding(&encoding)?;
     let mut bytes: Vec<u8> = Vec::new();
 
-    // Handle UTF-8 BOM
-    if encoding.to_lowercase().starts_with("utf-8 bom") {
+    let encoding_lower = encoding.to_lowercase();
+
+    // Handle BOM for supported encodings
+    if encoding_lower.starts_with("utf-8 bom") {
         bytes.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
+    } else if encoding_lower.starts_with("utf-16le") {
+        bytes.extend_from_slice(&[0xFF, 0xFE]);
+    } else if encoding_lower.starts_with("utf-16be") {
+        bytes.extend_from_slice(&[0xFE, 0xFF]);
     }
 
     let (encoded, _, _) = encoding_obj.encode(&content);

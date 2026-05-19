@@ -14,7 +14,8 @@ export interface EditorTab {
 export type Encoding =
   | 'UTF-8'
   | 'UTF-8 BOM'
-  | 'UTF-16'
+  | 'UTF-16LE'
+  | 'UTF-16BE'
   | 'ANSI'
   | 'GBK'
   | 'GB2312'
