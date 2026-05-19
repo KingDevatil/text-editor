@@ -274,22 +274,29 @@ fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
 
 #[tauri::command]
 fn write_file_with_encoding(path: String, content: String, encoding: String) -> Result<(), String> {
-    let encoding_obj = get_encoding(&encoding)?;
-    let mut bytes: Vec<u8> = Vec::new();
-
     let encoding_lower = encoding.to_lowercase();
+    let mut bytes: Vec<u8> = Vec::new();
 
     // Handle BOM for supported encodings
     if encoding_lower.starts_with("utf-8 bom") {
         bytes.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
     } else if encoding_lower.starts_with("utf-16le") {
         bytes.extend_from_slice(&[0xFF, 0xFE]);
+        // encoding_rs does not provide a UTF-16LE encoder (Web Standard omission).
+        // Manually encode Rust String (UTF-8) to UTF-16LE bytes.
+        for unit in content.encode_utf16() {
+            bytes.extend_from_slice(&unit.to_le_bytes());
+        }
     } else if encoding_lower.starts_with("utf-16be") {
         bytes.extend_from_slice(&[0xFE, 0xFF]);
+        for unit in content.encode_utf16() {
+            bytes.extend_from_slice(&unit.to_be_bytes());
+        }
+    } else {
+        let encoding_obj = get_encoding(&encoding)?;
+        let (encoded, _, _) = encoding_obj.encode(&content);
+        bytes.extend_from_slice(&encoded);
     }
-
-    let (encoded, _, _) = encoding_obj.encode(&content);
-    bytes.extend_from_slice(&encoded);
 
     // Atomic write: write to temp file, then rename to avoid partial writes
     let path_obj = std::path::Path::new(&path);
