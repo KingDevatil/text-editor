@@ -1,5 +1,5 @@
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightActiveLine, highlightWhitespace, highlightTrailingWhitespace, scrollPastEnd as scrollPastEndExt, rectangularSelection, crosshairCursor, drawSelection, highlightSpecialChars, dropCursor } from '@codemirror/view';
-import { EditorState, Compartment, EditorSelection, type Extension } from '@codemirror/state';
+import { EditorState, Compartment, EditorSelection, Prec, type Extension } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentMore, indentLess } from '@codemirror/commands';
 import { selectNextOccurrence, selectSelectionMatches, highlightSelectionMatches } from '@codemirror/search';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
@@ -36,6 +36,32 @@ export function createCompartments() {
 }
 
 export type EditorCompartments = ReturnType<typeof createCompartments>;
+
+/** Insert a literal tab at the cursor when not in leading whitespace;
+ *  otherwise fall back to indenting the line (indentMore). */
+function smartTab(view: EditorView): boolean {
+  const { state } = view;
+  const range = state.selection.main;
+  // Non-empty selection: indent the whole line(s)
+  if (range.from !== range.to) {
+    return indentMore(view);
+  }
+  const pos = range.head;
+  const line = state.doc.lineAt(pos);
+  const rel = pos - line.from;
+  const linePrefix = line.text.slice(0, rel);
+  // Cursor is inside leading whitespace: increase indent
+  if (/^\s*$/.test(linePrefix)) {
+    return indentMore(view);
+  }
+  // Otherwise insert a literal tab at cursor
+  const changes = state.changeByRange((r) => ({
+    changes: { from: r.from, to: r.to, insert: '\t' },
+    range: EditorSelection.cursor(r.from + 1),
+  }));
+  view.dispatch(state.update(changes, { userEvent: 'input' }));
+  return true;
+}
 
 /** Notepad++ style: Ctrl + click adds a cursor (multi-selection). */
 const ctrlClickMultiCursor = EditorView.domEventHandlers({
@@ -86,13 +112,15 @@ export function buildBaseExtensions(
       { key: 'Shift-Mod-l', run: selectSelectionMatches, preventDefault: true },
     ]),
     compartments.tabBehavior.of(
-      keymap.of([
-        {
-          key: 'Tab',
-          run: (view) => columnAlignTabCommand(view) || indentMore(view),
-          shift: (view) => columnAlignShiftTabCommand(view) || indentLess(view),
-        },
-      ])
+      Prec.highest(
+        keymap.of([
+          {
+            key: 'Tab',
+            run: (view) => columnAlignTabCommand(view) || smartTab(view),
+            shift: (view) => columnAlignShiftTabCommand(view) || indentLess(view),
+          },
+        ])
+      )
     ),
     markedLinesField,
     pairGutter,
