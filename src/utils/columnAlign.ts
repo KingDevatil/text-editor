@@ -3,6 +3,8 @@ import {
   Decoration,
   type DecorationSet,
   WidgetType,
+  ViewPlugin,
+  type ViewUpdate,
 } from '@codemirror/view';
 import { EditorState, StateField, StateEffect, RangeSetBuilder, EditorSelection } from '@codemirror/state';
 
@@ -10,6 +12,14 @@ const DEFAULT_COL_WIDTH = 120;
 const MIN_COL_WIDTH = 40;
 const COL_PADDING = 16;
 const TAB_REGEX = /\t/g;
+
+function estimateTextWidth(text: string): number {
+  let width = 0;
+  for (const ch of text) {
+    width += ch.charCodeAt(0) > 127 ? 14 : 7;
+  }
+  return width;
+}
 
 export interface ColumnAlignConfig {
   enabled: boolean;
@@ -75,7 +85,7 @@ function cellMarkStyle(width: number, isLast = false): string {
     // Last column: no fixed width so text flows naturally instead of being clipped
     return base;
   }
-  return `${base}width:${width}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
+  return `${base}max-width:${width}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
 }
 
 function buildDecorations(state: EditorState): DecorationSet {
@@ -108,6 +118,12 @@ function buildDecorations(state: EditorState): DecorationSet {
         const targetWidth = getColumnWidth(config, colIdx);
 
         if (start < i) {
+          const textSlice = text.slice(start, i);
+          const estimatedWidth = estimateTextWidth(textSlice);
+          const initialSpacerWidth = Math.max(
+            COL_PADDING,
+            targetWidth - estimatedWidth + COL_PADDING
+          );
           builder.add(
             line.from + start,
             tabPos,
@@ -116,6 +132,16 @@ function buildDecorations(state: EditorState): DecorationSet {
               attributes: {
                 style: cellMarkStyle(targetWidth),
               },
+            })
+          );
+          builder.add(
+            tabPos,
+            tabPos + 1,
+            Decoration.replace({
+              widget: new InlineBlockWidget(
+                initialSpacerWidth,
+                'cm-column-spacer cm-column-spacer-dynamic'
+              ),
             })
           );
         } else {
@@ -128,15 +154,14 @@ function buildDecorations(state: EditorState): DecorationSet {
               side: -1,
             })
           );
+          builder.add(
+            tabPos,
+            tabPos + 1,
+            Decoration.replace({
+              widget: new InlineBlockWidget(COL_PADDING, 'cm-column-spacer'),
+            })
+          );
         }
-
-        builder.add(
-          tabPos,
-          tabPos + 1,
-          Decoration.replace({
-            widget: new InlineBlockWidget(COL_PADDING, 'cm-column-spacer'),
-          })
-        );
 
         start = i + 1;
         colIdx++;
@@ -191,9 +216,93 @@ export const columnAlignDecorations = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
+const columnAlignDynamicPlugin = ViewPlugin.fromClass(
+  class {
+    private rafId: number | null = null;
+
+    constructor(view: EditorView) {
+      this.scheduleAdjust(view);
+    }
+
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.viewportChanged) {
+        this.scheduleAdjust(update.view);
+      }
+    }
+
+    scheduleAdjust(view: EditorView) {
+      if (this.rafId !== null) return;
+      this.rafId = requestAnimationFrame(() => {
+        this.rafId = null;
+        this.adjustSpacers(view);
+      });
+    }
+
+    adjustSpacers(view: EditorView) {
+      const config = view.state.field(columnAlignField);
+      if (!config.enabled) return;
+
+      const { from, to } = view.viewport;
+      for (let pos = from; pos < to; ) {
+        const line = view.state.doc.lineAt(pos);
+        const text = line.text;
+        if (!text.includes('\t')) {
+          pos = line.to + 1;
+          continue;
+        }
+
+        let start = 0;
+        let colIdx = 0;
+
+        for (let i = 0; i < text.length; i++) {
+          if (text[i] === '\t') {
+            const tabPos = line.from + i;
+            const targetWidth = getColumnWidth(config, colIdx);
+
+            if (start < i) {
+              const startCoords = view.coordsAtPos(line.from + start);
+              const tabCoords = view.coordsAtPos(tabPos);
+              if (startCoords && tabCoords) {
+                const textWidth = tabCoords.left - startCoords.left;
+                const newWidth = Math.max(
+                  COL_PADDING,
+                  targetWidth - textWidth + COL_PADDING
+                );
+
+                const domInfo = view.domAtPos(tabPos);
+                let el: HTMLElement | null = domInfo.node as HTMLElement;
+                while (el && !el.classList.contains('cm-column-spacer-dynamic')) {
+                  el = el.parentElement;
+                }
+                if (el) {
+                  const currentWidth = parseFloat(el.style.width) || 0;
+                  if (Math.abs(currentWidth - newWidth) > 0.5) {
+                    el.style.width = `${newWidth}px`;
+                  }
+                }
+              }
+            }
+
+            start = i + 1;
+            colIdx++;
+          }
+        }
+
+        pos = line.to + 1;
+      }
+    }
+
+    destroy() {
+      if (this.rafId !== null) {
+        cancelAnimationFrame(this.rafId);
+      }
+    }
+  }
+);
+
 const COLUMN_ALIGN_THEME = EditorView.theme({
   '.cm-column-spacer': {
-    verticalAlign: 'bottom',
+    verticalAlign: 'top',
     background: 'color-mix(in srgb, var(--te-border) 15%, transparent)',
     borderRadius: '2px',
   },
@@ -206,6 +315,7 @@ export const columnAlignExtension = [
   COLUMN_ALIGN_THEME,
   columnAlignField,
   columnAlignDecorations,
+  columnAlignDynamicPlugin,
 ];
 
 /**

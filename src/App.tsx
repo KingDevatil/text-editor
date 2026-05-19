@@ -383,7 +383,19 @@ function App() {
         markTabSaved(activeTab.id);
       }
     } catch (err) {
-      console.log('Save cancelled or failed', err);
+      // Ignore user cancellation (file picker abort)
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      const msg = typeof err === 'string' ? err : (err instanceof Error ? err.message : String(err));
+      console.error('Save failed:', err);
+
+      // Resume file watch if it was paused for a Tauri save attempt
+      if (isTauri() && activeTab?.filePath) {
+        await resumeWatch(activeTab.filePath).catch(() => {});
+      }
+
+      await message(msg, { title: '保存失败', kind: 'error' });
     }
   }, [activeTab, markTabSaved, renameTab, pauseWatch, resumeWatch]);
   useEffect(() => {

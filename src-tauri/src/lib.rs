@@ -294,8 +294,32 @@ fn write_file_with_encoding(path: String, content: String, encoding: String) -> 
     let temp_name = format!("~{}.tmp", file_name.to_string_lossy());
     temp_path.push(&temp_name);
 
-    fs::write(&temp_path, bytes).map_err(|e| e.to_string())?;
-    fs::rename(&temp_path, &path).map_err(|e| format!("Failed to rename temp file: {}", e))
+    fs::write(&temp_path, bytes).map_err(|e| format!("写入临时文件失败: {}", e))?;
+
+    if let Err(e) = fs::rename(&temp_path, &path) {
+        let _ = fs::remove_file(&temp_path);
+        let msg = match e.kind() {
+            std::io::ErrorKind::PermissionDenied => {
+                #[cfg(target_os = "windows")]
+                {
+                    if e.raw_os_error() == Some(32) {
+                        format!("文件 \"{}\" 正被其他程序占用，无法保存。请关闭占用该文件的程序后重试。", path)
+                    } else {
+                        format!("保存失败：权限不足，无法写入文件 \"{}\"", path)
+                    }
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    format!("保存失败：权限不足，无法写入文件 \"{}\"", path)
+                }
+            }
+            std::io::ErrorKind::NotFound => format!("保存失败：文件 \"{}\" 不存在", path),
+            _ => format!("保存失败：{}", e),
+        };
+        return Err(msg);
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
