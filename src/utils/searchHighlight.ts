@@ -24,12 +24,19 @@ const searchHighlightField = StateField.define<SearchQuery | null>({
   },
 });
 
-function getMatches(doc: any, query: SearchQuery): { from: number; to: number }[] {
+const MAX_HIGHLIGHT_CHARS = 200_000;
+
+function getMatches(
+  doc: any,
+  query: SearchQuery,
+  from: number,
+  to: number
+): { from: number; to: number }[] {
   if (!query.query) return [];
   const matches: { from: number; to: number }[] = [];
   try {
     if (query.regexMode) {
-      const cursor = new RegExpCursor(doc, query.query, { ignoreCase: !query.caseSensitive }, 0, doc.length);
+      const cursor = new RegExpCursor(doc, query.query, { ignoreCase: !query.caseSensitive }, from, to);
       if (!cursor) return matches;
       let result;
       while (!(result = cursor.next()).done) {
@@ -37,7 +44,7 @@ function getMatches(doc: any, query: SearchQuery): { from: number; to: number }[
       }
     } else {
       const normalize = query.caseSensitive ? undefined : (s: string) => s.toLowerCase();
-      const cursor = new SearchCursor(doc, query.query, 0, doc.length, normalize);
+      const cursor = new SearchCursor(doc, query.query, from, to, normalize);
       let result;
       while (!(result = cursor.next()).done) {
         matches.push({ from: result.value.from, to: result.value.to });
@@ -52,33 +59,56 @@ function getMatches(doc: any, query: SearchQuery): { from: number; to: number }[
 const searchHighlightPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet = Decoration.none;
+    cachedMatches: { from: number; to: number }[] = [];
+    cachedQuery: SearchQuery | null = null;
 
     constructor(view: EditorView) {
-      this.decorations = this.build(view);
+      this.rebuild(view);
     }
 
     update(update: ViewUpdate) {
       const query = update.state.field(searchHighlightField);
       const prevQuery = update.startState.field(searchHighlightField);
-      if (
-        query !== prevQuery ||
-        update.docChanged ||
-        update.viewportChanged ||
-        update.selectionSet
-      ) {
-        this.decorations = this.build(update.view);
+
+      const queryChanged =
+        query?.query !== prevQuery?.query ||
+        query?.caseSensitive !== prevQuery?.caseSensitive ||
+        query?.regexMode !== prevQuery?.regexMode;
+
+      if (queryChanged || update.docChanged) {
+        this.rebuild(update.view);
+      } else if (update.selectionSet) {
+        this.updateSelection(update.view);
       }
     }
 
-    build(view: EditorView): DecorationSet {
+    /** Re-scan matches when query or document changes. */
+    rebuild(view: EditorView) {
       const query = view.state.field(searchHighlightField);
-      if (!query || !query.query) return Decoration.none;
+      this.cachedQuery = query;
 
-      const builder = new RangeSetBuilder<Decoration>();
-      const matches = getMatches(view.state.doc, query);
+      if (!query || !query.query) {
+        this.cachedMatches = [];
+        this.decorations = Decoration.none;
+        return;
+      }
+
+      const scanTo = Math.min(view.state.doc.length, MAX_HIGHLIGHT_CHARS);
+      this.cachedMatches = getMatches(view.state.doc, query, 0, scanTo);
+      this.updateSelection(view);
+    }
+
+    /** Re-build decorations from cached matches when only selection changes. */
+    updateSelection(view: EditorView) {
+      if (!this.cachedMatches.length) {
+        this.decorations = Decoration.none;
+        return;
+      }
+
       const selection = view.state.selection.main;
+      const builder = new RangeSetBuilder<Decoration>();
 
-      for (const match of matches) {
+      for (const match of this.cachedMatches) {
         const isActive = match.from <= selection.head && match.to >= selection.head;
         const deco = Decoration.mark({
           class: isActive
@@ -88,7 +118,7 @@ const searchHighlightPlugin = ViewPlugin.fromClass(
         builder.add(match.from, match.to, deco);
       }
 
-      return builder.finish();
+      this.decorations = builder.finish();
     }
   },
   { decorations: (v) => v.decorations }
