@@ -65,6 +65,16 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
           findInputRef.current?.select();
         }, 10);
       }
+    } else {
+      // Clear search highlights and reset state when closing the panel
+      const view = activeTabId ? getActiveView(activeTabId) : undefined;
+      if (view) {
+        view.dispatch({ effects: setSearchQuery.of(null) });
+      }
+      setFindText('');
+      setReplaceText('');
+      setMatchCount(0);
+      setCurrentMatch(0);
     }
   }, [visible, activeTabId]);
 
