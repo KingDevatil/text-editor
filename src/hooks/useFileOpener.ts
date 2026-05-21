@@ -47,6 +47,7 @@ export function useFileOpener() {
   const setTabEncoding = useEditorStore((s) => s.setTabEncoding);
   const setTabLanguage = useEditorStore((s) => s.setTabLanguage);
   const setTabLineEnding = useEditorStore((s) => s.setTabLineEnding);
+  const markTabSaved = useEditorStore((s) => s.markTabSaved);
 
   const openFile = useCallback(
     async (filePath: string, options?: { text?: string; encoding?: string; fromDrop?: boolean }) => {
@@ -116,6 +117,8 @@ export function useFileOpener() {
                 setTabLineEnding(tab.id, detectLineEnding(result.text));
                 setTabLanguage(tab.id, getLanguageFromFileName(fileName));
                 addToMru(filePath, fileName);
+                // Content was reloaded from disk, not edited by user
+                markTabSaved(tab.id);
               })
               .catch((err) => {
                 console.error('Failed to load full content for:', filePath, err);
@@ -145,7 +148,7 @@ export function useFileOpener() {
         console.error('Failed to open file:', filePath, err);
       }
     },
-    [createTab, setActiveTabId, setTabEncoding, setTabLanguage, setTabLineEnding]
+    [createTab, setActiveTabId, setTabEncoding, setTabLanguage, setTabLineEnding, markTabSaved]
   );
 
   return openFile;
