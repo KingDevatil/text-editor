@@ -1,11 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ChevronDown, ChevronUp, X, Replace, ReplaceAll, ChevronRight, ChevronLeft, Wand2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, X, Replace, ReplaceAll, ChevronRight, ChevronLeft, Wand2, Search, FolderOpen } from 'lucide-react';
 import { SearchCursor, RegExpCursor } from '@codemirror/search';
 import type { Text } from '@codemirror/state';
+import { open } from '@tauri-apps/plugin-dialog';
+import { isTauri } from '@tauri-apps/api/core';
 import { useEditorStore } from '../hooks/useEditorStore';
 import { getActiveView } from '../hooks/useEditorStatePool';
 import RegexBuilderModal from './RegexBuilderModal';
 import { setSearchQuery } from '../utils/searchHighlight';
+import type { SearchOptions } from '../services/searchService';
 
 /** Maximum characters to scan for match counting (prevents UI freeze on large files). */
 const MAX_SCAN_CHARS = 200_000;
@@ -32,9 +35,13 @@ function createSearchCursor(doc: Text, query: string, from: number, to: number, 
 interface FindReplaceProps {
   visible: boolean;
   onClose: () => void;
+  projectPath?: string;
+  activeTabFilePath?: string;
+  onSearchInFolder?: (query: string, options: SearchOptions, directory: string) => void;
+  folderModeRef?: React.RefObject<{ setFolderMode: (v: boolean) => void } | null>;
 }
 
-const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
+const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath, activeTabFilePath, onSearchInFolder, folderModeRef }) => {
   const [findText, setFindText] = useState('');
   const [replaceText, setReplaceText] = useState('');
   const [showReplace, setShowReplace] = useState(true);
@@ -43,14 +50,46 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
   const [regexBuilderOpen, setRegexBuilderOpen] = useState(false);
   const [matchCount, setMatchCount] = useState(0);
   const [currentMatch, setCurrentMatch] = useState(0);
+  const [folderMode, setFolderMode] = useState(false);
+  const [searchDir, setSearchDir] = useState('');
+  const [searching, setSearching] = useState(false);
   const findInputRef = useRef<HTMLInputElement>(null);
+  const dirInputRef = useRef<HTMLInputElement>(null);
+
+  // Expose setFolderMode to parent via ref
+  useEffect(() => {
+    if (folderModeRef && 'current' in folderModeRef) {
+      (folderModeRef as React.MutableRefObject<{ setFolderMode: (v: boolean) => void } | null>).current = {
+        setFolderMode: (v: boolean) => setFolderMode(v),
+      };
+    }
+  }, [folderModeRef]);
 
   const activeTabId = useEditorStore((s) => s.activeTabId);
+
+  // Set default search directory when folder mode is enabled
+  useEffect(() => {
+    if (folderMode && !searchDir) {
+      let defaultDir = '';
+      if (activeTabFilePath) {
+        const lastSep = activeTabFilePath.lastIndexOf('\\');
+        const lastSepPosix = activeTabFilePath.lastIndexOf('/');
+        const sepIdx = Math.max(lastSep, lastSepPosix);
+        if (sepIdx > 0) {
+          defaultDir = activeTabFilePath.slice(0, sepIdx);
+        }
+      }
+      if (!defaultDir && projectPath) {
+        defaultDir = projectPath;
+      }
+      setSearchDir(defaultDir);
+    }
+  }, [folderMode, activeTabFilePath, projectPath, searchDir]);
 
   useEffect(() => {
     if (visible) {
       const view = activeTabId ? getActiveView(activeTabId) : undefined;
-      if (view) {
+      if (view && !folderMode) {
         const sel = view.state.selection.main;
         if (sel.from !== sel.to) {
           const text = view.state.doc.sliceString(sel.from, sel.to);
@@ -76,9 +115,11 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
         setReplaceText('');
         setMatchCount(0);
         setCurrentMatch(0);
+        setFolderMode(false);
+        setSearchDir('');
       });
     }
-  }, [visible, activeTabId]);
+  }, [visible, activeTabId, folderMode]);
 
   // Sync search highlight + debounced match counting
   useEffect(() => {
@@ -264,20 +305,56 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
     setCurrentMatch(0);
   }, [getView, findText, replaceText, caseSensitive, regexMode]);
 
+  const handleFolderSearch = useCallback(async () => {
+    if (!findText || !searchDir || !onSearchInFolder) return;
+    setSearching(true);
+    try {
+      await onSearchInFolder(findText, { query: findText, caseSensitive, regexMode }, searchDir);
+    } finally {
+      setSearching(false);
+    }
+  }, [findText, searchDir, caseSensitive, regexMode, onSearchInFolder]);
+
+  const handlePickDirectory = useCallback(async () => {
+    if (!isTauri()) return;
+    try {
+      const selected = await open({ directory: true, multiple: false });
+      if (selected && typeof selected === 'string') {
+        setSearchDir(selected);
+      }
+    } catch (err) {
+      console.error('[FindReplace] 选择目录失败:', err);
+    }
+  }, []);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        if (e.shiftKey) {
+        if (folderMode) {
+          handleFolderSearch();
+        } else if (e.shiftKey) {
           findPrevious();
         } else {
           findNext();
         }
       }
     },
-    [onClose, findNext, findPrevious]
+    [onClose, findNext, findPrevious, folderMode, handleFolderSearch]
+  );
+
+  const handleDirKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        handleFolderSearch();
+      }
+    },
+    [onClose, handleFolderSearch]
   );
 
   if (!visible) return null;
@@ -290,7 +367,9 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
 
   const disabledBtnClass = 'opacity-40 cursor-not-allowed active:scale-100';
 
-  const canAct = !!findText && !!activeTabId;
+  const canAct = folderMode
+    ? !!findText && !!searchDir && !!onSearchInFolder && !searching
+    : !!findText && !!activeTabId;
 
   return (
     <div className="flex flex-col gap-2.5 px-4 py-3 border-b border-[var(--te-border)] bg-[var(--te-bg-secondary)] shadow-sm">
@@ -300,19 +379,19 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
             <input
               ref={findInputRef}
               type="text"
-              placeholder="查找"
+              placeholder={folderMode ? '在文件夹中查找' : '查找'}
               value={findText}
               onChange={(e) => setFindText(e.target.value)}
               onKeyDown={handleKeyDown}
               className={`${inputClass} w-full`}
             />
-            {matchCount !== 0 && (
+            {!folderMode && matchCount !== 0 && (
               <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--te-text-secondary)] select-none">
                 {currentMatch}/{Math.abs(matchCount)}{matchCount < 0 ? '+' : ''}
               </span>
             )}
           </div>
-          {showReplace && (
+          {showReplace && !folderMode && (
             <div className="relative flex-1">
               <input
                 type="text"
@@ -326,23 +405,25 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
           )}
         </div>
         <div className="flex items-center gap-0.5">
+          {!folderMode && (
+            <button
+              title="上一个"
+              className={`${iconBtnClass} ${!canAct ? disabledBtnClass : ''}`}
+              onClick={findPrevious}
+              disabled={!canAct}
+            >
+              <ChevronLeft size={14} />
+            </button>
+          )}
           <button
-            title="上一个"
+            title={folderMode ? '在文件夹中查找' : '下一个'}
             className={`${iconBtnClass} ${!canAct ? disabledBtnClass : ''}`}
-            onClick={findPrevious}
+            onClick={folderMode ? handleFolderSearch : findNext}
             disabled={!canAct}
           >
-            <ChevronLeft size={14} />
+            {folderMode ? <Search size={14} /> : <ChevronRight size={14} />}
           </button>
-          <button
-            title="下一个"
-            className={`${iconBtnClass} ${!canAct ? disabledBtnClass : ''}`}
-            onClick={findNext}
-            disabled={!canAct}
-          >
-            <ChevronRight size={14} />
-          </button>
-          {showReplace && (
+          {showReplace && !folderMode && (
             <>
               <button
                 title="替换"
@@ -362,18 +443,45 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
               </button>
             </>
           )}
-          <button
-            onClick={() => setShowReplace(!showReplace)}
-            className={iconBtnClass}
-            title={showReplace ? '隐藏替换' : '显示替换'}
-          >
-            {showReplace ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
+          {!folderMode && (
+            <button
+              onClick={() => setShowReplace(!showReplace)}
+              className={iconBtnClass}
+              title={showReplace ? '隐藏替换' : '显示替换'}
+            >
+              {showReplace ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+          )}
           <button onClick={onClose} className={iconBtnClass} title="关闭 (Esc)">
             <X size={14} />
           </button>
         </div>
       </div>
+      {/* Directory input row — shown only in folder mode */}
+      {folderMode && (
+        <div className="flex items-center gap-2">
+          <div className="flex-1 flex items-center gap-2">
+            <div className="relative flex-1">
+              <input
+                ref={dirInputRef}
+                type="text"
+                placeholder="查找目录"
+                value={searchDir}
+                onChange={(e) => setSearchDir(e.target.value)}
+                onKeyDown={handleDirKeyDown}
+                className={`${inputClass} w-full`}
+              />
+            </div>
+          </div>
+          <button
+            title="浏览目录"
+            className={iconBtnClass}
+            onClick={handlePickDirectory}
+          >
+            <FolderOpen size={14} />
+          </button>
+        </div>
+      )}
       <div className="flex items-center gap-3 text-xs text-[var(--te-text-secondary)]">
         <label className="flex items-center gap-1.5 cursor-pointer select-none">
           <input
@@ -398,7 +506,16 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
           />
           <span>正则模式</span>
         </label>
-        {regexMode && (
+        <label className="flex items-center gap-1.5 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={folderMode}
+            onChange={(e) => setFolderMode(e.target.checked)}
+            className="rounded border-[var(--te-border)] text-[var(--te-primary)] focus:ring-[var(--te-primary)]"
+          />
+          <span>在文件夹中查找</span>
+        </label>
+        {regexMode && !folderMode && (
           <button
             onClick={() => setRegexBuilderOpen(true)}
             className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md border transition-colors hover:bg-[var(--te-bg-primary)]"
@@ -412,7 +529,9 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
             编辑正则
           </button>
         )}
-        <span className="text-[var(--te-text-secondary)]">Enter: 下一个, Shift+Enter: 上一个, Esc: 关闭</span>
+        <span className="text-[var(--te-text-secondary)]">
+          {folderMode ? 'Enter: 查找, Esc: 关闭' : 'Enter: 下一个, Shift+Enter: 上一个, Esc: 关闭'}
+        </span>
       </div>
 
       <RegexBuilderModal

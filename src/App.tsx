@@ -8,11 +8,11 @@ import { open, confirm, message } from '@tauri-apps/plugin-dialog';
 import { useEditorStore } from './hooks/useEditorStore';
 import { useSettingsStore } from './hooks/useSettingsStore';
 import { useUIStore } from './hooks/useUIStore';
-import { useFileOpener } from './hooks/useFileOpener';
+import { useFileOpener, normalizePath } from './hooks/useFileOpener';
 import { useFileWatcher } from './hooks/useFileWatcher';
 import { useSessionRestore, saveSession } from './hooks/useSessionRestore';
 import { useMru } from './hooks/useMru';
-import { getEditorContent, updateEditorContent, getActiveView } from './hooks/useEditorStatePool';
+import { getEditorContent, updateEditorContent, getActiveView, setPendingLineNumber } from './hooks/useEditorStatePool';
 import { formatDocument, goToDefinition } from './utils/cmCommands';
 import { perf } from './utils/perf';
 import type { Encoding, LineEnding } from './types';
@@ -37,6 +37,11 @@ import TitleBar from './components/TitleBar';
 import DiagnosticsPanel from './components/DiagnosticsPanel';
 import QuickOpen from './components/QuickOpen';
 import ExternalChangeDialog from './components/ExternalChangeDialog';
+import SearchResultsView from './components/SearchResultsView';
+import type { SearchMatch, SearchOptions } from './services/searchService';
+import { searchDirectory } from './services/searchService';
+
+const SEARCH_RESULTS_PATH = '__search_results__';
 
 // Apply saved theme as early as possible to avoid flash
 applySavedTheme();
@@ -100,6 +105,13 @@ function App() {
   const setProjectPath = useEditorStore((s) => s.setProjectPath);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [quickOpenOpen, setQuickOpenOpen] = useState(false);
+  const [searchResultsMap, setSearchResultsMap] = useState<Record<string, {
+    query: string;
+    directory: string;
+    matches: SearchMatch[];
+  }>>({});
+  const [searchLoadingMap, setSearchLoadingMap] = useState<Record<string, boolean>>({});
+  const findReplaceRef = useRef<{ setFolderMode: (v: boolean) => void } | null>(null);
   const [externalChangeNotice, setExternalChangeNotice] = useState<string | null>(null);
   const [externalDiff, setExternalDiff] = useState<{
     open: boolean;
@@ -290,6 +302,12 @@ function App() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p' && !e.shiftKey) {
         e.preventDefault();
         setQuickOpenOpen((v) => !v);
+      }
+      // Find in folder shortcut: Ctrl+Shift+F
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setFindReplaceVisible(true);
+        findReplaceRef.current?.setFolderMode(true);
       }
       // Read mode toggle: Ctrl+Shift+V
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
@@ -492,13 +510,44 @@ function App() {
   const handleSidebarOpenFile = useCallback(
     async (filePath: string) => {
       if (!isTauri()) return;
-      const existing = useEditorStore.getState().tabs.find((t) => t.filePath === filePath);
+      const existing = useEditorStore.getState().tabs.find((t) => normalizePath(t.filePath || '') === normalizePath(filePath));
       if (existing) {
         setReaderScrollToTop(false);
         setActiveTabId(existing.id);
       } else {
         setReaderScrollToTop(true);
         await openFile(filePath);
+      }
+    },
+    [openFile, setActiveTabId]
+  );
+
+  /** Open a file from search results and scroll to the matched line. */
+  const handleOpenSearchResult = useCallback(
+    async (filePath: string, lineNumber: number) => {
+      const existing = useEditorStore.getState().tabs.find((t) => normalizePath(t.filePath || '') === normalizePath(filePath));
+      if (existing) {
+        // Already open — switch and jump immediately
+        setActiveTabId(existing.id);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const view = getActiveView(existing.id);
+            if (view) {
+              const targetLine = Math.min(lineNumber, view.state.doc.lines);
+              const pos = view.state.doc.line(targetLine).from;
+              view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+            }
+          });
+        });
+        return;
+      }
+
+      // Not yet open — open it and set pending line number for CmEditor to apply on mount
+      await openFile(filePath);
+      const openedTab = useEditorStore.getState().tabs.find((t) => normalizePath(t.filePath || '') === normalizePath(filePath));
+      if (openedTab) {
+        setActiveTabId(openedTab.id);
+        setPendingLineNumber(openedTab.id, lineNumber);
       }
     },
     [openFile, setActiveTabId]
@@ -522,10 +571,40 @@ function App() {
   }, [setActiveGroup1TabId, setActiveGroup2TabId, setActiveTabId]);
 
   const handleTabClose = useCallback((id: string) => {
+    setSearchResultsMap((prev) => {
+      if (prev[id]) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return prev;
+    });
+    setSearchLoadingMap((prev) => {
+      if (prev[id]) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return prev;
+    });
     closeTab(id);
   }, [closeTab]);
 
   const handleCloseTabs = useCallback((ids: string[]) => {
+    setSearchResultsMap((prev) => {
+      const next = { ...prev };
+      for (const id of ids) {
+        delete next[id];
+      }
+      return next;
+    });
+    setSearchLoadingMap((prev) => {
+      const next = { ...prev };
+      for (const id of ids) {
+        delete next[id];
+      }
+      return next;
+    });
     closeTabs(ids);
   }, [closeTabs]);
 
@@ -789,6 +868,35 @@ function App() {
   const handleReaderExit = useCallback(() => setReadMode(false), [setReadMode]);
   const handleReaderToggleTheme = useCallback(() => handleCycleTheme(), [handleCycleTheme]);
 
+  const handleSearchInFolder = useCallback(async (query: string, options: SearchOptions, directory: string) => {
+    // Reuse existing search-results tab or create a new one
+    let targetTab = tabs.find((t) => t.filePath === SEARCH_RESULTS_PATH);
+    if (targetTab) {
+      setActiveTabId(targetTab.id);
+    } else {
+      targetTab = createTab(`查找结果: "${query}"`, 'plaintext', SEARCH_RESULTS_PATH);
+    }
+
+    setSearchLoadingMap((prev) => ({ ...prev, [targetTab.id]: true }));
+    try {
+      const matches = await searchDirectory(directory, options);
+      setSearchResultsMap((prev) => ({
+        ...prev,
+        [targetTab.id]: { query, directory, matches },
+      }));
+    } catch (err) {
+      console.error('[App] 文件夹搜索失败:', err);
+      const errMsg = String(err);
+      if (isTauri()) {
+        await message(errMsg, { title: '搜索失败', kind: 'error' });
+      } else {
+        alert(`搜索失败: ${errMsg}`);
+      }
+    } finally {
+      setSearchLoadingMap((prev) => ({ ...prev, [targetTab.id]: false }));
+    }
+  }, [tabs, createTab, setActiveTabId]);
+
   const group1Tab = tabs.find((t) => t.id === activeGroup1TabId);
   const canPreview = group1Tab?.language === 'markdown' || group1Tab?.language === 'html';
   const canSplit = tabs.length >= 2;
@@ -816,6 +924,7 @@ function App() {
     { id: 'open', label: '打开文件', shortcut: 'Ctrl+O', icon: <FolderOpen size={16} />, action: handleOpenFile },
     { id: 'save', label: '保存文件', shortcut: 'Ctrl+S', icon: <Save size={16} />, action: handleSaveFile },
     { id: 'find', label: '查找替换', shortcut: 'Ctrl+F', icon: <Search size={16} />, action: () => setFindReplaceVisible(!findReplaceVisible) },
+    { id: 'findInFolder', label: '在文件夹中查找', shortcut: 'Ctrl+Shift+F', icon: <Search size={16} />, action: () => { setFindReplaceVisible(true); findReplaceRef.current?.setFolderMode(true); } },
     { id: 'format', label: '格式化文档', shortcut: 'Shift+Alt+F', icon: <Braces size={16} />, action: handleFormat },
     { id: 'sidebar', label: sidebarVisible ? '隐藏侧边栏' : '显示侧边栏', icon: <PanelLeft size={16} />, action: () => setSidebarVisible(!sidebarVisible) },
     { id: 'theme', label: `切换主题 (${theme})`, icon: isDark ? <Sun size={16} /> : <Moon size={16} />, action: handleCycleTheme },
@@ -912,6 +1021,10 @@ function App() {
           <FindReplace
             visible={findReplaceVisible}
             onClose={() => setFindReplaceVisible(false)}
+            projectPath={projectPath || undefined}
+            activeTabFilePath={activeTab?.filePath}
+            onSearchInFolder={handleSearchInFolder}
+            folderModeRef={findReplaceRef}
           />
           <CommandPalette
             open={commandPaletteOpen}
@@ -950,21 +1063,31 @@ function App() {
                     className="h-full flex-1 min-w-0"
                     style={{ display: tab.id === activeGroup1TabId ? 'flex' : 'none' }}
                   >
-                    <CmEditor
-                      tabId={tab.id}
-                      language={tab.language}
-                      theme={theme}
-                      fontSize={fontSize}
-                      initialContent={tab.initialContent || ''}
-                      largeFileOptimize={largeFileOptimize}
-                      wordWrap={wordWrap}
-                      showWhitespace={showWhitespace}
-                      scrollPastEnd={scrollPastEnd}
-                      minimapVisible={minimapVisible}
-                      unicodeHighlight={unicodeHighlight}
-                      columnAlignEnabled={columnAlignSupported && (tab.columnAlignEnabled ?? false)}
-                      lineEnding={tab.lineEnding}
-                    />
+                    {tab.filePath === SEARCH_RESULTS_PATH ? (
+                      <SearchResultsView
+                        query={searchResultsMap[tab.id]?.query || ''}
+                        directory={searchResultsMap[tab.id]?.directory || ''}
+                        matches={searchResultsMap[tab.id]?.matches || []}
+                        isLoading={searchLoadingMap[tab.id] || false}
+                        onOpenFile={handleOpenSearchResult}
+                      />
+                    ) : (
+                      <CmEditor
+                        tabId={tab.id}
+                        language={tab.language}
+                        theme={theme}
+                        fontSize={fontSize}
+                        initialContent={tab.initialContent || ''}
+                        largeFileOptimize={largeFileOptimize}
+                        wordWrap={wordWrap}
+                        showWhitespace={showWhitespace}
+                        scrollPastEnd={scrollPastEnd}
+                        minimapVisible={minimapVisible}
+                        unicodeHighlight={unicodeHighlight}
+                        columnAlignEnabled={columnAlignSupported && (tab.columnAlignEnabled ?? false)}
+                        lineEnding={tab.lineEnding}
+                      />
+                    )}
                   </div>
                 ))}
                 {splitMode && (
@@ -978,21 +1101,31 @@ function App() {
                             className="h-full w-full"
                             style={{ display: tab.id === activeGroup2TabId ? 'flex' : 'none' }}
                           >
-                            <CmEditor
-                              tabId={tab.id}
-                              language={tab.language}
-                              theme={theme}
-                              fontSize={fontSize}
-                              initialContent={tab.initialContent || ''}
-                              largeFileOptimize={largeFileOptimize}
-                              wordWrap={wordWrap}
-                              showWhitespace={showWhitespace}
-                              scrollPastEnd={scrollPastEnd}
-                              minimapVisible={minimapVisible}
-                              unicodeHighlight={unicodeHighlight}
-                              columnAlignEnabled={columnAlignSupported && (tab.columnAlignEnabled ?? false)}
-                              lineEnding={tab.lineEnding}
-                            />
+                            {tab.filePath === SEARCH_RESULTS_PATH ? (
+                              <SearchResultsView
+                                query={searchResultsMap[tab.id]?.query || ''}
+                                directory={searchResultsMap[tab.id]?.directory || ''}
+                                matches={searchResultsMap[tab.id]?.matches || []}
+                                isLoading={searchLoadingMap[tab.id] || false}
+                                onOpenFile={handleOpenSearchResult}
+                              />
+                            ) : (
+                              <CmEditor
+                                tabId={tab.id}
+                                language={tab.language}
+                                theme={theme}
+                                fontSize={fontSize}
+                                initialContent={tab.initialContent || ''}
+                                largeFileOptimize={largeFileOptimize}
+                                wordWrap={wordWrap}
+                                showWhitespace={showWhitespace}
+                                scrollPastEnd={scrollPastEnd}
+                                minimapVisible={minimapVisible}
+                                unicodeHighlight={unicodeHighlight}
+                                columnAlignEnabled={columnAlignSupported && (tab.columnAlignEnabled ?? false)}
+                                lineEnding={tab.lineEnding}
+                              />
+                            )}
                           </div>
                         ))
                       ) : (

@@ -315,6 +315,10 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 /* Bracket/tag pair marker in the line-numbers gutter */
+.cm-pair-gutter {
+  order: -1;
+}
+
 .cm-bracket-marker {
   font-size: 0.75em;
   opacity: 0.9;

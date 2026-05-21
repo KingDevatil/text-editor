@@ -84,8 +84,8 @@ function cellMarkStyle(width: number, isLast = false): string {
 }
 
 function buildDecorations(state: EditorState): DecorationSet {
-  const config = state.field(columnAlignField);
-  if (!config.enabled) return Decoration.none;
+  const config = state.field(columnAlignField, false);
+  if (!config || !config.enabled) return Decoration.none;
 
   const builder = new RangeSetBuilder<Decoration>();
 
@@ -197,8 +197,8 @@ export const columnAlignDecorations = StateField.define<DecorationSet>({
     return buildDecorations(state);
   },
   update(decorations, tr) {
-    const config = tr.state.field(columnAlignField);
-    const prevConfig = tr.startState.field(columnAlignField);
+    const config = tr.state.field(columnAlignField, false);
+    const prevConfig = tr.startState.field(columnAlignField, false);
     if (config !== prevConfig || tr.docChanged) {
       return buildDecorations(tr.state);
     }

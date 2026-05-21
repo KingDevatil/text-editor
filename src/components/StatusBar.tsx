@@ -132,7 +132,7 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
     const unsubscribe = subscribeContentChange(activeTab.id, (content) => {
       setContentVersion((v) => v + 1);
       if (timeoutId) clearTimeout(timeoutId);
-      const isLarge = content.length > 500 * 1024;
+      const isLarge = content.length > 2 * 1024 * 1024;
       if (isLarge) setCalculating(true);
       timeoutId = setTimeout(() => {
         setWordCount(countWords(content));

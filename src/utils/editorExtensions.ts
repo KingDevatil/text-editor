@@ -8,8 +8,6 @@ import { unicodeHighlight as unicodeHighlightExt } from './unicodeHighlight';
 import { eolMarkers } from './showInvisibles';
 import { loadLanguageExtensions, getLanguageExtensionsSync } from './languageExtensions';
 import { buildDynamicTheme, syntaxHighlightExtension } from './themes';
-import { getLinterExtension } from './lint';
-import { getAutocompleteExtension } from './autocomplete';
 import { indentGuides } from './indentGuides';
 import { hoverInfo } from './hover';
 import { bracketColorization } from './bracketColorization';
@@ -165,7 +163,7 @@ export function buildBaseExtensions(
   wordWrap: boolean,
   showWhitespace: boolean,
   enableScrollPastEnd: boolean,
-  tabId: string,
+  _tabId: string,
   enableUnicodeHighlight: boolean,
   isDark: boolean,
 ): Extension[] {
@@ -215,8 +213,6 @@ export function buildBaseExtensions(
   ];
 
   // Heavy features: disabled in large-file mode to reduce CPU / memory
-  const linterExt = getLinterExtension(lang);
-  const autocompleteExt = getAutocompleteExtension(lang, tabId);
   const heavyExts: Extension[] = largeFileOptimize
     ? []
     : [
@@ -224,8 +220,6 @@ export function buildBaseExtensions(
         pairGutter,
         bracketAndTagMatcher,
         highlightSelectionMatches(),
-        ...(linterExt ? [linterExt] : []),
-        ...(autocompleteExt ? [autocompleteExt] : []),
         ...indentGuides,
         hoverInfo,
         bracketColorization,
@@ -241,7 +235,9 @@ export function buildBaseExtensions(
 
   exts.push(
     compartments.largeFile.of(
-      largeFileOptimize ? [] : [foldGutter({ openText: '▼', closedText: '▶' }), keymap.of(foldKeymap)]
+      largeFileOptimize
+        ? [largeFileLineHighlighter, largeFileLineHighlightTheme]
+        : [foldGutter({ openText: '▼', closedText: '▶' }), keymap.of(foldKeymap)]
     )
   );
 
@@ -254,13 +250,7 @@ export function buildBaseExtensions(
     exts.push(scrollPastEndExt());
   }
 
-  // In large-file mode, add lightweight line-level heuristic highlighting
-  if (largeFileOptimize) {
-    exts.push(largeFileLineHighlighter);
-    exts.push(largeFileLineHighlightTheme);
-  }
-
   return exts;
 }
 
-export { loadLanguageExtensions };
+export { loadLanguageExtensions, largeFileLineHighlighter, largeFileLineHighlightTheme };

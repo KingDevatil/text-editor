@@ -9,6 +9,9 @@ use serde::Serialize;
 mod encoding;
 use encoding::{get_encoding, smart_detect_encoding};
 
+mod search;
+use search::search_directory;
+
 #[derive(Serialize)]
 struct ReadFileResult {
     text: String,
@@ -595,6 +598,7 @@ pub fn run() {
             rename_file,
             watch_file,
             unwatch_file,
+            search_directory,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

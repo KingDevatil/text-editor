@@ -9,12 +9,16 @@ import { addToMru } from './useMru';
 import { detectLineEnding } from '../utils/lineEnding';
 import { perf } from '../utils/perf';
 
-const LARGE_FILE_THRESHOLD = 500 * 1024; // 500KB
+const LARGE_FILE_THRESHOLD = 2 * 1024 * 1024; // 2MB
 const PROGRESSIVE_THRESHOLD = 2 * 1024 * 1024; // 2MB
 
 function getLanguageFromFileName(fileName: string): Language {
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
   return EXT_TO_LANGUAGE[ext] || 'plaintext';
+}
+
+export function normalizePath(p: string): string {
+  return p.toLowerCase().replace(/\\/g, '/');
 }
 
 export interface OpenFileResult {
@@ -61,7 +65,7 @@ export function useFileOpener() {
           const text = options.text;
           const detectedEncoding = options.encoding || 'UTF-8';
           const fileName = filePath.split(/[\\/]/).pop() || filePath;
-          const existing = useEditorStore.getState().tabs.find((t) => t.filePath === filePath);
+          const existing = useEditorStore.getState().tabs.find((t) => normalizePath(t.filePath || '') === normalizePath(filePath));
           const lineEnding = detectLineEnding(text);
 
           if (existing) {
@@ -80,7 +84,7 @@ export function useFileOpener() {
         }
 
         const fileName = filePath.split(/[\\/]/).pop() || filePath;
-        const existing = useEditorStore.getState().tabs.find((t) => t.filePath === filePath);
+        const existing = useEditorStore.getState().tabs.find((t) => normalizePath(t.filePath || '') === normalizePath(filePath));
 
         if (existing) {
           // Re-read existing tab

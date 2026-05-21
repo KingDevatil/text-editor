@@ -232,10 +232,11 @@ export function getActiveView(tabId: string): EditorView | undefined {
   return activeViews.get(tabId);
 }
 
-// ── Pending scroll / selection for session restore ──
+// ── Pending scroll / selection / line number for session restore & search jump ──
 
 const pendingScrollTops = new Map<string, number>();
 const pendingSelections = new Map<string, { anchor: number; head: number }>();
+const pendingLineNumbers = new Map<string, number>();
 
 export function setPendingScrollTop(tabId: string, scrollTop: number): void {
   pendingScrollTops.set(tabId, scrollTop);
@@ -254,5 +255,15 @@ export function setPendingSelection(tabId: string, anchor: number, head: number)
 export function takePendingSelection(tabId: string): { anchor: number; head: number } | undefined {
   const v = pendingSelections.get(tabId);
   pendingSelections.delete(tabId);
+  return v;
+}
+
+export function setPendingLineNumber(tabId: string, lineNumber: number): void {
+  pendingLineNumbers.set(tabId, lineNumber);
+}
+
+export function takePendingLineNumber(tabId: string): number | undefined {
+  const v = pendingLineNumbers.get(tabId);
+  pendingLineNumbers.delete(tabId);
   return v;
 }
