@@ -121,7 +121,7 @@ export function executeMarkdownAction(view: EditorView, action: MarkdownAction) 
         changes.push({ from, to, insert: `\`\`\`\n${text}\n\`\`\`` });
         selection = EditorSelection.cursor(to);
       } else {
-        changes.push({ from, to, insert: '\`\`\`\n\n\`\`\`' });
+        changes.push({ from, to, insert: '```\n\n```' });
       }
       break;
     }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { X, Moon, Sun, ChevronUp } from 'lucide-react';
-import { getEditorContent } from '../hooks/useEditorStatePool';
+import { subscribeContentChange } from '../hooks/useEditorStatePool';
 import type { ThemeMode } from '../types';
 import { prepareHtmlSrcDoc } from '../utils/htmlPreview';
 
@@ -24,10 +24,10 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
   const [content, setContent] = useState('');
   const [readerWidth, setReaderWidth] = useState<'default' | 'wide' | 'full'>('default');
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const rafRef = useRef<number | null>(null);
-  const lastContentRef = useRef('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const savedScrollYRef = useRef(0);
+  const isFirstRef = useRef(true);
 
   // Scroll to top only when newly opened; otherwise restore previous position
   useEffect(() => {
@@ -40,32 +40,32 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
     }
   }, [tabId, shouldScrollToTop]);
 
-  // Poll content changes
+  // Subscribe to content changes via event-driven pub/sub with 300ms debounce
   useEffect(() => {
-    if (!visible) {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
+    if (!visible) return;
+    isFirstRef.current = true;
+    const unsubscribe = subscribeContentChange(tabId, (newContent) => {
+      if (isFirstRef.current) {
+        isFirstRef.current = false;
+        setContent(newContent);
+        return;
       }
-      return;
-    }
-
-    const poll = () => {
-      const current = getEditorContent(tabId);
-      if (current !== lastContentRef.current) {
-        lastContentRef.current = current;
-        setContent(current);
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
       }
-      rafRef.current = requestAnimationFrame(poll);
-    };
-    rafRef.current = requestAnimationFrame(poll);
+      debounceRef.current = setTimeout(() => {
+        setContent(newContent);
+      }, 300);
+    });
     return () => {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
+      unsubscribe();
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
       }
       // Save iframe scroll position before unmount/tab switch
-      savedScrollYRef.current = iframeRef.current?.contentWindow?.scrollY || 0;
+      const iframe = iframeRef.current;
+      savedScrollYRef.current = iframe?.contentWindow?.scrollY || 0;
     };
   }, [tabId, visible]);
 

@@ -71,10 +71,12 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose }) => {
       if (view) {
         view.dispatch({ effects: setSearchQuery.of(null) });
       }
-      setFindText('');
-      setReplaceText('');
-      setMatchCount(0);
-      setCurrentMatch(0);
+      queueMicrotask(() => {
+        setFindText('');
+        setReplaceText('');
+        setMatchCount(0);
+        setCurrentMatch(0);
+      });
     }
   }, [visible, activeTabId]);
 

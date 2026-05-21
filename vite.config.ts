@@ -16,5 +16,21 @@ export default defineConfig({
   build: {
     cssMinify: true,
     chunkSizeWarningLimit: 700,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // Order matters: more specific patterns must come before generic ones
+          if (id.includes('node_modules/@codemirror/lang-')) {
+            return 'codemirror-langs';
+          }
+          if (id.includes('node_modules/marked')) {
+            return 'marked';
+          }
+          if (id.includes('node_modules/@codemirror')) {
+            return 'codemirror-core';
+          }
+        },
+      },
+    },
   },
 })

@@ -5,6 +5,7 @@ import { EXT_TO_LANGUAGE } from '../types';
 import { useEditorStore } from './useEditorStore';
 import { useSettingsStore } from './useSettingsStore';
 import { updateEditorContent } from './useEditorStatePool';
+import { addToMru } from './useMru';
 import { detectLineEnding } from '../utils/lineEnding';
 import { perf } from '../utils/perf';
 
@@ -71,6 +72,7 @@ export function useFileOpener() {
             const isLarge = text.length > LARGE_FILE_THRESHOLD;
             const lang = isLarge ? 'plaintext' : getLanguageFromFileName(fileName);
             createTab(fileName, lang, filePath, 1, detectedEncoding as Encoding, text, lineEnding);
+            if (filePath) addToMru(filePath, fileName);
           }
           perf.recordFileOpen(text.length, performance.now() - openStart);
           return;
@@ -113,6 +115,7 @@ export function useFileOpener() {
                 updateEditorContent(tab.id, result.text);
                 setTabLineEnding(tab.id, detectLineEnding(result.text));
                 setTabLanguage(tab.id, getLanguageFromFileName(fileName));
+                addToMru(filePath, fileName);
               })
               .catch((err) => {
                 console.error('Failed to load full content for:', filePath, err);
@@ -125,6 +128,7 @@ export function useFileOpener() {
           const lineEnding = detectLineEnding(result.text);
 
           createTab(fileName, lang, filePath, 1, result.encoding as Encoding, result.text, lineEnding);
+          addToMru(filePath, fileName);
           perf.recordFileOpen(result.text.length, performance.now() - openStart);
 
           if (isLarge) {

@@ -4,8 +4,8 @@ import { useFileWatcher } from './useFileWatcher';
 import type { EditorTab } from '../types';
 
 const invokeMock = vi.fn(() => Promise.resolve());
-let listenCallbacks: Array<(event: { payload: string }) => void> = [];
-let unlistenFns: Array<() => void> = [];
+const listenCallbacks: Array<(event: { payload: string }) => void> = [];
+const unlistenFns: Array<() => void> = [];
 
 const listenMock = vi.fn((_event: string, cb: (event: { payload: string }) => void) => {
   listenCallbacks.push(cb);

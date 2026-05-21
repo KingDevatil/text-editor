@@ -12,7 +12,7 @@ import {
   Clipboard,
 } from 'lucide-react';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
-import { getEditorContent } from '../hooks/useEditorStatePool';
+import { subscribeContentChange } from '../hooks/useEditorStatePool';
 import { useSettingsStore } from '../hooks/useSettingsStore';
 import type { ThemeMode } from '../types';
 import { generateHeadingSlugs, slugify } from '../utils/slugify';
@@ -43,9 +43,9 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
   const setReaderTocVisible = useSettingsStore((s) => s.setReaderTocVisible);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const lastContentRef = useRef('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isFirstRef = useRef(true);
 
   // Scroll to top only when newly opened
   useEffect(() => {
@@ -54,29 +54,28 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
     }
   }, [tabId, shouldScrollToTop]);
 
-  // Poll content changes (throttled to 250ms to avoid 60fps GC pressure on large files)
+  // Subscribe to content changes via event-driven pub/sub with 300ms debounce
   useEffect(() => {
-    if (!visible) {
-      if (rafRef.current !== null) {
-        clearTimeout(rafRef.current);
-        rafRef.current = null;
+    if (!visible) return;
+    isFirstRef.current = true;
+    const unsubscribe = subscribeContentChange(tabId, (newContent) => {
+      if (isFirstRef.current) {
+        isFirstRef.current = false;
+        setContent(newContent);
+        return;
       }
-      return;
-    }
-
-    const poll = () => {
-      const current = getEditorContent(tabId);
-      if (current !== lastContentRef.current) {
-        lastContentRef.current = current;
-        setContent(current);
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
       }
-      rafRef.current = window.setTimeout(poll, 100);
-    };
-    rafRef.current = window.setTimeout(poll, 100);
+      debounceRef.current = setTimeout(() => {
+        setContent(newContent);
+      }, 300);
+    });
     return () => {
-      if (rafRef.current !== null) {
-        clearTimeout(rafRef.current);
-        rafRef.current = null;
+      unsubscribe();
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
       }
     };
   }, [tabId, visible]);

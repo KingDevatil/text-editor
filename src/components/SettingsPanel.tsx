@@ -73,8 +73,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
 
   useEffect(() => {
     if (!visible) {
-      setShowThemeEditor(false);
-      setShowHelp(false);
+      queueMicrotask(() => {
+        setShowThemeEditor(false);
+        setShowHelp(false);
+      });
     }
   }, [visible]);
 

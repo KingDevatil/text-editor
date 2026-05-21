@@ -12,8 +12,7 @@ import type { ContextMenuItem } from '../components/ContextMenu';
 export function useEditorContextMenu(
   viewRef: React.MutableRefObject<EditorView | null>,
   language: string,
-  tabId: string,
-  canFormat: boolean
+  tabId: string
 ) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
 
@@ -211,7 +210,7 @@ export function useEditorContextMenu(
     );
 
     return items;
-  }, [language, canFormat, tabId, viewRef]);
+  }, [language, tabId, viewRef]);
 
   const handleContextMenu = useCallback((e: MouseEvent) => {
     e.preventDefault();

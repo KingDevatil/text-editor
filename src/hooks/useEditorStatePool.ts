@@ -1,5 +1,6 @@
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { deleteCompartments } from '../utils/editorExtensions';
 
 interface StatePool {
   states: Map<string, EditorState>;
@@ -11,13 +12,27 @@ export function getEditorState(tabId: string): EditorState | undefined {
   return pool.states.get(tabId);
 }
 
+// Track closed tab IDs to prevent stale re-writes during component unmount
+const closedTabs = new Set<string>();
+
 export function setEditorState(tabId: string, state: EditorState): void {
+  if (closedTabs.has(tabId)) return;
   pool.states.set(tabId, state);
 }
 
 export function deleteEditorState(tabId: string): void {
+  closedTabs.add(tabId);
   pool.states.delete(tabId);
   scrollTops.delete(tabId);
+  activeViews.delete(tabId);
+  clearContentListeners(tabId);
+  clearEditorUpdateListeners(tabId);
+  deleteCompartments(tabId);
+}
+
+/** Remove tabId from closed-tabs guard so it can be reused (e.g. in tests). */
+export function reopenTab(tabId: string): void {
+  closedTabs.delete(tabId);
 }
 
 export function getEditorContent(tabId: string): string {
@@ -39,6 +54,118 @@ export function hasEditorState(tabId: string): boolean {
   return pool.states.has(tabId);
 }
 
+// ── Content change pub/sub (event-driven replacement for polling) ──
+
+export type ContentChangeListener = (content: string) => void;
+
+const contentListeners = new Map<string, Set<ContentChangeListener>>();
+
+/**
+ * Subscribe to content changes for a specific tab.
+ * The listener receives the current content string whenever the doc changes.
+ * Returns an unsubscribe function.
+ */
+export function subscribeContentChange(
+  tabId: string,
+  listener: ContentChangeListener
+): () => void {
+  let set = contentListeners.get(tabId);
+  if (!set) {
+    set = new Set();
+    contentListeners.set(tabId, set);
+  }
+  set.add(listener);
+  // Immediately emit current content so subscriber is in sync
+  const current = getEditorContent(tabId);
+  listener(current);
+  return () => {
+    set?.delete(listener);
+    if (set?.size === 0) {
+      contentListeners.delete(tabId);
+    }
+  };
+}
+
+/**
+ * Notify all listeners for a tab that content has changed.
+ * Called by CmEditor's updateListener when docChanged is true.
+ */
+export function notifyContentChange(tabId: string): void {
+  const set = contentListeners.get(tabId);
+  if (!set || set.size === 0) return;
+  const content = getEditorContent(tabId);
+  for (const listener of set) {
+    try {
+      listener(content);
+    } catch (err) {
+      console.error('[notifyContentChange] listener error:', err);
+    }
+  }
+}
+
+/** Clean up all listeners for a tab (call on tab close). */
+export function clearContentListeners(tabId: string): void {
+  contentListeners.delete(tabId);
+}
+
+// ── Editor update pub/sub (for Minimap and other view-dependent consumers) ──
+
+export type EditorUpdateListener = () => void;
+
+const editorUpdateListeners = new Map<string, Set<EditorUpdateListener>>();
+
+/**
+ * Subscribe to any CodeMirror update for a tab (doc change, viewport change, selection change).
+ * Used by Minimap to repaint without polling.
+ */
+export function subscribeEditorUpdate(
+  tabId: string,
+  listener: EditorUpdateListener
+): () => void {
+  let set = editorUpdateListeners.get(tabId);
+  if (!set) {
+    set = new Set();
+    editorUpdateListeners.set(tabId, set);
+  }
+  set.add(listener);
+  // Immediate call so subscriber catches up with current state
+  try {
+    listener();
+  } catch (err) {
+    console.error('[subscribeEditorUpdate] immediate listener error:', err);
+  }
+  return () => {
+    set?.delete(listener);
+    if (set?.size === 0) {
+      editorUpdateListeners.delete(tabId);
+    }
+  };
+}
+
+/** Notify all editor-update listeners for a tab. Called by CmEditor's updateListener. */
+export function notifyEditorUpdate(tabId: string): void {
+  const set = editorUpdateListeners.get(tabId);
+  if (!set || set.size === 0) return;
+  for (const listener of set) {
+    try {
+      listener();
+    } catch (err) {
+      console.error('[notifyEditorUpdate] listener error:', err);
+    }
+  }
+}
+
+/** Clean up all editor-update listeners for a tab. */
+export function clearEditorUpdateListeners(tabId: string): void {
+  editorUpdateListeners.delete(tabId);
+}
+
+/** Clear all listeners across every tab. Useful for test isolation. */
+export function clearAllListeners(): void {
+  contentListeners.clear();
+  editorUpdateListeners.clear();
+}
+
 // Scroll position per tab (CodeMirror EditorView scrollTop)
 const scrollTops = new Map<string, number>();
 
@@ -47,6 +174,7 @@ export function getEditorScrollTop(tabId: string): number | undefined {
 }
 
 export function setEditorScrollTop(tabId: string, scrollTop: number): void {
+  if (closedTabs.has(tabId)) return;
   scrollTops.set(tabId, scrollTop);
 }
 
@@ -102,4 +230,29 @@ export function setActiveView(tabId: string, view: EditorView | null): void {
 
 export function getActiveView(tabId: string): EditorView | undefined {
   return activeViews.get(tabId);
+}
+
+// ── Pending scroll / selection for session restore ──
+
+const pendingScrollTops = new Map<string, number>();
+const pendingSelections = new Map<string, { anchor: number; head: number }>();
+
+export function setPendingScrollTop(tabId: string, scrollTop: number): void {
+  pendingScrollTops.set(tabId, scrollTop);
+}
+
+export function takePendingScrollTop(tabId: string): number | undefined {
+  const v = pendingScrollTops.get(tabId);
+  pendingScrollTops.delete(tabId);
+  return v;
+}
+
+export function setPendingSelection(tabId: string, anchor: number, head: number): void {
+  pendingSelections.set(tabId, { anchor, head });
+}
+
+export function takePendingSelection(tabId: string): { anchor: number; head: number } | undefined {
+  const v = pendingSelections.get(tabId);
+  pendingSelections.delete(tabId);
+  return v;
 }

@@ -3,9 +3,15 @@ import { render, fireEvent } from '@testing-library/react';
 import MarkdownReader from './MarkdownReader';
 
 const getEditorContent = vi.fn(() => '');
+const unsubscribe = vi.fn();
+const subscribeContentChange = vi.fn((_tabId: string, listener: (content: string) => void) => {
+  listener('');
+  return unsubscribe;
+});
 
 vi.mock('../hooks/useEditorStatePool', () => ({
   getEditorContent: (...args: unknown[]) => getEditorContent(...args),
+  subscribeContentChange: (...args: unknown[]) => subscribeContentChange(...args),
 }));
 
 vi.mock('../hooks/useEditorStore', () => ({
@@ -18,6 +24,8 @@ vi.mock('../hooks/useEditorStore', () => ({
 describe('MarkdownReader', () => {
   beforeEach(() => {
     getEditorContent.mockClear();
+    subscribeContentChange.mockClear();
+    unsubscribe.mockClear();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   });
 
@@ -25,35 +33,21 @@ describe('MarkdownReader', () => {
     vi.useRealTimers();
   });
 
-  it('throttles content polling to ~100ms interval', () => {
+  it('subscribes to content changes when visible', () => {
     render(
       <MarkdownReader tabId="tab1" theme="light" onExit={vi.fn()} onToggleTheme={vi.fn()} visible={true} />
     );
-
-    expect(getEditorContent).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(100);
-    expect(getEditorContent).toHaveBeenCalledTimes(1);
-
-    getEditorContent.mockClear();
-    vi.advanceTimersByTime(100);
-    expect(getEditorContent).toHaveBeenCalledTimes(1);
+    expect(subscribeContentChange).toHaveBeenCalledWith('tab1', expect.any(Function));
   });
 
-  it('stops polling when visible becomes false', () => {
+  it('unsubscribes when visible becomes false', () => {
     const { rerender } = render(
       <MarkdownReader tabId="tab1" theme="light" onExit={vi.fn()} onToggleTheme={vi.fn()} visible={true} />
     );
-
-    vi.advanceTimersByTime(250);
-    expect(getEditorContent).toHaveBeenCalled();
-
-    getEditorContent.mockClear();
+    expect(unsubscribe).not.toHaveBeenCalled();
 
     rerender(<MarkdownReader tabId="tab1" theme="light" onExit={vi.fn()} onToggleTheme={vi.fn()} visible={false} />);
-
-    vi.advanceTimersByTime(250);
-    expect(getEditorContent).not.toHaveBeenCalled();
+    expect(unsubscribe).toHaveBeenCalled();
   });
 
   it('does not call onExit via ESC when not visible', () => {

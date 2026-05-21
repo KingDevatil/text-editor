@@ -260,3 +260,8 @@ export function preloadCommonLanguages(): void {
     });
   }
 }
+
+/** Check if a language pack is already loaded into the cache. */
+export function isLanguageCached(lang: Language): boolean {
+  return languageCache.has(lang);
+}

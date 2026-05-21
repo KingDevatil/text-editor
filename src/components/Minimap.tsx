@@ -1,8 +1,10 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { EditorView } from '@codemirror/view';
 import type { EditorTheme } from '../utils/themes';
+import { subscribeEditorUpdate } from '../hooks/useEditorStatePool';
 
 interface MinimapProps {
+  tabId: string;
   viewRef: React.MutableRefObject<EditorView | null>;
   theme: EditorTheme;
 }
@@ -10,158 +12,135 @@ interface MinimapProps {
 const getVar = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-const Minimap: React.FC<MinimapProps> = ({ viewRef, theme }) => {
+const Minimap: React.FC<MinimapProps> = ({ tabId, viewRef }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const lineHRef = useRef(1);
   const virtualLinesRef = useRef(1);
 
-  useEffect(() => {
+  const render = useCallback(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
-    if (!canvas || !container) return;
+    const view = viewRef.current;
+    if (!canvas || !container || !view) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let rafId: number;
-    let pollId: ReturnType<typeof setTimeout>;
-    let lastDocLen = -1;
-    let lastVpFrom = -1;
-    let lastVpTo = -1;
-    let lastW = -1;
-    let lastH = -1;
+    // Pause rendering when container is hidden
+    if (container.offsetParent === null) return;
 
+    const doc = view.state.doc;
+    const viewport = view.viewport;
+    const rect = container.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
     const W = 120;
+    const H = rect.height;
 
-    const render = () => {
+    if (W <= 0 || H <= 0) return;
+
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = `${W}px`;
+    canvas.style.height = `${H}px`;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.fillStyle = getVar('--te-bg-primary');
+    ctx.fillRect(0, 0, W, H);
+
+    const lines = doc.lines;
+
+    // 计算编辑器视口大约能容纳多少行，minimap 至少应显示一页内容
+    const editorHeight = view.dom.getBoundingClientRect().height;
+    const realLineHeight = view.defaultLineHeight || 16;
+    const viewportLines = Math.max(1, Math.ceil(editorHeight / realLineHeight));
+    const virtualLines = Math.max(lines, viewportLines);
+
+    let lineH = H / virtualLines;
+    let step = 1;
+
+    // 对于超大文件，按块采样避免逐行循环过慢
+    if (lineH < 0.5) {
+      step = Math.ceil(0.5 / lineH);
+      lineH = H / (virtualLines / step);
+    }
+
+    // 保存供 scrollToY 使用
+    lineHRef.current = lineH;
+    virtualLinesRef.current = virtualLines;
+
+    // 绘制代码缩略：每行/每块用一条灰线表示，长度和透明度随字符数变化
+    ctx.fillStyle = getVar('--te-text-secondary');
+    for (let i = 1; i <= lines; i += step) {
+      let maxLen = 0;
+      for (let j = 0; j < step && i + j <= lines; j++) {
+        const len = doc.line(i + j).text.trim().length;
+        if (len > maxLen) maxLen = len;
+      }
+      if (maxLen === 0) continue;
+
+      const y = Math.floor((i - 1) / step) * lineH;
+      const intensity = Math.min(maxLen / 80, 1);
+      ctx.globalAlpha = 0.2 + intensity * 0.4;
+      ctx.fillRect(2, y, (W - 4) * intensity, Math.max(lineH, 1));
+    }
+    ctx.globalAlpha = 1;
+
+    // 绘制当前视口覆盖层
+    const fromLine = doc.lineAt(viewport.from).number;
+    const toLine = doc.lineAt(viewport.to).number;
+    const vpY = (fromLine - 1) / step * lineH;
+    const vpH = Math.max((toLine - fromLine + 1) / step * lineH, 3);
+
+    ctx.globalAlpha = 0.08;
+    ctx.fillStyle = getVar('--te-text-primary');
+    ctx.fillRect(0, vpY, W, vpH);
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = getVar('--te-border');
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0.5, vpY + 0.5, W - 1, vpH - 1);
+  }, [viewRef]);
+
+  useEffect(() => {
+    // Subscribe to CodeMirror updates (content, viewport, selection changes)
+    const unsubscribeUpdate = subscribeEditorUpdate(tabId, render);
+
+    // Listen to scroll events on the editor scroller
+    let scrollCleanup: (() => void) | null = null;
+    const setupScroll = () => {
       const view = viewRef.current;
-      if (!view) {
-        // View not ready yet — poll at 10Hz instead of 60fps RAF to save CPU
-        pollId = setTimeout(render, 100);
-        return;
-      }
-
-      // Pause rendering when container is hidden (e.g. inactive tab with display:none)
-      if (container.offsetParent === null) {
-        pollId = setTimeout(render, 200);
-        return;
-      }
-
-      const doc = view.state.doc;
-      const viewport = view.viewport;
-
-      // Fast-path: skip layout read if doc and viewport haven't changed
-      // (canvas size is checked lazily only when needed)
-      if (
-        doc.length === lastDocLen &&
-        viewport.from === lastVpFrom &&
-        viewport.to === lastVpTo &&
-        lastH > 0
-      ) {
-        pollId = setTimeout(render, 200);
-        return;
-      }
-
-      const rect = container.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      const H = rect.height;
-
-      // If nothing meaningful changed after reading layout, skip repaint
-      if (
-        doc.length === lastDocLen &&
-        viewport.from === lastVpFrom &&
-        viewport.to === lastVpTo &&
-        W === lastW &&
-        H === lastH
-      ) {
-        pollId = setTimeout(render, 200);
-        return;
-      }
-
-      lastDocLen = doc.length;
-      lastVpFrom = viewport.from;
-      lastVpTo = viewport.to;
-
-      // Update canvas size only when it actually changed
-      if (W !== lastW || H !== lastH) {
-        canvas.width = W * dpr;
-        canvas.height = H * dpr;
-        canvas.style.width = `${W}px`;
-        canvas.style.height = `${H}px`;
-        lastW = W;
-        lastH = H;
-      }
-
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, W, H);
-
-      ctx.fillStyle = getVar('--te-bg-primary');
-      ctx.fillRect(0, 0, W, H);
-
-      const lines = doc.lines;
-
-      // 计算编辑器视口大约能容纳多少行，minimap 至少应显示一页内容
-      // 避免短文档时把少量行拉伸填充整个 minimap
-      const editorHeight = view.dom.getBoundingClientRect().height;
-      const realLineHeight = view.defaultLineHeight || 16;
-      const viewportLines = Math.max(1, Math.ceil(editorHeight / realLineHeight));
-      const virtualLines = Math.max(lines, viewportLines);
-
-      let lineH = H / virtualLines;
-      let step = 1;
-
-      // 对于超大文件，按块采样避免逐行循环过慢
-      if (lineH < 0.5) {
-        step = Math.ceil(0.5 / lineH);
-        lineH = H / (virtualLines / step);
-      }
-
-      // 保存供 scrollToY 使用
-      lineHRef.current = lineH;
-      virtualLinesRef.current = virtualLines;
-
-      // 绘制代码缩略：每行/每块用一条灰线表示，长度和透明度随字符数变化
-      ctx.fillStyle = getVar('--te-text-secondary');
-      for (let i = 1; i <= lines; i += step) {
-        let maxLen = 0;
-        for (let j = 0; j < step && i + j <= lines; j++) {
-          const len = doc.line(i + j).text.trim().length;
-          if (len > maxLen) maxLen = len;
-        }
-        if (maxLen === 0) continue;
-
-        const y = Math.floor((i - 1) / step) * lineH;
-        const intensity = Math.min(maxLen / 80, 1);
-        ctx.globalAlpha = 0.2 + intensity * 0.4;
-        ctx.fillRect(2, y, (W - 4) * intensity, Math.max(lineH, 1));
-      }
-      ctx.globalAlpha = 1;
-
-      // 绘制当前视口覆盖层
-      const fromLine = doc.lineAt(viewport.from).number;
-      const toLine = doc.lineAt(viewport.to).number;
-      const vpY = (fromLine - 1) / step * lineH;
-      const vpH = Math.max((toLine - fromLine + 1) / step * lineH, 3);
-
-      ctx.globalAlpha = 0.08;
-      ctx.fillStyle = getVar('--te-text-primary');
-      ctx.fillRect(0, vpY, W, vpH);
-      ctx.globalAlpha = 1;
-
-      ctx.strokeStyle = getVar('--te-border');
-      ctx.lineWidth = 1;
-      ctx.strokeRect(0.5, vpY + 0.5, W - 1, vpH - 1);
-
-      rafId = requestAnimationFrame(render);
+      if (!view) return;
+      const scroller = view.dom.querySelector('.cm-scroller');
+      if (!scroller) return;
+      const onScroll = () => render();
+      scroller.addEventListener('scroll', onScroll);
+      scrollCleanup = () => scroller.removeEventListener('scroll', onScroll);
     };
+    setupScroll();
 
-    rafId = requestAnimationFrame(render);
+    // Debounced window resize handler
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+    const onResize = () => {
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => render(), 100);
+    };
+    window.addEventListener('resize', onResize);
+
+    // Re-render when theme colors change (injected via themeInjector)
+    const onThemeChange = () => render();
+    window.addEventListener('te-theme-change', onThemeChange);
+
     return () => {
-      cancelAnimationFrame(rafId);
-      clearTimeout(pollId);
+      unsubscribeUpdate();
+      scrollCleanup?.();
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('te-theme-change', onThemeChange);
+      if (resizeTimeout) clearTimeout(resizeTimeout);
     };
-  }, [viewRef, theme]);
+  }, [tabId, viewRef, render]);
 
   const isDraggingRef = useRef(false);
 
@@ -190,7 +169,7 @@ const Minimap: React.FC<MinimapProps> = ({ viewRef, theme }) => {
         effects: EditorView.scrollIntoView(line.from, { y: 'start' }),
       });
     },
-    [viewRef]
+    []
   );
 
   const handleMouseDown = useCallback(

@@ -40,7 +40,10 @@ export function useFileWatcher(tabs: EditorTab[], onFileChanged?: (path: string)
   }, [tabs]);
 
   const onFileChangedRef = useRef(onFileChanged);
-  onFileChangedRef.current = onFileChanged;
+
+  useEffect(() => {
+    onFileChangedRef.current = onFileChanged;
+  });
 
   useEffect(() => {
     if (!isTauri()) return;

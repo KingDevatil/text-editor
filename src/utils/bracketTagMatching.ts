@@ -1,5 +1,5 @@
-import { EditorState, StateField, RangeSetBuilder, RangeSet } from '@codemirror/state';
-import { EditorView, Decoration, ViewPlugin, GutterMarker, gutter } from '@codemirror/view';
+import { EditorState, StateField, RangeSetBuilder, RangeSet, Range } from '@codemirror/state';
+import { EditorView, Decoration, ViewPlugin, ViewUpdate, GutterMarker, gutter, type DecorationSet } from '@codemirror/view';
 import { syntaxTree, matchBrackets } from '@codemirror/language';
 import type { SyntaxNode } from '@lezer/common';
 
@@ -23,7 +23,7 @@ function findTagPair(
   const tree = syntaxTree(state);
   if (!tree) return null;
 
-  let node = tree.resolveInner(pos, 1);
+  const node = tree.resolveInner(pos, 1);
 
   let tagContainer: SyntaxNode | null = null;
   for (let cur: SyntaxNode | null = node; cur; cur = cur.parent) {
@@ -195,11 +195,11 @@ function computeMarkedLines(state: EditorState, cursorPos: number): readonly num
 }
 
 /** StateField that stores a RangeSet of gutter markers for bracket/tag pair matches. */
-const markedLinesField = StateField.define<RangeSet<any>>({
+const markedLinesField = StateField.define<RangeSet<GutterMarker>>({
   create(state) {
     const cursorPos = state.selection.main.head;
     const lines = computeMarkedLines(state, cursorPos);
-    const builder = new RangeSetBuilder<any>();
+    const builder = new RangeSetBuilder<GutterMarker>();
     for (const lineNo of lines) {
       const line = state.doc.line(lineNo);
       builder.add(line.from, line.to, pairMarkerInstance);
@@ -210,7 +210,7 @@ const markedLinesField = StateField.define<RangeSet<any>>({
     if (!tr.docChanged && tr.startState.selection.eq(tr.state.selection)) return value;
     const cursorPos = tr.state.selection.main.head;
     const lines = computeMarkedLines(tr.state, cursorPos);
-    const builder = new RangeSetBuilder<any>();
+    const builder = new RangeSetBuilder<GutterMarker>();
     for (const lineNo of lines) {
       const line = tr.state.doc.line(lineNo);
       builder.add(line.from, line.to, pairMarkerInstance);
@@ -233,17 +233,17 @@ const pairGutter = gutter({
 /** ViewPlugin that highlights tag names for HTML/XML, and brackets for plain text. */
 const bracketAndTagMatcher = ViewPlugin.fromClass(
   class {
-    decorations: any;
+    decorations: DecorationSet;
     constructor(view: EditorView) {
       this.decorations = this.compute(view);
     }
-    update(update: any) {
+    update(update: ViewUpdate) {
       if (update.docChanged || update.selectionSet) {
         this.decorations = this.compute(update.view);
       }
     }
     compute(view: EditorView) {
-      const decorations: any[] = [];
+      const decorations: Range<Decoration>[] = [];
       for (const range of view.state.selection.ranges) {
         if (!range.empty) continue;
 
@@ -270,7 +270,7 @@ const bracketAndTagMatcher = ViewPlugin.fromClass(
       return Decoration.set(decorations, true);
     }
   },
-  { decorations: (v: any) => v.decorations }
+  { decorations: (v: { decorations: DecorationSet }) => v.decorations }
 );
 
 export { markedLinesField, pairGutter, bracketAndTagMatcher };

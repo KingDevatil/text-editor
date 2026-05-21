@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import type { EditorView } from '@codemirror/view';
 import { useEditorContextMenu } from './useEditorContextMenu';
 
 // ── mocks ──
@@ -53,14 +54,13 @@ describe('useEditorContextMenu', () => {
   });
 
   it('should set context menu on handleContextMenu call', () => {
-    const viewRef = { current: null as any };
+    const viewRef = { current: null as unknown as EditorView | null };
 
     const { result } = renderHook(() =>
       useEditorContextMenu(
         viewRef,
         'plaintext',
-        'tab-1',
-        false
+        'tab-1'
       )
     );
 
@@ -78,14 +78,13 @@ describe('useEditorContextMenu', () => {
   });
 
   it('should close context menu via setContextMenu', () => {
-    const viewRef = { current: null as any };
+    const viewRef = { current: null as unknown as EditorView | null };
 
     const { result } = renderHook(() =>
       useEditorContextMenu(
         viewRef,
         'plaintext',
-        'tab-1',
-        false
+        'tab-1'
       )
     );
 

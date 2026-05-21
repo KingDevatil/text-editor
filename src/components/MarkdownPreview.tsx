@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { marked } from 'marked';
 import { Copy, Clipboard } from 'lucide-react';
-import { getEditorContent } from '../hooks/useEditorStatePool';
+import { subscribeContentChange } from '../hooks/useEditorStatePool';
 import { generateHeadingSlugs, slugify } from '../utils/slugify';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 
@@ -13,32 +13,31 @@ interface MarkdownPreviewProps {
 
 const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ tabId, theme, visible = true }) => {
   const [content, setContent] = useState('');
-  const rafRef = useRef<number | null>(null);
-  const lastContentRef = useRef('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstRef = useRef(true);
 
-  // Poll content changes using requestAnimationFrame (cheap, stops when offscreen)
+  // Subscribe to content changes via event-driven pub/sub with 300ms debounce
   useEffect(() => {
-    if (!visible) {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
+    if (!visible) return;
+    isFirstRef.current = true;
+    const unsubscribe = subscribeContentChange(tabId, (newContent) => {
+      if (isFirstRef.current) {
+        isFirstRef.current = false;
+        setContent(newContent);
+        return;
       }
-      return;
-    }
-
-    const poll = () => {
-      const current = getEditorContent(tabId);
-      if (current !== lastContentRef.current) {
-        lastContentRef.current = current;
-        setContent(current);
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
       }
-      rafRef.current = requestAnimationFrame(poll);
-    };
-    rafRef.current = requestAnimationFrame(poll);
+      debounceRef.current = setTimeout(() => {
+        setContent(newContent);
+      }, 300);
+    });
     return () => {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
+      unsubscribe();
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
       }
     };
   }, [tabId, visible]);

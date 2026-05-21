@@ -1,5 +1,5 @@
 import { EditorView, Decoration, ViewPlugin, ViewUpdate, type DecorationSet } from '@codemirror/view';
-import { StateField, StateEffect, RangeSetBuilder } from '@codemirror/state';
+import { StateField, StateEffect, RangeSetBuilder, Text } from '@codemirror/state';
 import { SearchCursor, RegExpCursor } from '@codemirror/search';
 
 export interface SearchQuery {
@@ -25,9 +25,10 @@ const searchHighlightField = StateField.define<SearchQuery | null>({
 });
 
 const MAX_HIGHLIGHT_CHARS = 200_000;
+const VIEWPORT_BUFFER = 5000;
 
 function getMatches(
-  doc: any,
+  doc: Text,
   query: SearchQuery,
   from: number,
   to: number
@@ -77,6 +78,8 @@ const searchHighlightPlugin = ViewPlugin.fromClass(
 
       if (queryChanged || update.docChanged) {
         this.rebuild(update.view);
+      } else if (update.viewportChanged && update.view.state.doc.length > MAX_HIGHLIGHT_CHARS) {
+        this.rescanViewport(update.view);
       } else if (update.selectionSet) {
         this.updateSelection(update.view);
       }
@@ -93,8 +96,31 @@ const searchHighlightPlugin = ViewPlugin.fromClass(
         return;
       }
 
-      const scanTo = Math.min(view.state.doc.length, MAX_HIGHLIGHT_CHARS);
-      this.cachedMatches = getMatches(view.state.doc, query, 0, scanTo);
+      this.rescanViewport(view);
+    }
+
+    /** Scan visible viewport (with buffer) for large files, or full doc for small files. */
+    rescanViewport(view: EditorView) {
+      const query = this.cachedQuery;
+      if (!query) return;
+
+      const docLen = view.state.doc.length;
+      let from: number;
+      let to: number;
+
+      if (docLen <= MAX_HIGHLIGHT_CHARS) {
+        from = 0;
+        to = docLen;
+      } else {
+        const viewport = view.viewport;
+        from = Math.max(0, viewport.from - VIEWPORT_BUFFER);
+        to = Math.min(docLen, viewport.to + VIEWPORT_BUFFER);
+        if (to - from > MAX_HIGHLIGHT_CHARS) {
+          to = from + MAX_HIGHLIGHT_CHARS;
+        }
+      }
+
+      this.cachedMatches = getMatches(view.state.doc, query, from, to);
       this.updateSelection(view);
     }
 

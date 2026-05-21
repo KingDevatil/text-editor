@@ -50,13 +50,18 @@ export function injectThemeVars(colors: ThemeColors): void {
   .cm-editor .cm-cursor {
     border-left-color: ${colors.editorCursor} !important;
   }`;
+  window.dispatchEvent(new CustomEvent('te-theme-change'));
 }
 
-// Pre-inject saved theme colors on module load so CSS variables exist
-// before CmEditor initializes (App.tsx useEffect runs after child mount)
-if (typeof document !== 'undefined') {
+/**
+ * Apply saved theme colors from settings store.
+ * Called by App.tsx after settings initialization to avoid flash of wrong theme.
+ */
+export function applySavedTheme(): void {
+  if (typeof document === 'undefined') return;
   try {
-    const saved = JSON.parse(localStorage.getItem('te2-settings') || '{}');
+    const raw = localStorage.getItem('te2-prefs') || localStorage.getItem('te2-settings') || '{}';
+    const saved = JSON.parse(raw);
     const theme = saved.theme || 'dark';
     if (theme === 'light') {
       injectThemeVars({ ...defaultLightColors, ...saved.lightCustomColors });
