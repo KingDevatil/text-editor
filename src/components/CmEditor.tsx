@@ -383,6 +383,8 @@ const CmEditor: React.FC<CmEditorProps> = ({
       effects: compartmentsRef.current!.lineSeparator.reconfigure(lineSepExt),
     });
     setEditorState(tabId, view.state);
+    // Notify listeners (e.g. previews) that serialization format changed
+    notifyContentChange(tabId);
   }, [lineEnding, tabId]);
 
   // Dynamic reconfiguration: unicode highlight

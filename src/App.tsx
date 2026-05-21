@@ -577,9 +577,8 @@ function App() {
       if (!activeTab) return;
       setTabLineEnding(activeTab.id, ending);
       markTabDirty(activeTab.id, true);
-      // Explicitly refresh content so listeners (e.g. previews) pick up the new EOL format
-      const content = getEditorContent(activeTab.id);
-      updateEditorContent(activeTab.id, content);
+      // Note: listeners (e.g. previews) are notified via CmEditor's lineEnding effect,
+      // which calls notifyContentChange after updating lineSeparator.
     },
     [activeTab, setTabLineEnding, markTabDirty]
   );
