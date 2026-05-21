@@ -10,13 +10,16 @@ import { useSettingsStore } from './hooks/useSettingsStore';
 import { useUIStore } from './hooks/useUIStore';
 import { useFileOpener } from './hooks/useFileOpener';
 import { useFileWatcher } from './hooks/useFileWatcher';
+import { useSessionRestore, saveSession } from './hooks/useSessionRestore';
+import { useMru } from './hooks/useMru';
 import { getEditorContent, updateEditorContent, getActiveView } from './hooks/useEditorStatePool';
 import { formatDocument, goToDefinition } from './utils/cmCommands';
 import { perf } from './utils/perf';
-import type { Encoding } from './types';
+import type { Encoding, LineEnding } from './types';
 import { detectLineEnding } from './utils/lineEnding';
+import { preloadCommonLanguages, loadLanguageExtensions, isLanguageCached } from './utils/languageExtensions';
 import { resolveThemeColors } from './utils/themeResolver';
-import { injectThemeVars } from './utils/themeInjector';
+import { injectThemeVars, applySavedTheme } from './utils/themeInjector';
 import Toolbar from './components/Toolbar';
 import TabBar from './components/TabBar';
 import FindReplace from './components/FindReplace';
@@ -32,6 +35,11 @@ import DiffEditor from './components/DiffEditor';
 import CommandPalette from './components/CommandPalette';
 import TitleBar from './components/TitleBar';
 import DiagnosticsPanel from './components/DiagnosticsPanel';
+import QuickOpen from './components/QuickOpen';
+import ExternalChangeDialog from './components/ExternalChangeDialog';
+
+// Apply saved theme as early as possible to avoid flash
+applySavedTheme();
 
 function App() {
   const tabs = useEditorStore((s) => s.tabs);
@@ -54,6 +62,7 @@ function App() {
   const handleFormatRef = useRef<(() => void) | null>(null);
   const findReplaceVisibleRef = useRef(findReplaceVisible);
   const columnAlignSupportedRef = useRef(false);
+  const columnAlignSupported = useSettingsStore((s) => s.columnAlignSupported);
 
   // Keep all callback refs up-to-date outside of render phase
   useEffect(() => {
@@ -76,7 +85,6 @@ function App() {
   const readMode = useUIStore((s) => s.readMode);
   const diagnosticsPanelVisible = useUIStore((s) => s.diagnosticsPanelVisible);
   const setDiagnosticsPanelVisible = useUIStore((s) => s.setDiagnosticsPanelVisible);
-  const columnAlignSupported = useSettingsStore((s) => s.columnAlignSupported);
   const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId) || null);
   const columnAlignEnabled = activeTab?.columnAlignEnabled ?? false;
   const setTabColumnAlign = useEditorStore((s) => s.setTabColumnAlign);
@@ -91,6 +99,17 @@ function App() {
   const setSplitMode = useEditorStore((s) => s.setSplitMode);
   const setProjectPath = useEditorStore((s) => s.setProjectPath);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [quickOpenOpen, setQuickOpenOpen] = useState(false);
+  const [externalChangeNotice, setExternalChangeNotice] = useState<string | null>(null);
+  const [externalDiff, setExternalDiff] = useState<{
+    open: boolean;
+    filePath: string;
+    currentContent: string;
+    externalContent: string;
+    externalEncoding: string;
+    tabId: string;
+  } | null>(null);
+  const { items: mruItems } = useMru();
   const setTabEncoding = useEditorStore((s) => s.setTabEncoding);
   const setTabLineEnding = useEditorStore((s) => s.setTabLineEnding);
   const setTabLanguage = useEditorStore((s) => s.setTabLanguage);
@@ -113,28 +132,43 @@ function App() {
     const tab = useEditorStore.getState().tabs.find((t) => t.filePath === changedPath);
     if (!tab) return;
 
-    if (tab.isDirty) {
-      const ok = await confirm(
-        `"${tab.title}" 已被外部程序修改。是否重新加载并覆盖当前未保存的更改？`,
-        { title: '文件已更改', kind: 'warning' }
-      );
-      if (!ok) return;
+    let externalText: string;
+    let externalEncoding: string;
+    try {
+      const result = await invoke<{ text: string; encoding: string }>('read_file_auto_detect', {
+        path: changedPath,
+      });
+      externalText = result.text;
+      externalEncoding = result.encoding;
+    } catch (err) {
+      console.error('Failed to read externally changed file:', err);
+      return;
     }
 
     const stillTab = useEditorStore.getState().tabs.find((t) => t.filePath === changedPath);
     if (!stillTab) return;
 
-    try {
-      const result = await invoke<{ text: string; encoding: string }>('read_file_auto_detect', {
-        path: changedPath,
-      });
-      updateEditorContent(stillTab.id, result.text);
+    // If no unsaved changes, silently reload and show a transient notice
+    if (!tab.isDirty) {
+      updateEditorContent(stillTab.id, externalText);
       markTabSaved(stillTab.id);
-      setTabEncoding(stillTab.id, result.encoding as Encoding);
-      setTabLineEnding(stillTab.id, detectLineEnding(result.text));
-    } catch (err) {
-      console.error('Failed to reload changed file:', err);
+      setTabEncoding(stillTab.id, externalEncoding as Encoding);
+      setTabLineEnding(stillTab.id, detectLineEnding(externalText));
+      setExternalChangeNotice('已同步外部变更');
+      window.setTimeout(() => setExternalChangeNotice(null), 2500);
+      return;
     }
+
+    // If there are unsaved changes, show diff dialog
+    const currentContent = getEditorContent(stillTab.id);
+    setExternalDiff({
+      open: true,
+      filePath: changedPath,
+      currentContent,
+      externalContent: externalText,
+      externalEncoding,
+      tabId: stillTab.id,
+    });
   }, [markTabSaved, setTabEncoding, setTabLineEnding]);
 
   const { pauseWatch, resumeWatch } = useFileWatcher(tabs, handleFileChanged);
@@ -146,6 +180,29 @@ function App() {
     }
   }, [tabs.length, splitMode, setSplitMode]);
 
+  // Preload language packs for currently open tabs during idle time
+  useEffect(() => {
+    const langs = new Set(tabs.map((t) => t.language));
+    const idleCallback =
+      typeof window !== 'undefined' && 'requestIdleCallback' in window
+        ? window.requestIdleCallback
+        : (cb: () => void) => setTimeout(cb, 500);
+    const handle = idleCallback(() => {
+      for (const lang of langs) {
+        if (!isLanguageCached(lang)) {
+          loadLanguageExtensions(lang).catch(() => {});
+        }
+      }
+    });
+    return () => {
+      if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(handle as number);
+      } else {
+        clearTimeout(handle as ReturnType<typeof setTimeout>);
+      }
+    };
+  }, [tabs]);
+
   // Show window after paint completes to avoid blank screen
   useEffect(() => {
     if (!isTauri()) return;
@@ -154,6 +211,11 @@ function App() {
         getCurrentWindow().show().catch(() => {});
       });
     });
+  }, []);
+
+  // Preload common language packs on startup
+  useEffect(() => {
+    preloadCommonLanguages();
   }, []);
 
   // Listen for file open events from backend (single instance / file association)
@@ -224,6 +286,11 @@ function App() {
         e.preventDefault();
         setCommandPaletteOpen((v) => !v);
       }
+      // Quick open shortcut: Ctrl+P
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p' && !e.shiftKey) {
+        e.preventDefault();
+        setQuickOpenOpen((v) => !v);
+      }
       // Read mode toggle: Ctrl+Shift+V
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
         e.preventDefault();
@@ -264,7 +331,9 @@ function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [setFindReplaceVisible, setReadMode]);
+  }, [setFindReplaceVisible, setReadMode, setTabColumnAlign]);
+
+  useSessionRestore();
 
   const handleNewFile = useCallback(() => {
     const group = activeTab?.group || 1;
@@ -340,14 +409,15 @@ function App() {
       await Promise.all(filePromises);
       e.target.value = '';
     },
-    [openFile, setActiveTabId, createTab]
+    [openFile, setActiveTabId, createTab, setTabLineEnding]
   );
 
-  /** Convert normalized LF back to the tab's original line ending before saving. */
-  const normalizeLineEnding = useCallback((text: string, lineEnding: string | undefined): string => {
-    if (lineEnding === 'CRLF') return text.replace(/\n/g, '\r\n');
-    if (lineEnding === 'CR') return text.replace(/\n/g, '\r');
-    return text;
+  /** Convert text to the tab's target line ending before saving. */
+  const normalizeLineEnding = useCallback((text: string, lineEnding: LineEnding | undefined): string => {
+    const lf = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    if (lineEnding === 'CRLF') return lf.replace(/\n/g, '\r\n');
+    if (lineEnding === 'CR') return lf.replace(/\n/g, '\r');
+    return lf;
   }, []);
 
   const handleSaveFile = useCallback(async () => {
@@ -409,7 +479,7 @@ function App() {
 
       await message(msg, { title: '保存失败', kind: 'error' });
     }
-  }, [activeTab, markTabSaved, renameTab, pauseWatch, resumeWatch]);
+  }, [activeTab, markTabSaved, renameTab, pauseWatch, resumeWatch, normalizeLineEnding]);
   useEffect(() => {
     handleSaveFileRef.current = handleSaveFile;
   });
@@ -502,6 +572,18 @@ function App() {
     });
   }, [setTheme]);
 
+  const handleLineEndingChange = useCallback(
+    (ending: LineEnding) => {
+      if (!activeTab) return;
+      setTabLineEnding(activeTab.id, ending);
+      markTabDirty(activeTab.id, true);
+      // Explicitly refresh content so listeners (e.g. previews) pick up the new EOL format
+      const content = getEditorContent(activeTab.id);
+      updateEditorContent(activeTab.id, content);
+    },
+    [activeTab, setTabLineEnding, markTabDirty]
+  );
+
   const handleEncodingChange = useCallback(
     async (enc: Encoding) => {
       if (!activeTab) return;
@@ -562,6 +644,7 @@ function App() {
     const getStore = useEditorStore.getState;
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      saveSession();
       if (getStore().tabs.some((t) => t.isDirty)) {
         e.preventDefault();
       }
@@ -571,6 +654,7 @@ function App() {
     let tauriUnlisten: (() => void) | undefined;
     if (isTauri()) {
       getCurrentWindow().onCloseRequested((event) => {
+        saveSession();
         const dirtyTabs = getStore().tabs.filter((t) => t.isDirty);
         if (dirtyTabs.length > 0) {
           const names = dirtyTabs.map((t) => `"${t.title}"`).join(', ');
@@ -637,7 +721,7 @@ function App() {
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('drop', handleDrop);
     };
-  }, [setActiveTabId, createTab]);
+  }, [setActiveTabId, createTab, setTabLineEnding]);
 
   const canFormat = !!activeTab;
 
@@ -843,6 +927,22 @@ function App() {
             onClose={() => setCommandPaletteOpen(false)}
             commands={commands}
           />
+          <QuickOpen
+            open={quickOpenOpen}
+            onClose={() => setQuickOpenOpen(false)}
+            mruItems={mruItems}
+            openTabs={tabs.map((t) => ({ id: t.id, title: t.title, filePath: t.filePath }))}
+            onOpenFile={(path) => {
+              setReaderScrollToTop(true);
+              openFile(path);
+            }}
+            onActivateTab={(id) => {
+              const tab = tabs.find((t) => t.id === id);
+              if (tab) {
+                handleTabClick(id, (tab.group || 1) as 1 | 2);
+              }
+            }}
+          />
 
           <div className="flex flex-1 overflow-hidden relative">
             {diffMode && diffLeftTabId && diffRightTabId ? (
@@ -882,28 +982,28 @@ function App() {
                     <div className="flex-1 h-full min-w-0">
                       {group2Tabs.length > 0 ? (
                         group2Tabs.map((tab) => (
-                            <div
-                              key={tab.id}
-                              className="h-full w-full"
-                              style={{ display: tab.id === activeGroup2TabId ? 'flex' : 'none' }}
-                            >
-                              <CmEditor
-                                tabId={tab.id}
-                                language={tab.language}
-                                theme={theme}
-                                fontSize={fontSize}
-                                initialContent={tab.initialContent || ''}
-                                largeFileOptimize={largeFileOptimize}
-                                wordWrap={wordWrap}
-                                showWhitespace={showWhitespace}
-                                scrollPastEnd={scrollPastEnd}
-                                minimapVisible={minimapVisible}
-                                unicodeHighlight={unicodeHighlight}
-                                columnAlignEnabled={columnAlignSupported && (tab.columnAlignEnabled ?? false)}
-                                lineEnding={tab.lineEnding}
-                              />
-                            </div>
-                          ))
+                          <div
+                            key={tab.id}
+                            className="h-full w-full"
+                            style={{ display: tab.id === activeGroup2TabId ? 'flex' : 'none' }}
+                          >
+                            <CmEditor
+                              tabId={tab.id}
+                              language={tab.language}
+                              theme={theme}
+                              fontSize={fontSize}
+                              initialContent={tab.initialContent || ''}
+                              largeFileOptimize={largeFileOptimize}
+                              wordWrap={wordWrap}
+                              showWhitespace={showWhitespace}
+                              scrollPastEnd={scrollPastEnd}
+                              minimapVisible={minimapVisible}
+                              unicodeHighlight={unicodeHighlight}
+                              columnAlignEnabled={columnAlignSupported && (tab.columnAlignEnabled ?? false)}
+                              lineEnding={tab.lineEnding}
+                            />
+                          </div>
+                        ))
                       ) : (
                         <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-600 bg-white dark:bg-gray-900">
                           <p className="text-sm">选择标签页开始编辑</p>
@@ -990,6 +1090,8 @@ function App() {
                 setTabLanguage(activeTab.id, lang);
               }
             }}
+            lineEnding={activeTab?.lineEnding}
+            onLineEndingChange={handleLineEndingChange}
             wordWrap={wordWrap}
             onToggleWordWrap={() => {
               const next = !wordWrap;
@@ -1014,7 +1116,31 @@ function App() {
               }
             }}
             columnAlignSupported={columnAlignSupported}
+            externalChangeNotice={externalChangeNotice}
           />
+
+          {externalDiff?.open && (
+            <ExternalChangeDialog
+              open={externalDiff.open}
+              fileName={tabs.find((t) => t.id === externalDiff.tabId)?.title ?? ''}
+              currentContent={externalDiff.currentContent}
+              externalContent={externalDiff.externalContent}
+              theme={theme}
+              onUseExternal={() => {
+                updateEditorContent(externalDiff.tabId, externalDiff.externalContent);
+                markTabSaved(externalDiff.tabId);
+                setTabEncoding(externalDiff.tabId, externalDiff.externalEncoding as Encoding);
+                setTabLineEnding(externalDiff.tabId, detectLineEnding(externalDiff.externalContent));
+                setExternalDiff(null);
+              }}
+              onKeepCurrent={() => {
+                setExternalDiff(null);
+              }}
+              onClose={() => {
+                setExternalDiff(null);
+              }}
+            />
+          )}
         </div>
       </div>
 

@@ -19,6 +19,10 @@ import {
   setActiveView,
   getEditorScrollTop,
   setEditorScrollTop,
+  notifyContentChange,
+  notifyEditorUpdate,
+  takePendingScrollTop,
+  takePendingSelection,
 } from '../hooks/useEditorStatePool';
 import ContextMenu from './ContextMenu';
 import Minimap from './Minimap';
@@ -26,7 +30,7 @@ import { useEditorStore } from '../hooks/useEditorStore';
 import { useSettingsStore } from '../hooks/useSettingsStore';
 import { executeMarkdownAction } from '../utils/markdownActions';
 import MarkdownToolbar from './MarkdownToolbar';
-import { createCompartments, buildBaseExtensions, loadLanguageExtensions, type EditorCompartments } from '../utils/editorExtensions';
+import { getOrCreateCompartments, buildBaseExtensions, loadLanguageExtensions, type EditorCompartments } from '../utils/editorExtensions';
 import { useEditorContextMenu } from '../hooks/useEditorContextMenu';
 
 interface CmEditorProps {
@@ -45,8 +49,6 @@ interface CmEditorProps {
   columnAlignEnabled?: boolean;
   lineEnding?: LineEnding;
 }
-
-const FORMATTABLE_LANGUAGES = new Set(['json', 'jsonl', 'xml', 'html', 'css', 'javascript', 'typescript', 'sql']);
 
 const CmEditor: React.FC<CmEditorProps> = ({
   tabId,
@@ -67,13 +69,11 @@ const CmEditor: React.FC<CmEditorProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const compartmentsRef = useRef<EditorCompartments | null>(null);
-  if (!compartmentsRef.current) {
-    compartmentsRef.current = createCompartments();
+  if (compartmentsRef.current == null) {
+    compartmentsRef.current = getOrCreateCompartments(tabId);
   }
 
-  const canFormat = FORMATTABLE_LANGUAGES.has(language);
-
-  const { contextMenu, setContextMenu, handleContextMenu } = useEditorContextMenu(viewRef, language, tabId, canFormat);
+  const { contextMenu, setContextMenu, handleContextMenu } = useEditorContextMenu(viewRef, language, tabId);
 
   // Subscribe to custom colors from settings store for dynamic theme resolution
   const lightCustomColors = useSettingsStore((s) => s.lightCustomColors);
@@ -116,7 +116,9 @@ const CmEditor: React.FC<CmEditorProps> = ({
             setEditorState(tabId, update.state);
             if (update.docChanged) {
               useEditorStore.getState().markTabDirty(tabId, true);
+              notifyContentChange(tabId);
             }
+            notifyEditorUpdate(tabId);
           }),
         ],
       });
@@ -136,19 +138,42 @@ const CmEditor: React.FC<CmEditorProps> = ({
     });
     viewRef.current = view;
     setActiveView(tabId, view);
+    notifyEditorUpdate(tabId);
 
     // (contextmenu binding moved to a dedicated useEffect below to match original code)
 
+    // Real-time scroll position saving so we always have the latest value
+    const scroller = view.scrollDOM;
+    const onScroll = () => {
+      setEditorScrollTop(tabId, scroller.scrollTop);
+    };
+    scroller.addEventListener('scroll', onScroll);
+
     // Restore previous scroll position for this tab
     const savedScrollTop = getEditorScrollTop(tabId);
-    if (savedScrollTop !== undefined && savedScrollTop > 0) {
-      const restoreScroll = () => {
-        if (viewRef.current) {
-          viewRef.current.scrollDOM.scrollTop = savedScrollTop;
-        }
-      };
-      requestAnimationFrame(restoreScroll);
-      setTimeout(restoreScroll, 50);
+    const pendingScroll = takePendingScrollTop(tabId);
+    const targetScrollTop = pendingScroll ?? savedScrollTop;
+
+    const restoreScroll = () => {
+      if (viewRef.current && targetScrollTop !== undefined) {
+        viewRef.current.scrollDOM.scrollTop = targetScrollTop;
+      }
+    };
+
+    // Try restoring immediately, after rAF, and after delays.
+    // CM6 may reset scrollTop during initial layout or async reconfiguration,
+    // so we restore multiple times.
+    restoreScroll();
+    requestAnimationFrame(restoreScroll);
+    setTimeout(restoreScroll, 50);
+    setTimeout(restoreScroll, 200);
+
+    // Restore pending selection from session restore
+    const pendingSel = takePendingSelection(tabId);
+    if (pendingSel) {
+      view.dispatch({
+        selection: { anchor: pendingSel.anchor, head: pendingSel.head },
+      });
     }
 
     // Ensure wordWrap is applied even when reusing a pooled state with stale config
@@ -161,16 +186,6 @@ const CmEditor: React.FC<CmEditorProps> = ({
       effects: compartmentsRef.current!.whitespace.reconfigure(
         showWhitespace ? [highlightWhitespace(), highlightTrailingWhitespace(), eolMarkers] : []
       ),
-    });
-
-    // Ensure lineSeparator is applied even when reusing a pooled state
-    const lineSepExt = lineEnding === 'CRLF'
-      ? EditorState.lineSeparator.of('\r\n')
-      : lineEnding === 'CR'
-      ? EditorState.lineSeparator.of('\r')
-      : EditorState.lineSeparator.of('\n');
-    view.dispatch({
-      effects: compartmentsRef.current!.lineSeparator.reconfigure(lineSepExt),
     });
 
     // Apply fontSize via CSS variable for instant visual feedback
@@ -207,6 +222,11 @@ const CmEditor: React.FC<CmEditorProps> = ({
       viewRef.current.dispatch({
         effects: compartmentsRef.current!.language.reconfigure(exts),
       });
+      // Re-apply scroll position after language extension changes layout
+      const latestScrollTop = getEditorScrollTop(tabId);
+      if (latestScrollTop !== undefined && viewRef.current) {
+        viewRef.current.scrollDOM.scrollTop = latestScrollTop;
+      }
     }).catch((err) => {
       console.error(`[CmEditor] Failed to load language ${language}:`, err);
     });
@@ -214,6 +234,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
     return () => {
       cancelled = true;
       dblClickCleanup?.();
+      scroller.removeEventListener('scroll', onScroll);
       // (contextmenu unbinding handled in dedicated useEffect below)
       if (view) {
         setEditorScrollTop(tabId, view.scrollDOM.scrollTop);
@@ -223,8 +244,9 @@ const CmEditor: React.FC<CmEditorProps> = ({
         viewRef.current = null;
       }
     };
-  // Only re-run when tabId changes (or largeFileOptimize which affects base extensions).
-  // Language/theme/fontSize/readOnly changes are handled by their own effects below.
+    // Only re-run when tabId changes (or largeFileOptimize which affects base extensions).
+    // Language/theme/fontSize/readOnly changes are handled by their own effects below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabId, largeFileOptimize]);
 
   // Context menu binding — kept in a dedicated useEffect with [handleContextMenu]
@@ -244,6 +266,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
     const view = viewRef.current;
     if (!view) return;
 
+    let cancelled = false;
     const nonce = ++langNonceRef.current;
     console.log('[CmEditor] language change:', language, 'tabId:', tabId);
 
@@ -259,8 +282,8 @@ const CmEditor: React.FC<CmEditorProps> = ({
 
     // Then load heavy pack in background
     loadLanguageExtensions(language).then((exts) => {
-      // Ignore stale responses from rapid language switches
-      if (nonce !== langNonceRef.current) {
+      // Ignore stale responses from rapid language switches or unmount
+      if (cancelled || nonce !== langNonceRef.current) {
         console.log('[CmEditor] language change stale, ignoring', language);
         return;
       }
@@ -273,6 +296,10 @@ const CmEditor: React.FC<CmEditorProps> = ({
     }).catch((err) => {
       console.error(`[CmEditor] Failed to load language ${language}:`, err);
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [language, tabId]);
 
   // Dynamic reconfiguration: theme
@@ -334,7 +361,22 @@ const CmEditor: React.FC<CmEditorProps> = ({
       ),
     });
     setEditorState(tabId, view.state);
-  }, [showWhitespace, tabId, highlightWhitespace, highlightTrailingWhitespace, eolMarkers]);
+  }, [showWhitespace, tabId]);
+
+  // Dynamic reconfiguration: line ending
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const lineSepExt = lineEnding === 'CRLF'
+      ? EditorState.lineSeparator.of('\r\n')
+      : lineEnding === 'CR'
+      ? EditorState.lineSeparator.of('\r')
+      : EditorState.lineSeparator.of('\n');
+    view.dispatch({
+      effects: compartmentsRef.current!.lineSeparator.reconfigure(lineSepExt),
+    });
+    setEditorState(tabId, view.state);
+  }, [lineEnding, tabId]);
 
   // Dynamic reconfiguration: unicode highlight
   useEffect(() => {
@@ -346,17 +388,63 @@ const CmEditor: React.FC<CmEditorProps> = ({
     setEditorState(tabId, view.state);
   }, [enableUnicodeHighlight, tabId]);
 
-  // Dynamic reconfiguration: large file optimize (foldGutter + bracketMatching)
+  // Dynamic reconfiguration: large file optimize (disable heavy features + foldGutter)
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
-    view.dispatch({
-      effects: compartmentsRef.current!.largeFile.reconfigure(
-        largeFileOptimize ? [] : [foldGutter({ openText: '▼', closedText: '▶' }), keymap.of(foldKeymap)]
-      ),
-    });
-    setEditorState(tabId, view.state);
-  }, [largeFileOptimize, tabId]);
+
+    if (largeFileOptimize) {
+      view.dispatch({
+        effects: [
+          compartmentsRef.current!.largeFile.reconfigure([]),
+          compartmentsRef.current!.heavyFeatures.reconfigure([]),
+        ],
+      });
+      setEditorState(tabId, view.state);
+      return;
+    }
+
+    // Restore heavy features when leaving large-file mode
+    let cancelled = false;
+    (async () => {
+      const [{ getLinterExtension }, { getAutocompleteExtension }, { indentGuides }, { hoverInfo }, { bracketColorization }, { signatureHelp }, { columnAlignExtension }, { markedLinesField, pairGutter, bracketAndTagMatcher }, { highlightSelectionMatches }] = await Promise.all([
+        import('../utils/lint'),
+        import('../utils/autocomplete'),
+        import('../utils/indentGuides'),
+        import('../utils/hover'),
+        import('../utils/bracketColorization'),
+        import('../utils/signatureHelp'),
+        import('../utils/columnAlign'),
+        import('../utils/bracketTagMatching'),
+        import('@codemirror/search'),
+      ]);
+      if (cancelled || !viewRef.current) return;
+      const heavyExts = [
+        markedLinesField,
+        pairGutter,
+        bracketAndTagMatcher,
+        highlightSelectionMatches(),
+        ...(getLinterExtension(language) ? [getLinterExtension(language)!] : []),
+        ...(getAutocompleteExtension(language, tabId) ? [getAutocompleteExtension(language, tabId)!] : []),
+        ...indentGuides,
+        hoverInfo,
+        bracketColorization,
+        signatureHelp(),
+        columnAlignExtension,
+      ];
+      viewRef.current.dispatch({
+        effects: [
+          compartmentsRef.current!.largeFile.reconfigure([foldGutter({ openText: '▼', closedText: '▶' }), keymap.of(foldKeymap)]),
+          compartmentsRef.current!.heavyFeatures.reconfigure(heavyExts),
+        ],
+      });
+      setEditorState(tabId, viewRef.current.state);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [largeFileOptimize, tabId, language]);
 
   // Dynamic reconfiguration: column align
   const dragLayerCleanupRef = useRef<(() => void) | null>(null);
@@ -439,7 +527,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
             />
           )}
         </div>
-        {minimapVisible && <Minimap viewRef={viewRef} theme={theme} />}
+        {minimapVisible && <Minimap tabId={tabId} viewRef={viewRef} theme={theme} />}
       </div>
     </div>
   );

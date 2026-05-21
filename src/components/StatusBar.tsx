@@ -1,14 +1,16 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { FileType, ChevronUp, AlertCircle } from 'lucide-react';
+import { FileType, ChevronUp, AlertCircle, RefreshCw } from 'lucide-react';
 import { forEachDiagnostic } from '@codemirror/lint';
-import type { EditorTab, Encoding, Language } from '../types';
-import { getEditorContent, getEditorLineCount, getEditorValueLength, getActiveView } from '../hooks/useEditorStatePool';
+import type { EditorTab, Encoding, Language, LineEnding } from '../types';
+import { getEditorLineCount, getEditorValueLength, getActiveView, subscribeContentChange } from '../hooks/useEditorStatePool';
 
 interface StatusBarProps {
   activeTab: EditorTab | null;
   theme: string;
   onEncodingChange?: (encoding: Encoding) => void;
   onLanguageChange?: (language: Language) => void;
+  lineEnding?: LineEnding;
+  onLineEndingChange?: (lineEnding: LineEnding) => void;
   wordWrap?: boolean;
   onToggleWordWrap?: () => void;
   showWhitespace?: boolean;
@@ -20,6 +22,7 @@ interface StatusBarProps {
   columnAlignEnabled?: boolean;
   onToggleColumnAlign?: () => void;
   columnAlignSupported?: boolean;
+  externalChangeNotice?: string | null;
 }
 
 const ENCODINGS: Encoding[] = [
@@ -37,6 +40,8 @@ const ENCODINGS: Encoding[] = [
   'ISO-8859-1',
   'Windows-1252',
 ];
+
+const LINE_ENDINGS: LineEnding[] = ['CRLF', 'LF', 'CR'];
 
 const LANGUAGES: { id: Language; label: string }[] = [
   { id: 'plaintext', label: 'Plain Text' },
@@ -88,18 +93,19 @@ function countWords(text: string): number {
 
 const StatusBar: React.FC<StatusBarProps> = React.memo(({
   activeTab, onEncodingChange, onLanguageChange,
+  lineEnding, onLineEndingChange,
   wordWrap, onToggleWordWrap, showWhitespace, onToggleShowWhitespace,
   minimapVisible, onToggleMinimap,
   diagnosticsPanelVisible, onToggleDiagnosticsPanel,
   columnAlignEnabled, onToggleColumnAlign,
   columnAlignSupported,
+  externalChangeNotice,
 }) => {
   const [wordCount, setWordCount] = useState(0);
   const [calculating, setCalculating] = useState(false);
   const [diagnosticCount, setDiagnosticCount] = useState(0);
-  const rafRef = useRef<number | null>(null);
+  const [contentVersion, setContentVersion] = useState(0);
   const diagRef = useRef<number | null>(null);
-  const lastContentRef = useRef('');
 
   // Quick stats from state pool — read directly so they update on every render
   const quickStats = useMemo(() => {
@@ -109,9 +115,9 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
       charCount: getEditorValueLength(activeTab.id),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, activeTab?.id, wordCount]); // wordCount changes on content edit, triggering re-calc
+  }, [activeTab, activeTab?.id, contentVersion]);
 
-  // Async debounced word count via polling (CM6 has no model.onDidChangeContent)
+  // Event-driven word count via subscribeContentChange + debounce
   useEffect(() => {
     if (!activeTab) {
       queueMicrotask(() => {
@@ -121,34 +127,30 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
       return;
     }
 
-    const poll = () => {
-      const content = getEditorContent(activeTab.id);
-      if (content !== lastContentRef.current) {
-        lastContentRef.current = content;
-        const isLarge = content.length > 500 * 1024;
-        if (isLarge) setCalculating(true);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-        // Defer heavy counting
-        setTimeout(() => {
-          setWordCount(countWords(content));
-          setCalculating(false);
-        }, isLarge ? 800 : 300);
-      }
-      rafRef.current = requestAnimationFrame(poll);
-    };
+    const unsubscribe = subscribeContentChange(activeTab.id, (content) => {
+      setContentVersion((v) => v + 1);
+      if (timeoutId) clearTimeout(timeoutId);
+      const isLarge = content.length > 500 * 1024;
+      if (isLarge) setCalculating(true);
+      timeoutId = setTimeout(() => {
+        setWordCount(countWords(content));
+        setCalculating(false);
+      }, isLarge ? 800 : 300);
+    });
 
-    rafRef.current = requestAnimationFrame(poll);
     return () => {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-      }
+      unsubscribe();
+      if (timeoutId) clearTimeout(timeoutId);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab?.id]);
 
   // Diagnostic count polling
   useEffect(() => {
     if (!activeTab) {
-      setDiagnosticCount(0);
+      queueMicrotask(() => setDiagnosticCount(0));
       return;
     }
     const poll = () => {
@@ -171,15 +173,19 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
         diagRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab?.id]);
 
   const [encOpen, setEncOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
+  const [leOpen, setLeOpen] = useState(false);
   const encRef = useRef<HTMLDivElement>(null);
   const langRef = useRef<HTMLDivElement>(null);
+  const leRef = useRef<HTMLDivElement>(null);
 
   useClickOutside(encRef, () => setEncOpen(false));
   useClickOutside(langRef, () => setLangOpen(false));
+  useClickOutside(leRef, () => setLeOpen(false));
 
   return (
     <div
@@ -191,7 +197,7 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
           <>
             <div className="relative" ref={langRef}>
               <button
-                onClick={() => { setLangOpen(!langOpen); setEncOpen(false); }}
+                onClick={() => { setLangOpen(!langOpen); setEncOpen(false); setLeOpen(false); }}
                 className="flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors cursor-pointer hover:opacity-80"
                 title="点击切换语言模式"
               >
@@ -233,6 +239,12 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
         )}
       </div>
       <div className="flex items-center gap-3">
+        {externalChangeNotice && (
+          <span className="flex items-center gap-1 text-[10px] font-medium" style={{ color: 'var(--te-success)' }}>
+            <RefreshCw size={10} />
+            {externalChangeNotice}
+          </span>
+        )}
         {activeTab && (
           <>
             <span className="tabular-nums">行 {quickStats.lineCount}</span>
@@ -306,9 +318,39 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
             )}
           </>
         )}
+        <div className="relative" ref={leRef}>
+          <button
+            onClick={() => { setLeOpen(!leOpen); setEncOpen(false); setLangOpen(false); }}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors cursor-pointer hover:opacity-80"
+            title="点击切换换行符"
+          >
+            <span className="font-medium">{lineEnding || 'LF'}</span>
+            <ChevronUp size={10} className={`transition-transform ${leOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {leOpen && (
+            <div
+              className="absolute bottom-full right-0 mb-1 py-1.5 rounded-lg shadow-xl border z-50 min-w-[100px]"
+              style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)' }}
+            >
+              {LINE_ENDINGS.map((le) => (
+                <button
+                  key={le}
+                  onClick={() => { onLineEndingChange?.(le); setLeOpen(false); }}
+                  className={`block w-full text-left px-3 py-1.5 text-xs rounded transition-colors hover:opacity-80 ${lineEnding === le ? 'font-medium' : ''}`}
+                  style={lineEnding === le
+                    ? { backgroundColor: 'color-mix(in srgb, var(--te-primary) 15%, transparent)', color: 'var(--te-primary)' }
+                    : { color: 'var(--te-text-primary)' }
+                  }
+                >
+                  {le}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="relative" ref={encRef}>
           <button
-            onClick={() => { setEncOpen(!encOpen); setLangOpen(false); }}
+            onClick={() => { setEncOpen(!encOpen); setLangOpen(false); setLeOpen(false); }}
             className="flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors cursor-pointer hover:opacity-80"
             title="点击切换编码"
           >
