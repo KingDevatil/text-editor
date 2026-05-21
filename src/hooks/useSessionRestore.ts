@@ -8,6 +8,7 @@ import {
   setPendingSelection,
 } from './useEditorStatePool';
 import type { Encoding } from '../types';
+import { normalizeLineEnding } from '../utils/lineEnding';
 
 const SESSION_KEY = 'te2-session';
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -124,13 +125,20 @@ export function useSessionRestore() {
               'read_file_auto_detect',
               { path: st.filePath }
             );
+            // Normalize file content to the session's line ending so CodeMirror's
+            // lineSeparator matches the document (prevents \n from being treated as
+            // plain text when lineSeparator is \r\n).
+            const normalizedText = normalizeLineEnding(
+              result.text,
+              st.lineEnding as import('../types').LineEnding
+            );
             newTab = createTab(
               st.title,
               st.language as import('../types').Language,
               st.filePath,
               st.group,
               result.encoding as Encoding,
-              result.text,
+              normalizedText,
               st.lineEnding as import('../types').LineEnding
             );
           } catch {

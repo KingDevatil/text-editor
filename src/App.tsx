@@ -16,7 +16,7 @@ import { getEditorContent, updateEditorContent, getActiveView } from './hooks/us
 import { formatDocument, goToDefinition } from './utils/cmCommands';
 import { perf } from './utils/perf';
 import type { Encoding, LineEnding } from './types';
-import { detectLineEnding } from './utils/lineEnding';
+import { detectLineEnding, normalizeLineEnding } from './utils/lineEnding';
 import { preloadCommonLanguages, loadLanguageExtensions, isLanguageCached } from './utils/languageExtensions';
 import { resolveThemeColors } from './utils/themeResolver';
 import { injectThemeVars, applySavedTheme } from './utils/themeInjector';
@@ -412,14 +412,6 @@ function App() {
     [openFile, setActiveTabId, createTab, setTabLineEnding]
   );
 
-  /** Convert text to the tab's target line ending before saving. */
-  const normalizeLineEnding = useCallback((text: string, lineEnding: LineEnding | undefined): string => {
-    const lf = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    if (lineEnding === 'CRLF') return lf.replace(/\n/g, '\r\n');
-    if (lineEnding === 'CR') return lf.replace(/\n/g, '\r');
-    return lf;
-  }, []);
-
   const handleSaveFile = useCallback(async () => {
     if (!activeTab) return;
 
@@ -479,7 +471,7 @@ function App() {
 
       await message(msg, { title: '保存失败', kind: 'error' });
     }
-  }, [activeTab, markTabSaved, renameTab, pauseWatch, resumeWatch, normalizeLineEnding]);
+  }, [activeTab, markTabSaved, renameTab, pauseWatch, resumeWatch]);
   useEffect(() => {
     handleSaveFileRef.current = handleSaveFile;
   });

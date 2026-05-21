@@ -9,6 +9,14 @@ function countLineEndings(text: string): { crlf: number; cr: number; lf: number 
   return { crlf, cr, lf };
 }
 
+/** Normalize any line endings in text to the target format. */
+export function normalizeLineEnding(text: string, lineEnding: LineEnding | undefined): string {
+  const lf = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  if (lineEnding === 'CRLF') return lf.replace(/\n/g, '\r\n');
+  if (lineEnding === 'CR') return lf.replace(/\n/g, '\r');
+  return lf;
+}
+
 export function detectLineEnding(text: string): LineEnding {
   if (text.length <= SAMPLE_SIZE) {
     const { crlf, cr, lf } = countLineEndings(text);
