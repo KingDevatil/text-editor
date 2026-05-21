@@ -125,9 +125,11 @@ const CmEditor: React.FC<CmEditorProps> = ({
               // Guard against transactions that replace the document with identical
               // content (e.g. session-restore + get_pending_files race, or external
               // file reload) so the tab is not falsely marked dirty.
-              const oldText = update.startState.doc.toString();
-              const newText = update.state.doc.toString();
-              if (oldText !== newText) {
+              // Fast path: length mismatch guarantees a real change.
+              const changed =
+                update.startState.doc.length !== update.state.doc.length ||
+                update.startState.doc.toString() !== update.state.doc.toString();
+              if (changed) {
                 useEditorStore.getState().markTabDirty(tabId, true);
                 notifyContentChange(tabId);
               }
