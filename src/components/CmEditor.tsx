@@ -13,6 +13,13 @@ import { getLinterExtension } from '../utils/lint';
 import { getAutocompleteExtension } from '../utils/autocomplete';
 import { unicodeHighlight as unicodeHighlightExt } from '../utils/unicodeHighlight';
 import { foldGutter, foldKeymap } from '@codemirror/language';
+import { highlightSelectionMatches } from '@codemirror/search';
+import { indentGuides } from '../utils/indentGuides';
+import { hoverInfo } from '../utils/hover';
+import { bracketColorization } from '../utils/bracketColorization';
+import { signatureHelp } from '../utils/signatureHelp';
+import { columnAlignExtension } from '../utils/columnAlign';
+import { markedLinesField, pairGutter, bracketAndTagMatcher } from '../utils/bracketTagMatching';
 import {
   getEditorState,
   setEditorState,
@@ -405,45 +412,26 @@ const CmEditor: React.FC<CmEditorProps> = ({
     }
 
     // Restore heavy features when leaving large-file mode
-    let cancelled = false;
-    (async () => {
-      const [{ getLinterExtension }, { getAutocompleteExtension }, { indentGuides }, { hoverInfo }, { bracketColorization }, { signatureHelp }, { columnAlignExtension }, { markedLinesField, pairGutter, bracketAndTagMatcher }, { highlightSelectionMatches }] = await Promise.all([
-        import('../utils/lint'),
-        import('../utils/autocomplete'),
-        import('../utils/indentGuides'),
-        import('../utils/hover'),
-        import('../utils/bracketColorization'),
-        import('../utils/signatureHelp'),
-        import('../utils/columnAlign'),
-        import('../utils/bracketTagMatching'),
-        import('@codemirror/search'),
-      ]);
-      if (cancelled || !viewRef.current) return;
-      const heavyExts = [
-        markedLinesField,
-        pairGutter,
-        bracketAndTagMatcher,
-        highlightSelectionMatches(),
-        ...(getLinterExtension(language) ? [getLinterExtension(language)!] : []),
-        ...(getAutocompleteExtension(language, tabId) ? [getAutocompleteExtension(language, tabId)!] : []),
-        ...indentGuides,
-        hoverInfo,
-        bracketColorization,
-        signatureHelp(),
-        columnAlignExtension,
-      ];
-      viewRef.current.dispatch({
-        effects: [
-          compartmentsRef.current!.largeFile.reconfigure([foldGutter({ openText: '▼', closedText: '▶' }), keymap.of(foldKeymap)]),
-          compartmentsRef.current!.heavyFeatures.reconfigure(heavyExts),
-        ],
-      });
-      setEditorState(tabId, viewRef.current.state);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    const heavyExts = [
+      markedLinesField,
+      pairGutter,
+      bracketAndTagMatcher,
+      highlightSelectionMatches(),
+      ...(getLinterExtension(language) ? [getLinterExtension(language)!] : []),
+      ...(getAutocompleteExtension(language, tabId) ? [getAutocompleteExtension(language, tabId)!] : []),
+      ...indentGuides,
+      hoverInfo,
+      bracketColorization,
+      signatureHelp(),
+      columnAlignExtension,
+    ];
+    view.dispatch({
+      effects: [
+        compartmentsRef.current!.largeFile.reconfigure([foldGutter({ openText: '▼', closedText: '▶' }), keymap.of(foldKeymap)]),
+        compartmentsRef.current!.heavyFeatures.reconfigure(heavyExts),
+      ],
+    });
+    setEditorState(tabId, view.state);
   }, [largeFileOptimize, tabId, language]);
 
   // Dynamic reconfiguration: column align
