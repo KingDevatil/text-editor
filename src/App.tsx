@@ -10,7 +10,7 @@ import { useSettingsStore } from './hooks/useSettingsStore';
 import { useUIStore } from './hooks/useUIStore';
 import { useFileOpener, normalizePath } from './hooks/useFileOpener';
 import { useFileWatcher } from './hooks/useFileWatcher';
-import { useSessionRestore, saveSession } from './hooks/useSessionRestore';
+import { useSessionRestore, saveSession, recordUserOpenedFile } from './hooks/useSessionRestore';
 import { useMru } from './hooks/useMru';
 import { getEditorContent, updateEditorContent, getActiveView, setPendingLineNumber } from './hooks/useEditorStatePool';
 import { formatDocument, goToDefinition } from './utils/cmCommands';
@@ -238,6 +238,7 @@ function App() {
 
     const setupListener = async () => {
       unlisten = await listen<string>('open-file', (event) => {
+        recordUserOpenedFile(event.payload);
         openFile(event.payload);
       });
     };
@@ -246,6 +247,9 @@ function App() {
 
     invoke<string[]>('get_pending_files')
       .then((files) => {
+        if (files.length > 0) {
+          recordUserOpenedFile(files[files.length - 1]);
+        }
         for (const filePath of files) {
           openFile(filePath);
         }

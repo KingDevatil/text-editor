@@ -80,6 +80,22 @@ export function clearSession(): void {
   localStorage.removeItem(SESSION_KEY);
 }
 
+/**
+ * Tracks a file path that was opened via file association (double-click in OS).
+ * Session restore should respect this over the session's activeFilePath.
+ */
+let userOpenedFilePath: string | null = null;
+
+export function recordUserOpenedFile(path: string): void {
+  userOpenedFilePath = path;
+}
+
+function takeUserOpenedFile(): string | null {
+  const p = userOpenedFilePath;
+  userOpenedFilePath = null;
+  return p;
+}
+
 export function useSessionRestore() {
   useEffect(() => {
     const raw = localStorage.getItem(SESSION_KEY);
@@ -175,7 +191,15 @@ export function useSessionRestore() {
         const id = pathToId.get(session.activeGroup2FilePath);
         if (id) setActiveGroup2TabId(id);
       }
-      if (session.activeFilePath) {
+
+      // File association (double-click in OS) takes priority over session restore
+      const userFile = takeUserOpenedFile();
+      if (userFile) {
+        const id = pathToId.get(userFile);
+        if (id) {
+          setActiveTabId(id);
+        }
+      } else if (session.activeFilePath) {
         const id = pathToId.get(session.activeFilePath);
         if (id) setActiveTabId(id);
       }
