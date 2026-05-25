@@ -96,6 +96,13 @@ function takeUserOpenedFile(): string | null {
   return p;
 }
 
+/** Promise that resolves when session restore finishes (or immediately if no session). */
+let sessionRestorePromise: Promise<void> | null = null;
+
+export function waitForSessionRestore(): Promise<void> {
+  return sessionRestorePromise ?? Promise.resolve();
+}
+
 export function useSessionRestore() {
   useEffect(() => {
     const raw = localStorage.getItem(SESSION_KEY);
@@ -208,8 +215,14 @@ export function useSessionRestore() {
       localStorage.removeItem(SESSION_KEY);
     };
 
-    restore().catch(() => {
-      localStorage.removeItem(SESSION_KEY);
-    });
+    sessionRestorePromise = restore();
+    sessionRestorePromise
+      .then(() => {
+        sessionRestorePromise = null;
+      })
+      .catch(() => {
+        sessionRestorePromise = null;
+        localStorage.removeItem(SESSION_KEY);
+      });
   }, []);
 }

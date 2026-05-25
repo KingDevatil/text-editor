@@ -10,7 +10,7 @@ import { useSettingsStore } from './hooks/useSettingsStore';
 import { useUIStore } from './hooks/useUIStore';
 import { useFileOpener, normalizePath } from './hooks/useFileOpener';
 import { useFileWatcher } from './hooks/useFileWatcher';
-import { useSessionRestore, saveSession, recordUserOpenedFile } from './hooks/useSessionRestore';
+import { useSessionRestore, saveSession, recordUserOpenedFile, waitForSessionRestore } from './hooks/useSessionRestore';
 import { useMru } from './hooks/useMru';
 import { getEditorContent, updateEditorContent, getActiveView, setPendingLineNumber } from './hooks/useEditorStatePool';
 import { formatDocument, goToDefinition } from './utils/cmCommands';
@@ -246,10 +246,13 @@ function App() {
     setupListener();
 
     invoke<string[]>('get_pending_files')
-      .then((files) => {
+      .then(async (files) => {
         if (files.length > 0) {
           recordUserOpenedFile(files[files.length - 1]);
         }
+        // Wait for session restore to finish so openFile can detect
+        // already-restored tabs and avoid duplicate creation.
+        await waitForSessionRestore();
         for (const filePath of files) {
           openFile(filePath);
         }
