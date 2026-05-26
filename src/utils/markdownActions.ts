@@ -64,7 +64,7 @@ function mapPosThroughChanges(
 ): number {
   let result = pos;
   for (const ch of changes) {
-    if (ch.from >= result) break;
+    if (ch.from > result) break;
     if (result > ch.to) {
       // Position is after the changed range → shift by delta
       result += ch.insert.length - (ch.to - ch.from);
