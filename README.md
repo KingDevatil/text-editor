@@ -207,6 +207,12 @@ git push origin v1.1.0
 | `F1` | 命令面板 |
 | `F12` | 转到定义 |
 | `Ctrl + Shift + V` | Markdown / HTML 阅读模式 |
+| `Ctrl + 1 ~ 6` | Markdown 标题 1~6 |
+| `Ctrl + B` | Markdown 粗体 |
+| `Ctrl + I` | Markdown 斜体 |
+| `Ctrl + U` | Markdown 删除线 |
+| `Ctrl + K` | Markdown 链接 |
+| <code>Ctrl + \`</code> | Markdown 行内代码 |
 | `F11` | 切换全屏 |
 | `鼠标拖拽标签` | 同组内排序 / 跨组移动（分屏） |
 

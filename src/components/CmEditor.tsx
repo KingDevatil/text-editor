@@ -39,7 +39,7 @@ import { useEditorStore } from '../hooks/useEditorStore';
 import { useSettingsStore } from '../hooks/useSettingsStore';
 import { executeMarkdownAction } from '../utils/markdownActions';
 import MarkdownToolbar from './MarkdownToolbar';
-import { getOrCreateCompartments, buildBaseExtensions, loadLanguageExtensions, largeFileLineHighlighter, largeFileLineHighlightTheme, type EditorCompartments } from '../utils/editorExtensions';
+import { getOrCreateCompartments, buildBaseExtensions, loadLanguageExtensions, largeFileLineHighlighter, largeFileLineHighlightTheme, createMarkdownKeymap, type EditorCompartments } from '../utils/editorExtensions';
 import { useEditorContextMenu } from '../hooks/useEditorContextMenu';
 
 interface CmEditorProps {
@@ -316,6 +316,9 @@ const CmEditor: React.FC<CmEditorProps> = ({
         compartmentsRef.current!.language.reconfigure(getLanguageExtensionsSync(language)),
         compartmentsRef.current!.lint.reconfigure(effectiveLargeFile ? [] : lintExt),
         compartmentsRef.current!.autocomplete.reconfigure(effectiveLargeFile ? [] : autocompleteExt),
+        compartmentsRef.current!.markdownKeymap.reconfigure(
+          language === 'markdown' ? createMarkdownKeymap() : [],
+        ),
       ],
     });
     setEditorState(tabId, view.state);

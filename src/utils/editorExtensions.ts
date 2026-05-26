@@ -15,6 +15,7 @@ import { searchHighlight } from './searchHighlight';
 import { signatureHelp } from './signatureHelp';
 import { columnAlignExtension, columnAlignTabCommand, columnAlignShiftTabCommand } from './columnAlign';
 import { markedLinesField, pairGutter, bracketAndTagMatcher } from './bracketTagMatching';
+import { executeMarkdownAction } from './markdownActions';
 import type { Language, ThemeColors } from '../types';
 
 /** Factory for per-instance compartments so multiple editors can be reconfigured independently. */
@@ -34,6 +35,7 @@ export function createCompartments() {
     whitespace: new Compartment(),
     lineSeparator: new Compartment(),
     heavyFeatures: new Compartment(),
+    markdownKeymap: new Compartment(),
   };
 }
 
@@ -210,6 +212,7 @@ export function buildBaseExtensions(
     compartments.readOnly.of(EditorView.editable.of(!readOnly)),
     compartments.wordWrap.of(wordWrap ? EditorView.lineWrapping : []),
     compartments.unicodeHighlight.of(enableUnicodeHighlight ? [...unicodeHighlightExt] : []),
+    compartments.markdownKeymap.of(lang === 'markdown' ? createMarkdownKeymap() : []),
   ];
 
   // Heavy features: disabled in large-file mode to reduce CPU / memory
@@ -251,6 +254,29 @@ export function buildBaseExtensions(
   }
 
   return exts;
+}
+
+/**
+ * Markdown keyboard shortcuts (override defaultCodeMirror key bindings).
+ */
+export function createMarkdownKeymap(): Extension {
+  return Prec.highest(
+    keymap.of([
+      // Heading levels: Ctrl+1 ~ Ctrl+6
+      { key: 'Mod-1', run: (view) => { executeMarkdownAction(view, 'h1'); return true; } },
+      { key: 'Mod-2', run: (view) => { executeMarkdownAction(view, 'h2'); return true; } },
+      { key: 'Mod-3', run: (view) => { executeMarkdownAction(view, 'h3'); return true; } },
+      { key: 'Mod-4', run: (view) => { executeMarkdownAction(view, 'h4'); return true; } },
+      { key: 'Mod-5', run: (view) => { executeMarkdownAction(view, 'h5'); return true; } },
+      { key: 'Mod-6', run: (view) => { executeMarkdownAction(view, 'h6'); return true; } },
+      // Inline formatting
+      { key: 'Mod-b', run: (view) => { executeMarkdownAction(view, 'bold'); return true; } },
+      { key: 'Mod-i', run: (view) => { executeMarkdownAction(view, 'italic'); return true; } },
+      { key: 'Mod-u', run: (view) => { executeMarkdownAction(view, 'strikethrough'); return true; } },
+      { key: 'Mod-k', run: (view) => { executeMarkdownAction(view, 'link'); return true; } },
+      { key: 'Mod-`', run: (view) => { executeMarkdownAction(view, 'inlineCode'); return true; } },
+    ]),
+  );
 }
 
 export { loadLanguageExtensions, largeFileLineHighlighter, largeFileLineHighlightTheme };

@@ -129,7 +129,16 @@ const EditorHelp: React.FC<EditorHelpProps> = ({ onClose }) => {
 
         <Section title="Markdown / HTML" icon={<BookOpen size={16} />}>
           <div className="px-4 py-3 text-sm" style={{ color: 'var(--te-text-primary)' }}>
-            <p className="mb-2">支持 Markdown 和 HTML 的实时预览与阅读模式：</p>
+            <p className="mb-2">支持 Markdown 格式快捷键（需先切换语言为 Markdown）：</p>
+            <ul className="list-disc list-inside space-y-1 ml-1">
+              <li><code>Ctrl + 1~6</code> 标题 1~6</li>
+              <li><code>Ctrl + B</code> 粗体</li>
+              <li><code>Ctrl + I</code> 斜体</li>
+              <li><code>Ctrl + U</code> 删除线</li>
+              <li><code>Ctrl + K</code> 链接</li>
+              <li><code>Ctrl + `</code> 行内代码</li>
+            </ul>
+            <p className="mt-3 mb-2">实时预览与阅读模式：</p>
             <ul className="list-disc list-inside space-y-1 ml-1">
               <li>预览模式：与编辑器并排显示渲染后的内容</li>
               <li>阅读模式：专注阅读，带目录导航和字体调节</li>
