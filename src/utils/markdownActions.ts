@@ -54,6 +54,28 @@ function newCursorAfter(change: { from: number; to: number; insert: string }): n
   return change.from + change.insert.length;
 }
 
+/**
+ * Map a document position through a list of (sorted, non-overlapping) changes,
+ * replicating CodeMirror's selection-mapping logic.
+ */
+function mapPosThroughChanges(
+  pos: number,
+  changes: { from: number; to: number; insert: string }[],
+): number {
+  let result = pos;
+  for (const ch of changes) {
+    if (ch.from >= result) break;
+    if (result > ch.to) {
+      // Position is after the changed range → shift by delta
+      result += ch.insert.length - (ch.to - ch.from);
+    } else {
+      // Position is inside the changed range → map to end of inserted text
+      result = ch.from + ch.insert.length;
+    }
+  }
+  return result;
+}
+
 function placeholderMarker(
   change: { from: number; to: number; insert: string },
   prefixLen: number,
@@ -130,6 +152,9 @@ export function executeMarkdownAction(view: EditorView, action: MarkdownAction) 
 
     case 'quote': {
       changes.push(...toggleLinePrefix(state, '> '));
+      selection = EditorSelection.single(
+        mapPosThroughChanges(state.selection.main.head, changes),
+      );
       break;
     }
 
@@ -192,16 +217,25 @@ export function executeMarkdownAction(view: EditorView, action: MarkdownAction) 
 
     case 'unorderedList': {
       changes.push(...toggleLinePrefix(state, '- '));
+      selection = EditorSelection.single(
+        mapPosThroughChanges(state.selection.main.head, changes),
+      );
       break;
     }
 
     case 'orderedList': {
       changes.push(...toggleLinePrefix(state, '1. '));
+      selection = EditorSelection.single(
+        mapPosThroughChanges(state.selection.main.head, changes),
+      );
       break;
     }
 
     case 'taskList': {
       changes.push(...toggleLinePrefix(state, '- [ ] '));
+      selection = EditorSelection.single(
+        mapPosThroughChanges(state.selection.main.head, changes),
+      );
       break;
     }
 
