@@ -172,7 +172,7 @@ export function buildBaseExtensions(
   const exts: Extension[] = [
     history(),
     drawSelection(),
-    highlightSpecialChars({ specialChars: (code) => code === 13 ? null : undefined }),
+    highlightSpecialChars({ specialChars: /[\x00-\x08\x0a\x0b\x0c\x0e-\x1f\x7f-\x9f\u00ad\u061c\u200b-\u200f\u2028\u2029\ufeff\ufff9-\ufffc]/g }),
     dropCursor(),
     closeBrackets(),
     indentOnInput(),
