@@ -12,7 +12,6 @@ import {
   Clipboard,
 } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { isTauri } from '@tauri-apps/api/core';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 import { subscribeContentChange } from '../hooks/useEditorStatePool';
 import { useSettingsStore } from '../hooks/useSettingsStore';
@@ -134,9 +133,7 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
       return;
     }
     e.preventDefault();
-    if (isTauri()) {
-      openUrl(href).catch(() => {});
-    }
+    openUrl(href).catch(() => {});
   }, []);
 
   // Keyboard: ESC to exit (only when this instance is visible)
