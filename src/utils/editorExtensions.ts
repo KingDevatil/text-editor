@@ -1,4 +1,4 @@
-import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightActiveLine, highlightWhitespace, highlightTrailingWhitespace, scrollPastEnd as scrollPastEndExt, rectangularSelection, crosshairCursor, drawSelection, highlightSpecialChars, dropCursor, ViewPlugin, ViewUpdate, Decoration } from '@codemirror/view';
+import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightActiveLine, highlightWhitespace, highlightTrailingWhitespace, highlightSpecialChars, scrollPastEnd as scrollPastEndExt, rectangularSelection, crosshairCursor, drawSelection, dropCursor, ViewPlugin, ViewUpdate, Decoration } from '@codemirror/view';
 import { EditorState, Compartment, EditorSelection, Prec, type Extension, RangeSetBuilder } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentMore, indentLess } from '@codemirror/commands';
 import { selectNextOccurrence, selectSelectionMatches, highlightSelectionMatches } from '@codemirror/search';
@@ -172,7 +172,7 @@ export function buildBaseExtensions(
   const exts: Extension[] = [
     history(),
     drawSelection(),
-    highlightSpecialChars(),
+    highlightSpecialChars({ specialChars: (code) => code === 13 ? null : undefined }),
     dropCursor(),
     closeBrackets(),
     indentOnInput(),

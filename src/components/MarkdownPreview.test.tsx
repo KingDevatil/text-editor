@@ -9,6 +9,8 @@ const subscribeContentChange = vi.fn((_tabId: string, listener: (content: string
   return unsubscribe;
 });
 
+vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => false }));
+vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
 vi.mock('../hooks/useEditorStatePool', () => ({
   getEditorContent: (...args: unknown[]) => getEditorContent(...args),
   subscribeContentChange: (...args: unknown[]) => subscribeContentChange(...args),

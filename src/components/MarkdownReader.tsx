@@ -11,6 +11,8 @@ import {
   Copy,
   Clipboard,
 } from 'lucide-react';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import { isTauri } from '@tauri-apps/api/core';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 import { subscribeContentChange } from '../hooks/useEditorStatePool';
 import { useSettingsStore } from '../hooks/useSettingsStore';
@@ -117,18 +119,23 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
     const a = (e.target as HTMLElement).closest('a');
     if (!a) return;
     const href = a.getAttribute('href');
-    if (!href || !href.startsWith('#')) return;
-    e.preventDefault();
-    const rawId = decodeURIComponent(href.slice(1));
-    let el = document.getElementById(rawId);
-    // Fallback: if the href contains punctuation that slugify strips,
-    // try the slugified version.
-    if (!el) {
-      el = document.getElementById(slugify(rawId));
+    if (!href) return;
+    if (href.startsWith('#')) {
+      e.preventDefault();
+      const rawId = decodeURIComponent(href.slice(1));
+      let el = document.getElementById(rawId);
+      if (!el) {
+        el = document.getElementById(slugify(rawId));
+      }
+      if (el && scrollRef.current) {
+        const top = (el as HTMLElement).offsetTop - 24;
+        scrollRef.current.scrollTo({ top, behavior: 'smooth' });
+      }
+      return;
     }
-    if (el && scrollRef.current) {
-      const top = (el as HTMLElement).offsetTop - 24;
-      scrollRef.current.scrollTo({ top, behavior: 'smooth' });
+    e.preventDefault();
+    if (isTauri()) {
+      openUrl(href).catch(() => {});
     }
   }, []);
 
