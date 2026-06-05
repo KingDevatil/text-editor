@@ -42,7 +42,9 @@ export function generateHeadingSlugs(html: string): HeadingSlugResult {
   let match;
   while ((match = regex.exec(html)) !== null) {
     levels.push(parseInt(match[1], 10));
-    texts.push(match[2].replace(/<[^>]+>/g, ''));
+    const stripped = match[2].replace(/<[^>]+>/g, '');
+    const decoded = new DOMParser().parseFromString(stripped, 'text/html').body.textContent || '';
+    texts.push(decoded);
   }
 
   // Generate unique slugs (GitHub-style dedup: foo, foo-1, foo-2...)
