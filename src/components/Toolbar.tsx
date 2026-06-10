@@ -15,6 +15,7 @@ import {
   Columns2,
   Eye,
   Settings,
+  ListTree,
 } from 'lucide-react';
 import type { ThemeMode } from '../types';
 
@@ -31,6 +32,7 @@ interface ToolbarProps {
   onToggleSplit: () => void;
   onToggleReadMode: () => void;
   onToggleSettings: () => void;
+  onToggleJsonForm: () => void;
   canFormat: boolean;
   canPreview: boolean;
   previewActive: boolean;
@@ -38,6 +40,8 @@ interface ToolbarProps {
   splitActive: boolean;
   canReadMode: boolean;
   readModeActive: boolean;
+  canJsonForm: boolean;
+  jsonFormActive: boolean;
   theme: ThemeMode;
 }
 
@@ -54,6 +58,7 @@ const Toolbar: React.FC<ToolbarProps> = React.memo(({
   onToggleSplit,
   onToggleReadMode,
   onToggleSettings,
+  onToggleJsonForm,
   canFormat,
   canPreview,
   previewActive,
@@ -61,6 +66,8 @@ const Toolbar: React.FC<ToolbarProps> = React.memo(({
   splitActive,
   canReadMode,
   readModeActive,
+  canJsonForm,
+  jsonFormActive,
   theme,
 }) => {
   const btnBase =
@@ -141,6 +148,16 @@ const Toolbar: React.FC<ToolbarProps> = React.memo(({
         >
           <BookOpen size={16} />
           <span className="hidden sm:inline font-medium">预览</span>
+        </button>
+        <button
+          className={`${btnBase} ${!canJsonForm ? 'opacity-40 cursor-not-allowed active:scale-100' : ''}`}
+          style={jsonFormActive ? activeStyle : btnStyle}
+          onClick={onToggleJsonForm}
+          disabled={!canJsonForm}
+          title="JSON 表单 (Ctrl+Shift+J)"
+        >
+          <ListTree size={16} />
+          <span className="hidden sm:inline font-medium">表单</span>
         </button>
         <button
           className={`${btnBase} ${!canReadMode ? 'opacity-40 cursor-not-allowed active:scale-100' : ''}`}

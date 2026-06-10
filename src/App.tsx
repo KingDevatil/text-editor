@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
-import { FilePlus, FolderOpen, Save, Search, Braces, PanelLeft, Sun, Moon, WrapText, Space, BookOpen, Columns2, GitCompare, X, Eye, Table } from 'lucide-react';
+import { FilePlus, FolderOpen, Save, Search, Braces, PanelLeft, Sun, Moon, WrapText, Space, BookOpen, Columns2, GitCompare, X, Eye, Table, ListTree, Maximize2 } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
@@ -32,6 +32,7 @@ import HtmlPreview from './components/HtmlPreview';
 import HtmlReader from './components/HtmlReader';
 import CmEditor from './components/CmEditor';
 import DiffEditor from './components/DiffEditor';
+import JsonFormPanel from './components/JsonFormPanel';
 import CommandPalette from './components/CommandPalette';
 import TitleBar from './components/TitleBar';
 import DiagnosticsPanel from './components/DiagnosticsPanel';
@@ -134,6 +135,10 @@ function App() {
   const moveTabToGroup = useEditorStore((s) => s.moveTabToGroup);
   const reorderTab = useEditorStore((s) => s.reorderTab);
   const setReadMode = useUIStore((s) => s.setReadMode);
+  const jsonFormVisible = useUIStore((s) => s.jsonFormVisible);
+  const setJsonFormVisible = useUIStore((s) => s.setJsonFormVisible);
+  const jsonFormFullScreen = useUIStore((s) => s.jsonFormFullScreen);
+  const setJsonFormFullScreen = useUIStore((s) => s.setJsonFormFullScreen);
 
   const openFile = useFileOpener();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -338,6 +343,19 @@ function App() {
         if (tab) {
           setTabColumnAlign(tab.id, !(tab.columnAlignEnabled ?? false));
         }
+      }
+      // JSON form panel toggle: Ctrl+Shift+J
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        const tab = activeTabRef.current;
+        if (tab && (tab.language === 'json' || tab.language === 'jsonl')) {
+          useUIStore.getState().setJsonFormVisible(!useUIStore.getState().jsonFormVisible);
+        }
+      }
+      // Esc: exit JSON form full screen
+      if (e.key === 'Escape' && useUIStore.getState().jsonFormFullScreen) {
+        e.preventDefault();
+        useUIStore.getState().setJsonFormFullScreen(false);
       }
       // Go to definition shortcut (only intercept in Tauri; let F12 open DevTools in browser)
       if (e.key === 'F12' && isTauri()) {
@@ -948,6 +966,21 @@ function App() {
       icon: <Table size={16} />,
       action: () => setTabColumnAlign(activeTab.id, !(activeTab.columnAlignEnabled ?? false)),
     }] : []),
+    ...(activeTab && (activeTab.language === 'json' || activeTab.language === 'jsonl') ? [{
+      id: 'jsonForm',
+      label: jsonFormVisible ? '关闭 JSON 表单' : 'JSON 表单',
+      shortcut: 'Ctrl+Shift+J',
+      icon: <ListTree size={16} />,
+      action: () => setJsonFormVisible(!jsonFormVisible),
+    }, {
+      id: 'jsonFormFullScreen',
+      label: jsonFormFullScreen ? '退出 JSON 表单全屏' : 'JSON 表单全屏',
+      icon: <Maximize2 size={16} />,
+      action: () => {
+        if (!jsonFormVisible) setJsonFormVisible(true);
+        setJsonFormFullScreen(!jsonFormFullScreen);
+      },
+    }] : []),
     ...(activeTab?.filePath ? [{
       id: 'reveal',
       label: '在文件夹中显示',
@@ -987,6 +1020,7 @@ function App() {
         onToggleSplit={handleToggleSplit}
         onToggleReadMode={handleToggleReadMode}
         onToggleSettings={() => setSettingsVisible((v) => !v)}
+        onToggleJsonForm={() => setJsonFormVisible(!jsonFormVisible)}
         canFormat={canFormat}
         canPreview={canPreview}
         previewActive={previewVisible}
@@ -994,6 +1028,8 @@ function App() {
         splitActive={splitMode}
         canReadMode={!!activeTab && (activeTab.language === 'markdown' || activeTab.language === 'html')}
         readModeActive={readMode}
+        canJsonForm={!!activeTab && (activeTab.language === 'json' || activeTab.language === 'jsonl')}
+        jsonFormActive={jsonFormVisible}
         theme={theme}
       />
 
@@ -1162,6 +1198,19 @@ function App() {
                       </div>
                     </React.Fragment>
                   ))}
+                {jsonFormVisible && !jsonFormFullScreen && activeTab && (activeTab.language === 'json' || activeTab.language === 'jsonl') && (
+                  <>
+                    <div className="w-px bg-gray-200 dark:bg-gray-800 self-stretch flex-shrink-0" />
+                    <div className="flex-1 h-full min-w-0">
+                      <JsonFormPanel
+                        tabId={activeTab.id}
+                        visible={jsonFormVisible}
+                        fullScreen={false}
+                        onToggleFullScreen={() => setJsonFormFullScreen(true)}
+                      />
+                    </div>
+                  </>
+                )}
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center text-gray-400 dark:text-gray-600 bg-white dark:bg-gray-900">
@@ -1201,6 +1250,15 @@ function App() {
                   )}
                 </div>
               ))}
+            {jsonFormVisible && jsonFormFullScreen && activeTab && (activeTab.language === 'json' || activeTab.language === 'jsonl') && (
+              <JsonFormPanel
+                tabId={activeTab.id}
+                visible={jsonFormVisible}
+                fullScreen={true}
+                onToggleFullScreen={() => setJsonFormFullScreen(false)}
+                onExitFullScreen={() => { setJsonFormFullScreen(false); setJsonFormVisible(false); }}
+              />
+            )}
           </div>
 
       {/* Settings Panel overlay */}

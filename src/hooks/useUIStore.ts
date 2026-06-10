@@ -20,6 +20,7 @@ function saveUI(state: UIState & UIActions) {
         findReplaceVisible: state.findReplaceVisible,
         previewVisible: state.previewVisible,
         diagnosticsPanelVisible: state.diagnosticsPanelVisible,
+        jsonFormVisible: state.jsonFormVisible,
       })
     );
   } catch {
@@ -33,6 +34,8 @@ interface UIState {
   previewVisible: boolean;
   diagnosticsPanelVisible: boolean;
   readMode: boolean;
+  jsonFormVisible: boolean;
+  jsonFormFullScreen: boolean;
 }
 
 interface UIActions {
@@ -41,11 +44,14 @@ interface UIActions {
   setPreviewVisible: (visible: boolean) => void;
   setDiagnosticsPanelVisible: (visible: boolean) => void;
   setReadMode: (mode: boolean) => void;
+  setJsonFormVisible: (visible: boolean) => void;
+  setJsonFormFullScreen: (full: boolean) => void;
   toggleSidebar: () => void;
   toggleFindReplace: () => void;
   togglePreview: () => void;
   toggleDiagnosticsPanel: () => void;
   toggleReadMode: () => void;
+  toggleJsonForm: () => void;
 }
 
 const loadedUI = loadUI();
@@ -56,17 +62,22 @@ const useUIStore = create<UIState & UIActions>((set) => ({
   previewVisible: loadedUI.previewVisible ?? false,
   diagnosticsPanelVisible: false,
   readMode: false,
+  jsonFormVisible: false,
+  jsonFormFullScreen: false,
 
   setSidebarVisible: (visible) => set({ sidebarVisible: visible }),
   setFindReplaceVisible: (visible) => set({ findReplaceVisible: visible }),
   setPreviewVisible: (visible) => set({ previewVisible: visible }),
   setDiagnosticsPanelVisible: (visible) => set({ diagnosticsPanelVisible: visible }),
   setReadMode: (mode) => set({ readMode: mode }),
+  setJsonFormVisible: (visible) => set({ jsonFormVisible: visible, jsonFormFullScreen: false }),
+  setJsonFormFullScreen: (full) => set({ jsonFormFullScreen: full }),
   toggleSidebar: () => set((state) => ({ sidebarVisible: !state.sidebarVisible })),
   toggleFindReplace: () => set((state) => ({ findReplaceVisible: !state.findReplaceVisible })),
   togglePreview: () => set((state) => ({ previewVisible: !state.previewVisible })),
   toggleDiagnosticsPanel: () => set((state) => ({ diagnosticsPanelVisible: !state.diagnosticsPanelVisible })),
   toggleReadMode: () => set((state) => ({ readMode: !state.readMode })),
+  toggleJsonForm: () => set((state) => ({ jsonFormVisible: !state.jsonFormVisible, jsonFormFullScreen: false })),
 }));
 
 useUIStore.subscribe(debounce(saveUI, 300));
