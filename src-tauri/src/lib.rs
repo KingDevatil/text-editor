@@ -559,13 +559,28 @@ pub fn run() {
             }
             
             // When app is already running and a new file is opened,
-            // emit open-file event for each valid file path
+            // store files in pending_files AND emit open-file event.
+            // pending_files ensures files are not lost if the React
+            // listener hasn't mounted yet (race condition on cold start).
             if argv.len() > 1 {
-                for arg in &argv[1..] {
-                    let path = std::path::Path::new(arg);
-                    if path.exists() && path.is_file() {
-                        let _ = app.emit("open-file", arg);
+                let valid_files: Vec<String> = argv[1..].iter()
+                    .filter(|arg| {
+                        let path = std::path::Path::new(arg);
+                        path.exists() && path.is_file()
+                    })
+                    .cloned()
+                    .collect();
+
+                // Store in pending_files so get_pending_files can retrieve them
+                if let Some(state) = app.try_state::<AppState>() {
+                    if let Ok(mut pending) = state.pending_files.lock() {
+                        pending.extend(valid_files.clone());
                     }
+                }
+
+                // Also emit event for the live listener (fast path)
+                for file in &valid_files {
+                    let _ = app.emit("open-file", file);
                 }
             }
         }))
@@ -576,7 +591,8 @@ pub fn run() {
             {
                 let window = app.get_webview_window("main").unwrap();
                 let _ = window.set_title("Text Editor");
-                let _ = window.show();
+                // Window visibility is controlled by the frontend (App.tsx useEffect)
+                // to ensure the window only appears after React has painted.
             }
             // Warm up encoding detection libraries (avoid cold-start on first file open)
             let _ = smart_detect_encoding(b"warmup");
