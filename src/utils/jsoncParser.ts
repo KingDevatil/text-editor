@@ -31,7 +31,7 @@ function buildNodeInfo(node: jsonc.Node, text: string, path: JSONPath): JsonNode
   const info: JsonNodeInfo = {
     path: [...path],
     key: path.length > 0 ? path[path.length - 1] : undefined,
-    value: extractValue(node, text),
+    value: type === 'object' || type === 'array' ? undefined : extractValue(node, text),
     type,
     children: [],
     offset: node.offset,
@@ -39,10 +39,10 @@ function buildNodeInfo(node: jsonc.Node, text: string, path: JSONPath): JsonNode
   };
 
   if (node.type === 'object' && node.children) {
-    for (let i = 0; i < node.children.length; i += 2) {
-      const keyNode = node.children[i];
-      const valNode = node.children[i + 1];
-      if (!keyNode || !valNode) continue;
+    for (const propNode of node.children) {
+      if (propNode.type !== 'property' || !propNode.children || propNode.children.length < 2) continue;
+      const keyNode = propNode.children[0];
+      const valNode = propNode.children[1];
       const key = extractValue(keyNode, text) as string;
       info.children.push(buildNodeInfo(valNode, text, [...path, key]));
     }
@@ -176,9 +176,9 @@ function getSiblingKeys(tree: jsonc.Node, text: string, parentPath: JSONPath): s
   const parent = jsonc.findNodeAtLocation(tree, parentPath);
   if (!parent || parent.type !== 'object' || !parent.children) return [];
   const keys: string[] = [];
-  for (let i = 0; i < parent.children.length; i += 2) {
-    const keyNode = parent.children[i];
-    if (keyNode) {
+  for (const propNode of parent.children) {
+    if (propNode.type === 'property' && propNode.children && propNode.children.length >= 1) {
+      const keyNode = propNode.children[0];
       const raw = text.substring(keyNode.offset, keyNode.offset + keyNode.length);
       keys.push(raw.slice(1, -1));
     }
