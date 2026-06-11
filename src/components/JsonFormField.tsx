@@ -52,6 +52,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
   const [keyDraft, setKeyDraft] = useState(() => String(node.key ?? pathKey));
   const [addingField, setAddingField] = useState(false);
   const [newFieldKey, setNewFieldKey] = useState('');
+  const [keyWarning, setKeyWarning] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
   const [editingComment, setEditingComment] = useState(false);
   const [commentDraft, setCommentDraft] = useState(() => getLeadingCommentText(node));
@@ -60,6 +61,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
   );
   const composingRef = useRef(false);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
 
   const indent = depth * 16;
   const nodeIssues = issues.filter((issue) => pathsEqual(issue.path, node.path));
@@ -94,7 +96,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
     }
 
     if (node.type === 'number') {
-      if (draft.trim() === '' || Number.isNaN(Number(draft))) return;
+      if (draft.trim() === '' || !Number.isFinite(Number(draft))) return;
       handleValueChange(Number(draft));
       return;
     }
@@ -102,9 +104,12 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
     if (node.type === 'array') {
       try {
         const parsed = JSON.parse(draft);
-        if (Array.isArray(parsed)) handleValueChange(parsed);
+        if (Array.isArray(parsed)) {
+          setDraftError(null);
+          handleValueChange(parsed);
+        }
       } catch {
-        // Keep invalid JSON array drafts local while the user is still typing.
+        setDraftError('JSON 格式错误');
       }
     }
   }, [handleValueChange, node.type, valueDraft]);
@@ -143,7 +148,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
     e.stopPropagation();
     const leadingText = getLeadingCommentText(node);
     const trailingText = getTrailingCommentText(node);
-    const nextPosition = trailingText && !leadingText ? 'trailing' : 'leading';
+    const nextPosition = trailingText ? 'trailing' : 'leading';
     setCommentPosition(nextPosition);
     setCommentDraft(nextPosition === 'trailing' ? trailingText : leadingText);
     setEditingComment(true);
@@ -165,10 +170,15 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
   const commitNewField = useCallback(() => {
     const key = newFieldKey.trim();
     if (!key) return;
+    const existingKeys = node.children.map((c) => c.key);
+    if (existingKeys.includes(key)) {
+      setKeyWarning(`"${key}" 已存在，将自动重命名`);
+      setTimeout(() => setKeyWarning(null), 3000);
+    }
     onAdd(node.path, true, key);
     setAddingField(false);
     setNewFieldKey('');
-  }, [newFieldKey, node.path, onAdd]);
+  }, [newFieldKey, node, onAdd]);
 
   const commitKey = useCallback(() => {
     if (typeof node.key === 'string') onRename(node.path, keyDraft);
@@ -329,8 +339,14 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
             }}
             value={String(value)}
             onChange={(e) => {
-              if (e.target.value.trim() === '') return;
-              const nextValue = Number(e.target.value);
+              const raw = e.target.value;
+              if (raw === '') {
+                const next = [...values];
+                next[index] = 0;
+                handleValueChange(next);
+                return;
+              }
+              const nextValue = Number(raw);
               if (!Number.isFinite(nextValue)) return;
               const next = [...values];
               next[index] = nextValue;
@@ -447,7 +463,11 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
               if (e.key === 'Escape') {
                 e.preventDefault();
                 setEditingComment(false);
-                setCommentDraft(leadingText);
+                setCommentDraft(
+                  commentPosition === 'trailing'
+                    ? getTrailingCommentText(node)
+                    : getLeadingCommentText(node)
+                );
               }
             }}
           />
@@ -598,6 +618,11 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
                 </button>
               </div>
             )}
+            {keyWarning && (
+              <div className="ml-1 text-xs" style={{ color: 'var(--te-warning, #f59e0b)' }}>
+                {keyWarning}
+              </div>
+            )}
             {renderIssues()}
           </div>
         )}
@@ -619,6 +644,14 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
               <span className="text-xs" style={{ color: 'var(--te-text-secondary)' }}>
                 [简单数组] ({childCount})
               </span>
+              {getTrailingCommentText(node) && (
+                <span
+                  className="text-xs shrink-0"
+                  style={{ color: 'color-mix(in srgb, var(--te-text-secondary) 65%, transparent)' }}
+                >
+                  {' '}// {getTrailingCommentText(node)}
+                </span>
+              )}
               {renderIssueBadge()}
               {renderActionButtons()}
             </div>
@@ -640,10 +673,16 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
               }}
               onChange={(e) => {
                 setValueDraft(e.target.value);
+                setDraftError(null);
                 scheduleDraftCommit(e.target.value);
               }}
               spellCheck={false}
             />
+          )}
+          {draftError && (
+            <div className="mt-0.5 text-xs" style={{ color: 'var(--te-error, #ef4444)' }}>
+              {draftError}
+            </div>
           )}
           {renderIssues()}
         </div>
@@ -662,6 +701,14 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
             <span className="text-xs" style={{ color: 'var(--te-text-secondary)' }}>
               [...] ({childCount})
             </span>
+            {getTrailingCommentText(node) && (
+              <span
+                className="text-xs shrink-0"
+                style={{ color: 'color-mix(in srgb, var(--te-text-secondary) 65%, transparent)' }}
+              >
+                {' '}// {getTrailingCommentText(node)}
+              </span>
+            )}
             {renderIssueBadge()}
             {renderActionButtons()}
           </div>
@@ -774,10 +821,10 @@ function getTrailingCommentText(node: JsonNodeInfo): string {
     .join('\n');
 }
 
-function isCompactNumberArray(value: unknown): value is number[] {
+function isCompactNumberArray(value: unknown, maxLen = 6): value is number[] {
   return Array.isArray(value) &&
     value.length > 0 &&
-    value.length <= 6 &&
+    value.length <= maxLen &&
     value.every((item) => typeof item === 'number' && Number.isFinite(item));
 }
 
@@ -822,7 +869,7 @@ function isDescendantPath(path: JSONPath, parent: JSONPath): boolean {
 }
 
 function nodeKey(node: JsonNodeInfo): string {
-  return `${node.path.join('.')}:${node.offset}:${node.length}`;
+  return `${node.offset}:${node.length}`;
 }
 
 export default JsonFormField;

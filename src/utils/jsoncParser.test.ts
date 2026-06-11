@@ -305,7 +305,7 @@ describe('jsoncParser', () => {
     expect(power?.comments).toHaveLength(0);
   });
 
-  it('transfers leading comments between [ and first element to the array node', () => {
+  it('keeps first element leading comment on the element when no blank line', () => {
     const text = `{
   "dimensions": [
     // 赛季
@@ -319,12 +319,74 @@ describe('jsoncParser', () => {
     const dims = root?.children.find((child) => child.key === 'dimensions');
     const elem0 = dims?.children?.[0];
 
-    // The comment should be on the array node, not the first element
-    expect(dims?.comments).toContainEqual(
+    // No blank line → comment stays on the first element
+    expect(elem0?.comments).toContainEqual(
       expect.objectContaining({ position: 'leading', content: '赛季' })
     );
-    // The first element should NOT have the comment
-    expect(elem0?.comments.filter((c) => c.content === '赛季')).toHaveLength(0);
+    // Array should NOT have the comment
+    expect(dims?.comments.filter((c) => c.content === '赛季')).toHaveLength(0);
+  });
+
+  it('transfers first element leading comment to array when blank line separates them', () => {
+    const text = `{
+  "dimensions": [
+    // 赛季配置
+
+    {
+      "id": "favor",
+      "name": "圣宠值"
+    }
+  ]
+}`;
+    const root = parseJsonc(text).root;
+    const dims = root?.children.find((child) => child.key === 'dimensions');
+    const elem0 = dims?.children?.[0];
+
+    // Blank line → comment transferred to array node
+    expect(dims?.comments).toContainEqual(
+      expect.objectContaining({ position: 'leading', content: '赛季配置' })
+    );
+    expect(elem0?.comments.filter((c) => c.content === '赛季配置')).toHaveLength(0);
+  });
+
+  it('collects trailing comment on array bracket as array trailing comment', () => {
+    const text = `{
+  "dimensions": [ // 赛季
+    { "id": "favor" }
+  ]
+}`;
+    const root = parseJsonc(text).root;
+    const dims = root?.children.find((child) => child.key === 'dimensions');
+
+    expect(dims?.comments).toContainEqual(
+      expect.objectContaining({ position: 'trailing', content: '赛季' })
+    );
+  });
+
+  it('keeps inter-element comments on their respective elements', () => {
+    const text = `{
+  "dimensions": [
+    { "id": "a" },
+    // between 0 and 1
+    { "id": "b" },
+    // between 1 and 2
+    { "id": "c" }
+  ]
+}`;
+    const root = parseJsonc(text).root;
+    const dims = root?.children.find((child) => child.key === 'dimensions');
+    const elem1 = dims?.children?.[1];
+    const elem2 = dims?.children?.[2];
+
+    // Inter-element comments stay on their elements
+    expect(elem1?.comments).toContainEqual(
+      expect.objectContaining({ position: 'leading', content: 'between 0 and 1' })
+    );
+    expect(elem2?.comments).toContainEqual(
+      expect.objectContaining({ position: 'leading', content: 'between 1 and 2' })
+    );
+    // Array should NOT have these comments
+    expect(dims?.comments.filter((c) => c.content.startsWith('between'))).toHaveLength(0);
   });
 
   it('adds array elements from a neutral field template instead of cloning values', () => {

@@ -38,12 +38,19 @@ export interface ParsedJson {
 // Simple cache for parseJsonc to avoid re-parsing identical text
 let lastParsedText = '';
 let lastParsedResult: ParsedJson | null = null;
+let lastParsedTime = 0;
+const CACHE_TTL_MS = 5000;
 
 export function parseJsonc(text: string): ParsedJson {
-  // Return cached result if text hasn't changed
+  const now = Date.now();
+  if (now - lastParsedTime > CACHE_TTL_MS) {
+    lastParsedText = '';
+    lastParsedResult = null;
+  }
   if (text === lastParsedText && lastParsedResult) {
     return lastParsedResult;
   }
+  lastParsedTime = now;
   
   const errors: jsonc.ParseError[] = [];
   const node = jsonc.parseTree(text, errors);
@@ -92,45 +99,43 @@ function buildNodeInfo(
       buildNodeInfo(child, text, [...path, idx], comments, child)
     );
 
-    // Leading comments that sit between the array's opening bracket `[` and
-    // the first element belong to the array itself, not the element.
+    // For the first element: if comments between `[` and the element are
+    // separated from the element by a blank line, those comments are
+    // array-level (shown between the array name and elements).
+    // Otherwise they stay on the element (already collected by getLeadingComments).
     if (info.children.length > 0) {
-      const firstChild = info.children[0];
       const firstChildNode = node.children[0];
-      const transfer: JsonNodeComment[] = [];
-      const keep: JsonNodeComment[] = [];
-      for (const comment of firstChild.comments) {
-        if (comment.position === 'leading' && comment.offset > node.offset &&
-            comment.offset + comment.length <= firstChildNode.offset) {
-          transfer.push({ ...comment, position: 'leading' });
-        } else {
-          keep.push(comment);
+      const betweenStart = node.offset;
+      const betweenEnd = firstChildNode.offset;
+      const commentsInRange = comments.filter(
+        (c) => c.offset >= betweenStart && c.offset + c.length <= betweenEnd
+      );
+      if (commentsInRange.length > 0) {
+        const lastComment = commentsInRange[commentsInRange.length - 1];
+        const gap = text.slice(lastComment.offset + lastComment.length, betweenEnd);
+        if (countLineBreaks(gap) > 1) {
+          // Blank line → transfer to array node as leading comments
+          const rangeOffsets = new Set(commentsInRange.map((c) => c.offset));
+          const transfer: JsonNodeComment[] = [];
+          const keep: JsonNodeComment[] = [];
+          for (const comment of info.children[0].comments) {
+            if (comment.position === 'leading' && rangeOffsets.has(comment.offset)) {
+              transfer.push({ ...comment, position: 'leading' });
+            } else {
+              keep.push(comment);
+            }
+          }
+          // Also pick up comments that getLeadingComments skipped due to the blank line
+          for (const c of commentsInRange) {
+            if (!transfer.some((t) => t.offset === c.offset)) {
+              transfer.push(toNodeComment(c, 'leading'));
+            }
+          }
+          if (transfer.length > 0) {
+            info.children[0].comments = keep;
+            info.comments = [...info.comments, ...transfer];
+          }
         }
-      }
-      if (transfer.length > 0) {
-        firstChild.comments = keep;
-        info.comments = [...info.comments, ...transfer];
-      }
-    }
-
-    // Leading comments on non-first array elements are "inter-element"
-    // comments (e.g. "//赛季" between `},` and `{`). They belong to the
-    // array context, not to the individual element.
-    for (let i = 1; i < info.children.length; i++) {
-      const child = info.children[i];
-      const prevEnd = node.children[i - 1].offset + node.children[i - 1].length;
-      const transfer: JsonNodeComment[] = [];
-      const keep: JsonNodeComment[] = [];
-      for (const comment of child.comments) {
-        if (comment.position === 'leading' && comment.offset > prevEnd) {
-          transfer.push({ ...comment, position: 'leading' });
-        } else {
-          keep.push(comment);
-        }
-      }
-      if (transfer.length > 0) {
-        child.comments = keep;
-        info.comments = [...info.comments, ...transfer];
       }
     }
   }
@@ -208,11 +213,6 @@ function collectSubtreeComments(
     // Leading comments
     const leading = getLeadingComments(text, current, allComments);
     for (const c of leading) {
-      // At the root level (depth 0), skip all leading comments.
-      // These belong to the array/object context (e.g. inter-element
-      // separators like "//赛季"), not to the element itself.
-      // Child nodes (depth > 0) keep their leading comments as usual.
-      if (depth === 0) continue;
       result.push({
         relativePath: [...relPath],
         position: 'leading',
@@ -256,6 +256,8 @@ function applyCommentsToNewNode(
   const commentEdits: JsonTextEdit[] = [];
   const eol = detectEol(text);
 
+  const allComments = scanJsonComments(text);
+
   for (const sc of sourceComments) {
     const targetAbsPath = [...newPath, ...sc.relativePath];
     const targetNode = jsonc.findNodeAtLocation(newTree, targetAbsPath);
@@ -263,12 +265,12 @@ function applyCommentsToNewNode(
 
     // Skip if target already has a comment of the same type
     if (sc.position === 'trailing') {
-      const existing = getTrailingComment(text, targetNode, scanJsonComments(text));
+      const existing = getTrailingComment(text, targetNode, allComments);
       if (existing) continue;
       const insertOff = getTrailingCommentInsertOffset(text, targetNode);
       commentEdits.push({ offset: insertOff, length: 0, content: ` ${sc.rawText}` });
     } else {
-      const existing = getLeadingComments(text, targetNode, scanJsonComments(text));
+      const existing = getLeadingComments(text, targetNode, allComments);
       if (existing.length > 0) continue;
       const indent = text.slice(lineStart(text, targetNode.offset), targetNode.offset);
       const lineStartOff = lineStart(text, targetNode.offset);
@@ -512,10 +514,39 @@ export function setTrailingComment(
 }
 
 export function removeField(text: string, path: JSONPath): string {
-  const edits = jsonc.modify(text, path, undefined, {
+  const tree = jsonc.parseTree(text);
+  if (!tree) return text;
+  const target = jsonc.findNodeAtLocation(tree, path);
+  if (!target) return text;
+
+  const allComments = scanJsonComments(text);
+  const extraEdits: JsonTextEdit[] = [];
+
+  // Delete leading comments (including their line and trailing newline)
+  const leading = getLeadingComments(text, target, allComments);
+  if (leading.length > 0) {
+    const start = lineStart(text, leading[0].offset);
+    const lastEnd = leading[leading.length - 1].offset + leading[leading.length - 1].length;
+    const end = lineEndWithBreak(text, lastEnd);
+    extraEdits.push({ offset: start, length: end - start, content: '' });
+  }
+
+  // Delete trailing comment (including leading whitespace)
+  const trailing = getTrailingComment(text, target, allComments);
+  if (trailing) {
+    const wsStart = trailingWhitespaceStart(text, target, trailing.offset);
+    const trailingEnd = trailing.offset + trailing.length;
+    // Also consume trailing newline if present
+    const lineEnd = lineEndWithBreak(text, trailingEnd);
+    extraEdits.push({ offset: wsStart, length: lineEnd - wsStart, content: '' });
+  }
+
+  const valueEdits = jsonc.modify(text, path, undefined, {
     formattingOptions: { tabSize: 2, insertSpaces: true, eol: detectEol(text) },
   });
-  return jsonc.applyEdits(text, edits);
+
+  const allEdits = [...extraEdits, ...valueEdits].sort((a, b) => b.offset - a.offset);
+  return jsonc.applyEdits(text, allEdits);
 }
 
 export function renameObjectKey(
@@ -576,42 +607,26 @@ export function moveNode(
     return { newText: text, newPath: path };
   }
 
-  const parentValue = jsonc.getNodeValue(parent);
-  if (Array.isArray(parentValue)) {
-    const nextValue = [...parentValue];
-    const [moved] = nextValue.splice(index, 1);
-    nextValue.splice(targetIndex, 0, moved);
-    const edits = jsonc.modify(text, parentPath, nextValue, {
-      formattingOptions: { tabSize: 2, insertSpaces: true, eol: detectEol(text) },
-    });
-    return {
-      newText: jsonc.applyEdits(text, edits),
-      newPath: [...parentPath, targetIndex],
-    };
-  }
+  const first = Math.min(index, targetIndex);
+  const last = Math.max(index, targetIndex);
+  const firstNode = children[first];
+  const lastNode = children[last];
+  const rawFirst = text.slice(firstNode.offset, firstNode.offset + firstNode.length);
+  const rawLast = text.slice(lastNode.offset, lastNode.offset + lastNode.length);
 
-  if (parent.type !== 'object' || typeof key !== 'string' || !isPlainRecord(parentValue)) {
-    return { newText: text, newPath: path };
-  }
-
-  const entries = children
-    .map((child) => {
-      const keyNode = child.children?.[0];
-      const propKey = keyNode ? extractValue(keyNode, text) : undefined;
-      return typeof propKey === 'string'
-        ? ([propKey, parentValue[propKey]] as const)
-        : undefined;
-    })
-    .filter((entry): entry is readonly [string, unknown] => entry !== undefined);
-  const [moved] = entries.splice(index, 1);
-  entries.splice(targetIndex, 0, moved);
-  const nextValue = Object.fromEntries(entries);
-  const edits = jsonc.modify(text, parentPath, nextValue, {
-    formattingOptions: { tabSize: 2, insertSpaces: true, eol: detectEol(text) },
+  let newText = applySingleEdit(text, {
+    offset: lastNode.offset,
+    length: lastNode.length,
+    content: rawFirst,
   });
-  const newText = jsonc.applyEdits(text, edits);
+  newText = applySingleEdit(newText, {
+    offset: firstNode.offset,
+    length: firstNode.length,
+    content: rawLast,
+  });
 
-  return { newText, newPath: path };
+  const newPath = parent.type === 'array' ? [...parentPath, targetIndex] : path;
+  return { newText, newPath };
 }
 
 export function isSimpleArray(value: unknown): boolean {

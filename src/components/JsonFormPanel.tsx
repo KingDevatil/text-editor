@@ -38,10 +38,12 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
   const [editingLongText, setEditingLongText] = useState<{ path: JSONPath; value: string } | null>(null);
   const [longTextDraft, setLongTextDraft] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const applyingEditRef = useRef(false);
 
   useEffect(() => {
     if (!visible) return;
     const unsubscribe = subscribeContentChange(tabId, (newContent) => {
+      if (applyingEditRef.current) return;
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => setText(newContent), 100);
     });
@@ -81,14 +83,14 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
   const applyToEditor = useCallback((newText: string) => {
     const edit = getMinimalEdit(text, newText);
     if (!edit) return;
+    applyingEditRef.current = true;
     applyEditsToEditor([edit], newText);
-    // Immediately update local text to avoid waiting for editor notification
     setText(newText);
-    // Clear any pending debounce to avoid double update
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
       debounceRef.current = null;
     }
+    setTimeout(() => { applyingEditRef.current = false; }, 0);
   }, [text, applyEditsToEditor]);
 
   const handleEdit = useCallback((path: JSONPath, newValue: unknown) => {
@@ -241,22 +243,24 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
         )}
 
         {parsedTree ? (
-          <JsonFormField
-            node={parsedTree}
-            pathKey="root"
-            issues={issues}
-            onEdit={handleEdit}
-            onCopy={handleCopy}
-            onAddLike={handleAddLike}
-            onDelete={handleDelete}
-            onAdd={handleAdd}
-            onRename={handleRename}
-            onMove={handleMove}
-            onEditComment={handleEditComment}
-            onEditText={handleEditText}
-            depth={0}
-            isRoot
-          />
+          <JsonFormErrorBoundary>
+            <JsonFormField
+              node={parsedTree}
+              pathKey="root"
+              issues={issues}
+              onEdit={handleEdit}
+              onCopy={handleCopy}
+              onAddLike={handleAddLike}
+              onDelete={handleDelete}
+              onAdd={handleAdd}
+              onRename={handleRename}
+              onMove={handleMove}
+              onEditComment={handleEditComment}
+              onEditText={handleEditText}
+              depth={0}
+              isRoot
+            />
+          </JsonFormErrorBoundary>
         ) : (
           !parseErrors.length && (
             <div className="flex items-center justify-center h-full text-xs" style={{ color: 'var(--te-text-secondary)' }}>
@@ -283,8 +287,12 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
               </button>
             </div>
             <textarea
-              className="flex-1 min-h-[200px] p-4 text-sm resize-y"
-              style={{ color: 'var(--te-text-primary)', backgroundColor: 'var(--te-bg-primary)' }}
+              className="flex-1 min-h-[200px] p-4 text-sm resize-y rounded border"
+              style={{
+                color: 'var(--te-text-primary)',
+                backgroundColor: 'var(--te-bg-primary)',
+                borderColor: 'var(--te-border)',
+              }}
               value={longTextDraft}
               onChange={(e) => setLongTextDraft(e.target.value)}
               autoFocus
@@ -314,6 +322,33 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
 
 export default JsonFormPanel;
 JsonFormPanel.displayName = 'JsonFormPanel';
+
+class JsonFormErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full gap-2 text-xs" style={{ color: 'var(--te-error, #ef4444)' }}>
+          <span>表单渲染出错，请切换到源码模式检查 JSON 格式。</span>
+          <button
+            className="px-2 py-1 rounded text-xs"
+            style={{ color: 'var(--te-text-secondary)', border: '1px solid var(--te-border)' }}
+            onClick={() => this.setState({ hasError: false })}
+          >
+            重试
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function getMinimalEdit(oldText: string, newText: string): JsonTextEdit | null {
   if (oldText === newText) return null;
