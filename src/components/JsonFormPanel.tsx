@@ -60,7 +60,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
     setIssues(errors.length ? [] : analyzeJsonForm(root));
   }, [text]);
 
-  const applyEditsToEditor = useCallback((edits: JsonTextEdit[], newText: string) => {
+  const applyEditsToEditor = useCallback((edits: JsonTextEdit[], _newText: string) => {
     const view = getActiveView(tabId);
     if (!view) return;
     if (edits.length === 0) return;
@@ -74,7 +74,9 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
           insert: normalizeInsertForView(edit.content, view.state),
         })),
     });
-    setText(newText);
+    // Don't call setText here — the subscribeContentChange callback will
+    // pick up the editor change after its 300 ms debounce, avoiding a
+    // double parse (immediate + subscriber) on every edit.
   }, [tabId]);
 
   const applyToEditor = useCallback((newText: string) => {

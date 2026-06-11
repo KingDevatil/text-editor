@@ -112,6 +112,56 @@ describe('jsoncParser', () => {
     ]);
   });
 
+  it('preserves trailing comments when copying an object property', () => {
+    const text = `{
+  "id": "favor", // ID
+  "name": "圣宠值", // 名字
+  "description": "说明"
+}`;
+    const { newText } = copyNode(text, [], 'id', true);
+    // jsonc.modify transfers the trailing comment to the new property
+    expect(newText).toContain('"id_2": "favor"');
+    expect(newText).toMatch(/"id_2"[^\n]*\/\/ ID/);
+    expect(newText).toContain('"name": "圣宠值", // 名字');
+  });
+
+  it('preserves trailing comments when copying an array element', () => {
+    const text = `{
+  "items": [
+    "alpha", // first
+    "beta"
+  ]
+}`;
+    const { newText } = copyNode(text, ['items'], 0, false);
+    // jsonc.modify transfers the trailing comment to the new element
+    expect(newText).toMatch(/"alpha"[^\n]*\/\/ first/);
+    const root = parseJsonc(newText).root;
+    const items = root?.children.find((c) => c.key === 'items');
+    expect(items?.value).toHaveLength(3);
+  });
+
+  it('preserves internal trailing comments when copying a multi-line array element', () => {
+    const text = `{
+  "items": [
+    {
+      "id": "a", // comment-a
+      "name": "alpha" // name-a
+    }
+  ]
+}`;
+    const { newText } = copyNode(text, ['items'], 0, false);
+    // The new element should also have the trailing comments
+    const root = parseJsonc(newText).root;
+    const items = root?.children.find((c) => c.key === 'items');
+    expect(items?.value).toHaveLength(2);
+    // Check that the new element has comments
+    const elem1 = items?.children?.[1];
+    const idField = elem1?.children?.find((c: any) => c.key === 'id');
+    const nameField = elem1?.children?.find((c: any) => c.key === 'name');
+    expect(idField?.comments.some((c: any) => c.position === 'trailing' && c.content === 'comment-a')).toBe(true);
+    expect(nameField?.comments.some((c: any) => c.position === 'trailing' && c.content === 'name-a')).toBe(true);
+  });
+
   it('formats copied object fields onto their own lines', () => {
     const text = `{
   "rules": {
@@ -216,6 +266,65 @@ describe('jsoncParser', () => {
 
     expect(updated).toContain('"name": "old" // new note');
     expect(updated).not.toContain('old note');
+  });
+
+  it('does not bleed trailing comments into the next property as leading comments', () => {
+    const text = `{
+  "id": "favor", // ID
+  "name": "圣宠值", // 名字
+  "description": "皇帝对你的宠爱程度"
+}`;
+    const root = parseJsonc(text).root;
+    const id = root?.children.find((child) => child.key === 'id');
+    const name = root?.children.find((child) => child.key === 'name');
+    const desc = root?.children.find((child) => child.key === 'description');
+
+    // id should have trailing "ID", no leading
+    expect(id?.comments).toContainEqual(expect.objectContaining({ position: 'trailing', content: 'ID' }));
+    expect(id?.comments.filter((c) => c.position === 'leading')).toHaveLength(0);
+
+    // name should have trailing "名字", no leading
+    expect(name?.comments).toContainEqual(expect.objectContaining({ position: 'trailing', content: '名字' }));
+    expect(name?.comments.filter((c) => c.position === 'leading')).toHaveLength(0);
+
+    // description should have NO comments at all
+    expect(desc?.comments).toHaveLength(0);
+  });
+
+  it('collects genuine leading comments that sit on their own line', () => {
+    const text = `{
+  // this is a leading note
+  "name": "old",
+  "power": 10
+}`;
+    const root = parseJsonc(text).root;
+    const name = root?.children.find((child) => child.key === 'name');
+    const power = root?.children.find((child) => child.key === 'power');
+
+    expect(name?.comments).toContainEqual(expect.objectContaining({ position: 'leading', content: 'this is a leading note' }));
+    expect(power?.comments).toHaveLength(0);
+  });
+
+  it('transfers leading comments between [ and first element to the array node', () => {
+    const text = `{
+  "dimensions": [
+    // 赛季
+    {
+      "id": "favor",
+      "name": "圣宠值"
+    }
+  ]
+}`;
+    const root = parseJsonc(text).root;
+    const dims = root?.children.find((child) => child.key === 'dimensions');
+    const elem0 = dims?.children?.[0];
+
+    // The comment should be on the array node, not the first element
+    expect(dims?.comments).toContainEqual(
+      expect.objectContaining({ position: 'leading', content: '赛季' })
+    );
+    // The first element should NOT have the comment
+    expect(elem0?.comments.filter((c) => c.content === '赛季')).toHaveLength(0);
   });
 
   it('adds array elements from a neutral field template instead of cloning values', () => {

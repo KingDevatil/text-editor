@@ -74,6 +74,27 @@ function buildNodeInfo(
     info.children = node.children.map((child, idx) =>
       buildNodeInfo(child, text, [...path, idx], comments, child)
     );
+
+    // Leading comments that sit between the array's opening bracket `[` and
+    // the first element belong to the array itself, not the element.
+    if (info.children.length > 0) {
+      const firstChild = info.children[0];
+      const firstChildNode = node.children[0];
+      const transfer: JsonNodeComment[] = [];
+      const keep: JsonNodeComment[] = [];
+      for (const comment of firstChild.comments) {
+        if (comment.position === 'leading' && comment.offset > node.offset &&
+            comment.offset + comment.length <= firstChildNode.offset) {
+          transfer.push({ ...comment, position: 'leading' });
+        } else {
+          keep.push(comment);
+        }
+      }
+      if (transfer.length > 0) {
+        firstChild.comments = keep;
+        info.comments = [...info.comments, ...transfer];
+      }
+    }
   }
 
   return info;
@@ -123,6 +144,105 @@ export function getValueEdits(
   });
 }
 
+interface SourceCommentInfo {
+  relativePath: JSONPath;
+  position: 'trailing' | 'leading';
+  rawText: string;
+}
+
+function collectSubtreeComments(
+  text: string,
+  node: jsonc.Node,
+  basePath: JSONPath
+): SourceCommentInfo[] {
+  const allComments = scanJsonComments(text);
+  const result: SourceCommentInfo[] = [];
+
+  function walk(current: jsonc.Node, relPath: JSONPath) {
+    // Trailing comment
+    const trailing = getTrailingComment(text, current, allComments);
+    if (trailing) {
+      result.push({
+        relativePath: [...relPath],
+        position: 'trailing',
+        rawText: trailing.text,
+      });
+    }
+    // Leading comments
+    const leading = getLeadingComments(text, current, allComments);
+    for (const c of leading) {
+      result.push({
+        relativePath: [...relPath],
+        position: 'leading',
+        rawText: c.text,
+      });
+    }
+    // Recurse into children
+    if (current.children) {
+      if (current.type === 'object') {
+        for (const prop of current.children) {
+          const keyNode = prop.children?.[0];
+          const valNode = prop.children?.[1];
+          if (keyNode && valNode) {
+            const key = extractValue(keyNode, text) as string;
+            walk(valNode, [...relPath, key]);
+          }
+        }
+      } else if (current.type === 'array') {
+        current.children.forEach((child, idx) => {
+          walk(child, [...relPath, idx]);
+        });
+      }
+    }
+  }
+
+  walk(node, []);
+  return result;
+}
+
+function applyCommentsToNewNode(
+  text: string,
+  newPath: JSONPath,
+  sourceComments: SourceCommentInfo[]
+): string {
+  const newTree = jsonc.parseTree(text);
+  if (!newTree) return text;
+  const newNode = jsonc.findNodeAtLocation(newTree, newPath);
+  if (!newNode) return text;
+
+  // Build edit list for comment insertions (process bottom-up to avoid offset shifts)
+  const commentEdits: JsonTextEdit[] = [];
+  const eol = detectEol(text);
+
+  for (const sc of sourceComments) {
+    const targetAbsPath = [...newPath, ...sc.relativePath];
+    const targetNode = jsonc.findNodeAtLocation(newTree, targetAbsPath);
+    if (!targetNode) continue;
+
+    // Skip if target already has a comment of the same type
+    if (sc.position === 'trailing') {
+      const existing = getTrailingComment(text, targetNode, scanJsonComments(text));
+      if (existing) continue;
+      const insertOff = getTrailingCommentInsertOffset(text, targetNode);
+      commentEdits.push({ offset: insertOff, length: 0, content: ` ${sc.rawText}` });
+    } else {
+      const existing = getLeadingComments(text, targetNode, scanJsonComments(text));
+      if (existing.length > 0) continue;
+      const indent = text.slice(lineStart(text, targetNode.offset), targetNode.offset);
+      const lineStartOff = lineStart(text, targetNode.offset);
+      commentEdits.push({
+        offset: lineStartOff,
+        length: 0,
+        content: `${indent}${sc.rawText}${eol}`,
+      });
+    }
+  }
+
+  // Apply edits from bottom to top
+  commentEdits.sort((a, b) => b.offset - a.offset);
+  return jsonc.applyEdits(text, commentEdits);
+}
+
 export function copyNode(
   text: string,
   parentPath: JSONPath,
@@ -144,6 +264,12 @@ export function copyNode(
     return { newText: text, newPath: sourcePath };
   }
 
+  // Collect comments from source subtree before modification
+  const sourceComments = collectSubtreeComments(text, sourceNode, sourcePath);
+
+  let result: string;
+  let newPath: JSONPath;
+
   if (isObject && typeof sourceKey === 'string') {
     const existingKeys = getSiblingKeys(tree, text, parentPath);
     const newKey = generateUniqueKey(sourceKey, existingKeys);
@@ -152,17 +278,25 @@ export function copyNode(
       getInsertionIndex: insertIndex === undefined ? undefined : () => insertIndex,
       formattingOptions: { tabSize: 2, insertSpaces: true, eol: detectEol(text) },
     });
-    const newText = formatNodeAtPath(jsonc.applyEdits(text, edits), parentPath);
-    return { newText, newPath: [...parentPath, newKey] };
+    result = formatNodeAtPath(jsonc.applyEdits(text, edits), parentPath);
+    newPath = [...parentPath, newKey];
+  } else {
+    const parentArr = jsonc.findNodeAtLocation(tree, parentPath);
+    const idx = typeof sourceKey === 'number' ? sourceKey + 1 : parentArr?.children?.length ?? 0;
+    const edits = jsonc.modify(text, [...parentPath, idx], sourceValue, {
+      isArrayInsertion: true,
+      formattingOptions: { tabSize: 2, insertSpaces: true, eol: detectEol(text) },
+    });
+    result = jsonc.applyEdits(text, edits);
+    newPath = [...parentPath, idx];
   }
 
-  const parentArr = jsonc.findNodeAtLocation(tree, parentPath);
-  const idx = typeof sourceKey === 'number' ? sourceKey + 1 : parentArr?.children?.length ?? 0;
-  const edits = jsonc.modify(text, [...parentPath, idx], sourceValue, {
-    isArrayInsertion: true,
-    formattingOptions: { tabSize: 2, insertSpaces: true, eol: detectEol(text) },
-  });
-  return { newText: jsonc.applyEdits(text, edits), newPath: [...parentPath, idx] };
+  // Restore comments from source into the new node
+  if (sourceComments.length > 0) {
+    result = applyCommentsToNewNode(result, newPath, sourceComments);
+  }
+
+  return { newText: result, newPath };
 }
 
 export function addField(
@@ -567,6 +701,11 @@ function getLeadingComments(
     if (commentEnd > cursor) continue;
     const between = text.slice(commentEnd, cursor);
     if (!/^[\t \r\n]*$/.test(between) || countLineBreaks(between) > 1) break;
+    // Ensure the comment is on its own line (only whitespace before it).
+    // Otherwise it's a trailing comment of a previous property and should
+    // not be collected as a leading comment for the current node.
+    const linePrefix = text.slice(lineStart(text, comment.offset), comment.offset);
+    if (!/^[\t ]*$/.test(linePrefix)) break;
     selected.unshift(comment);
     cursor = lineStart(text, comment.offset);
   }

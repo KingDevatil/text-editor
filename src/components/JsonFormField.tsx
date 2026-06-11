@@ -234,6 +234,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
         }
         return (
           <input
+            key={String(node.offset)}
             type="text"
             className="flex-1 min-w-0 px-2 py-0.5 rounded border text-xs"
             style={{
@@ -264,6 +265,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
       case 'number':
         return (
           <input
+            key={String(node.offset)}
             type="number"
             className="w-32 px-2 py-0.5 rounded border text-xs"
             style={{
@@ -403,7 +405,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
   const renderCommentEditor = () => {
     const leadingText = getLeadingCommentText(node);
     const trailingText = getTrailingCommentText(node);
-    if (!editingComment && !leadingText && !trailingText) return null;
+    if (!editingComment && !leadingText) return null;
 
     if (editingComment) {
       return (
@@ -483,11 +485,25 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
       );
     }
 
+    // Display mode: show only leading comments as line comments
     return (
       <div className="ml-6 my-0.5 text-xs leading-5" style={{ color: 'var(--te-text-secondary)' }}>
         {leadingText && <div className="whitespace-pre-wrap">// {leadingText}</div>}
-        {trailingText && <div className="whitespace-pre-wrap opacity-80">/* {trailingText} */</div>}
       </div>
+    );
+  };
+
+  const renderInlineTrailingComment = () => {
+    if (editingComment) return null;
+    const trailingText = getTrailingCommentText(node);
+    if (!trailingText) return null;
+    return (
+      <span
+        className="text-xs shrink-0"
+        style={{ color: 'color-mix(in srgb, var(--te-text-secondary) 65%, transparent)' }}
+      >
+        // {trailingText}
+      </span>
     );
   };
 
@@ -694,10 +710,11 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
         {renderKey()}
         <span className="text-xs shrink-0" style={{ color: 'var(--te-text-secondary)' }}>:</span>
         {renderValueInput()}
+        {renderInlineTrailingComment()}
         {renderActionButtons()}
         {renderIssueBadge()}
-        {renderIssues()}
       </div>
+      {renderIssues()}
       {renderCommentEditor()}
     </div>
   );
