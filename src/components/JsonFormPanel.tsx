@@ -1,10 +1,25 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Maximize2, Minimize2, X, AlertCircle } from 'lucide-react';
+import { EditorState } from '@codemirror/state';
 import { subscribeContentChange, getActiveView } from '../hooks/useEditorStatePool';
-import { parseJsonc, applyValueEdit, copyNode, addField, removeField } from '../utils/jsoncParser';
-import type { JsonNodeInfo, JSONPath } from '../utils/jsoncParser';
+import {
+  parseJsonc,
+  applyValueEdit,
+  getValueEdits,
+  copyNode,
+  addField,
+  addFieldFromTemplate,
+  removeField,
+  renameObjectKey,
+  moveNode,
+  setLeadingComment,
+  setTrailingComment,
+} from '../utils/jsoncParser';
+import type { JsonNodeInfo, JSONPath, JsonTextEdit } from '../utils/jsoncParser';
 import type { ParseError } from 'jsonc-parser';
 import JsonFormField from './JsonFormField';
+import { analyzeJsonForm } from '../utils/jsonFormAnalysis';
+import type { JsonFormIssue } from '../utils/jsonFormAnalysis';
 
 interface JsonFormPanelProps {
   tabId: string;
@@ -20,6 +35,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
   const [text, setText] = useState('');
   const [parsedTree, setParsedTree] = useState<JsonNodeInfo | null>(null);
   const [parseErrors, setParseErrors] = useState<ParseError[]>([]);
+  const [issues, setIssues] = useState<JsonFormIssue[]>([]);
   const [editingLongText, setEditingLongText] = useState<{ path: JSONPath; value: string } | null>(null);
   const [longTextDraft, setLongTextDraft] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -37,27 +53,49 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
   }, [tabId, visible]);
 
   useEffect(() => {
-    if (!text) { setParsedTree(null); setParseErrors([]); return; }
+    if (!text) { setParsedTree(null); setParseErrors([]); setIssues([]); return; }
     const { root, errors } = parseJsonc(text);
     setParsedTree(root);
     setParseErrors(errors);
+    setIssues(errors.length ? [] : analyzeJsonForm(root));
   }, [text]);
 
-  const applyToEditor = useCallback((newText: string) => {
+  const applyEditsToEditor = useCallback((edits: JsonTextEdit[], newText: string) => {
     const view = getActiveView(tabId);
     if (!view) return;
+    if (edits.length === 0) return;
     view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: newText },
+      changes: edits
+        .slice()
+        .sort((a, b) => a.offset - b.offset)
+        .map((edit) => ({
+          from: edit.offset,
+          to: edit.offset + edit.length,
+          insert: normalizeInsertForView(edit.content, view.state),
+        })),
     });
+    setText(newText);
   }, [tabId]);
 
+  const applyToEditor = useCallback((newText: string) => {
+    const edit = getMinimalEdit(text, newText);
+    if (!edit) return;
+    applyEditsToEditor([edit], newText);
+  }, [text, applyEditsToEditor]);
+
   const handleEdit = useCallback((path: JSONPath, newValue: unknown) => {
+    const edits = getValueEdits(text, path, newValue);
     const newText = applyValueEdit(text, path, newValue);
-    applyToEditor(newText);
-  }, [text, applyToEditor]);
+    applyEditsToEditor(edits, newText);
+  }, [text, applyEditsToEditor]);
 
   const handleCopy = useCallback((parentPath: JSONPath, sourceKey: string | number, isObject: boolean) => {
     const { newText } = copyNode(text, parentPath, sourceKey, isObject);
+    applyToEditor(newText);
+  }, [text, applyToEditor]);
+
+  const handleAddLike = useCallback((path: JSONPath) => {
+    const { newText } = addFieldFromTemplate(text, path.slice(0, -1), path);
     applyToEditor(newText);
   }, [text, applyToEditor]);
 
@@ -66,8 +104,40 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
     applyToEditor(newText);
   }, [text, applyToEditor]);
 
-  const handleAdd = useCallback((parentPath: JSONPath, isObject: boolean) => {
+  const handleAdd = useCallback((parentPath: JSONPath, isObject: boolean, key?: string) => {
+    if (isObject) {
+      if (!key?.trim()) return;
+      const { newText } = addField(text, parentPath, true, key.trim(), '');
+      applyToEditor(newText);
+      return;
+    }
+    if (!isObject) {
+      const parentNode = findNode(parsedTree, parentPath);
+      const lastChild = parentNode?.children[parentNode.children.length - 1];
+      if (lastChild) {
+        const { newText } = addFieldFromTemplate(text, parentPath, lastChild.path);
+        applyToEditor(newText);
+        return;
+      }
+    }
     const { newText } = addField(text, parentPath, isObject);
+    applyToEditor(newText);
+  }, [text, parsedTree, applyToEditor]);
+
+  const handleRename = useCallback((path: JSONPath, newKey: string) => {
+    const { newText } = renameObjectKey(text, path, newKey);
+    applyToEditor(newText);
+  }, [text, applyToEditor]);
+
+  const handleMove = useCallback((path: JSONPath, direction: -1 | 1) => {
+    const { newText } = moveNode(text, path, direction);
+    applyToEditor(newText);
+  }, [text, applyToEditor]);
+
+  const handleEditComment = useCallback((path: JSONPath, content: string, position: 'leading' | 'trailing') => {
+    const newText = position === 'trailing'
+      ? setTrailingComment(text, path, content)
+      : setLeadingComment(text, path, content);
     applyToEditor(newText);
   }, [text, applyToEditor]);
 
@@ -132,14 +202,50 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
           </div>
         )}
 
+        {issues.length > 0 && (
+          <div
+            className="mb-2 rounded border p-2 text-xs"
+            style={{
+              borderColor: 'var(--te-border)',
+              backgroundColor: 'var(--te-bg-secondary)',
+              color: 'var(--te-text-primary)',
+            }}
+          >
+            <div className="mb-1 font-medium" style={{ color: 'var(--te-text-secondary)' }}>
+              配置检查：{issues.filter((issue) => issue.severity === 'error').length} 个错误 / {issues.filter((issue) => issue.severity === 'warning').length} 个提醒
+            </div>
+            {issues.slice(0, 5).map((issue, index) => (
+              <div key={`${issue.path.join('.')}-${index}`} className="flex gap-1 leading-5">
+                <span style={{ color: issue.severity === 'error' ? 'var(--te-error, #ef4444)' : 'var(--te-warning, #f59e0b)' }}>
+                  {issue.severity === 'error' ? '错误' : '提醒'}
+                </span>
+                <span style={{ color: 'var(--te-text-secondary)' }}>
+                  {formatPath(issue.path)}
+                </span>
+                <span>{issue.message}</span>
+              </div>
+            ))}
+            {issues.length > 5 && (
+              <div style={{ color: 'var(--te-text-secondary)' }}>
+                还有 {issues.length - 5} 条检查结果
+              </div>
+            )}
+          </div>
+        )}
+
         {parsedTree ? (
           <JsonFormField
             node={parsedTree}
             pathKey="root"
+            issues={issues}
             onEdit={handleEdit}
             onCopy={handleCopy}
+            onAddLike={handleAddLike}
             onDelete={handleDelete}
             onAdd={handleAdd}
+            onRename={handleRename}
+            onMove={handleMove}
+            onEditComment={handleEditComment}
             onEditText={handleEditText}
             depth={0}
             isRoot
@@ -186,7 +292,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
               </button>
               <button
                 className="px-3 py-1 text-sm rounded"
-                style={{ backgroundColor: 'var(--te-primary)', color: 'var(--te-primary-text)' }}
+                style={{ backgroundColor: 'var(--te-primary)', color: '#ffffff' }}
                 onClick={handleSaveLongText}
               >
                 保存
@@ -201,3 +307,56 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
 
 export default JsonFormPanel;
 JsonFormPanel.displayName = 'JsonFormPanel';
+
+function getMinimalEdit(oldText: string, newText: string): JsonTextEdit | null {
+  if (oldText === newText) return null;
+
+  let start = 0;
+  const oldLength = oldText.length;
+  const newLength = newText.length;
+  while (start < oldLength && start < newLength && oldText[start] === newText[start]) {
+    start++;
+  }
+
+  let oldEnd = oldLength;
+  let newEnd = newLength;
+  while (
+    oldEnd > start &&
+    newEnd > start &&
+    oldText[oldEnd - 1] === newText[newEnd - 1]
+  ) {
+    oldEnd--;
+    newEnd--;
+  }
+
+  return {
+    offset: start,
+    length: oldEnd - start,
+    content: newText.slice(start, newEnd),
+  };
+}
+
+function findNode(root: JsonNodeInfo | null, path: JSONPath): JsonNodeInfo | null {
+  if (!root) return null;
+  if (path.length === 0) return root;
+  let current: JsonNodeInfo | undefined = root;
+  for (const segment of path) {
+    current = current.children.find((child) => child.key === segment);
+    if (!current) return null;
+  }
+  return current;
+}
+
+function formatPath(path: JSONPath): string {
+  if (path.length === 0) return '$';
+  return path.reduce<string>((acc, segment) => (
+    typeof segment === 'number' ? `${acc}[${segment}]` : `${acc}.${segment}`
+  ), '$');
+}
+
+function normalizeInsertForView(content: string, state: EditorState): string {
+  const separator = state.facet(EditorState.lineSeparator) || '\n';
+  if (separator === '\n') return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lf = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  return lf.replace(/\n/g, separator);
+}

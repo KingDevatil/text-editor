@@ -228,7 +228,7 @@ input[type="range"]::-webkit-slider-thumb {
 .tok-keyword       { color: #0000ff; }
 .tok-string        { color: #a31515; }
 .tok-number        { color: #098658; }
-.tok-comment       { color: #008000; font-style: italic; }
+.tok-comment       { color: #6b7280; font-style: italic; opacity: 0.72; }
 .tok-variableName  { color: #001080; }
 .tok-typeName      { color: #267f99; }
 .tok-propertyName  { color: #001080; }
@@ -246,7 +246,7 @@ input[type="range"]::-webkit-slider-thumb {
 .dark .tok-keyword       { color: #569cd6; }
 .dark .tok-string        { color: #ce9178; }
 .dark .tok-number        { color: #b5cea8; }
-.dark .tok-comment       { color: #6a9955; font-style: italic; }
+.dark .tok-comment       { color: #7b8492; font-style: italic; opacity: 0.72; }
 .dark .tok-variableName  { color: #9cdcfe; }
 .dark .tok-typeName      { color: #4ec9b0; }
 .dark .tok-propertyName  { color: #9cdcfe; }
@@ -547,4 +547,3 @@ input[type="range"]::-webkit-slider-thumb {
 .dark .reader-prose :where(pre) {
   background: color-mix(in srgb, var(--te-text-secondary) 8%, transparent);
 }
-
