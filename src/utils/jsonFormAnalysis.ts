@@ -10,10 +10,25 @@ export interface JsonFormIssue {
 
 const IDENTITY_KEY_PATTERN = /^(id|key|code|uid|uuid|name)$/i;
 
+// Simple cache for analyzeJsonForm to avoid re-analyzing identical trees
+let lastAnalyzedRoot: JsonNodeInfo | null = null;
+let lastAnalyzedResult: JsonFormIssue[] = [];
+
 export function analyzeJsonForm(root: JsonNodeInfo | null): JsonFormIssue[] {
-  if (!root) return [];
+  // Return cached result if root hasn't changed
+  if (root === lastAnalyzedRoot) {
+    return lastAnalyzedResult;
+  }
+  
+  if (!root) {
+    lastAnalyzedRoot = null;
+    lastAnalyzedResult = [];
+    return [];
+  }
   const issues: JsonFormIssue[] = [];
   visit(root, issues);
+  lastAnalyzedRoot = root;
+  lastAnalyzedResult = issues;
   return issues;
 }
 

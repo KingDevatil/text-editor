@@ -35,12 +35,29 @@ export interface ParsedJson {
   text: string;
 }
 
+// Simple cache for parseJsonc to avoid re-parsing identical text
+let lastParsedText = '';
+let lastParsedResult: ParsedJson | null = null;
+
 export function parseJsonc(text: string): ParsedJson {
+  // Return cached result if text hasn't changed
+  if (text === lastParsedText && lastParsedResult) {
+    return lastParsedResult;
+  }
+  
   const errors: jsonc.ParseError[] = [];
   const node = jsonc.parseTree(text, errors);
-  if (!node) return { root: null, errors, text };
+  if (!node) {
+    const result = { root: null, errors, text };
+    lastParsedText = text;
+    lastParsedResult = result;
+    return result;
+  }
   const comments = scanJsonComments(text);
-  return { root: buildNodeInfo(node, text, [], comments, node), errors, text };
+  const result = { root: buildNodeInfo(node, text, [], comments, node), errors, text };
+  lastParsedText = text;
+  lastParsedResult = result;
+  return result;
 }
 
 function buildNodeInfo(
@@ -152,13 +169,12 @@ interface SourceCommentInfo {
 
 function collectSubtreeComments(
   text: string,
-  node: jsonc.Node,
-  basePath: JSONPath
+  node: jsonc.Node
 ): SourceCommentInfo[] {
   const allComments = scanJsonComments(text);
   const result: SourceCommentInfo[] = [];
 
-  function walk(current: jsonc.Node, relPath: JSONPath) {
+  function walk(current: jsonc.Node, relPath: JSONPath, depth: number) {
     // Trailing comment
     const trailing = getTrailingComment(text, current, allComments);
     if (trailing) {
@@ -171,6 +187,11 @@ function collectSubtreeComments(
     // Leading comments
     const leading = getLeadingComments(text, current, allComments);
     for (const c of leading) {
+      // At the root level (depth 0), skip all leading comments.
+      // These belong to the array/object context (e.g. inter-element
+      // separators like "//赛季"), not to the element itself.
+      // Child nodes (depth > 0) keep their leading comments as usual.
+      if (depth === 0) continue;
       result.push({
         relativePath: [...relPath],
         position: 'leading',
@@ -185,18 +206,18 @@ function collectSubtreeComments(
           const valNode = prop.children?.[1];
           if (keyNode && valNode) {
             const key = extractValue(keyNode, text) as string;
-            walk(valNode, [...relPath, key]);
+            walk(valNode, [...relPath, key], depth + 1);
           }
         }
       } else if (current.type === 'array') {
         current.children.forEach((child, idx) => {
-          walk(child, [...relPath, idx]);
+          walk(child, [...relPath, idx], depth + 1);
         });
       }
     }
   }
 
-  walk(node, []);
+  walk(node, [], 0);
   return result;
 }
 
@@ -265,7 +286,7 @@ export function copyNode(
   }
 
   // Collect comments from source subtree before modification
-  const sourceComments = collectSubtreeComments(text, sourceNode, sourcePath);
+  const sourceComments = collectSubtreeComments(text, sourceNode);
 
   let result: string;
   let newPath: JSONPath;

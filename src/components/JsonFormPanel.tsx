@@ -5,7 +5,6 @@ import { subscribeContentChange, getActiveView } from '../hooks/useEditorStatePo
 import {
   parseJsonc,
   applyValueEdit,
-  getValueEdits,
   copyNode,
   addField,
   addFieldFromTemplate,
@@ -44,7 +43,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
     if (!visible) return;
     const unsubscribe = subscribeContentChange(tabId, (newContent) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => setText(newContent), 300);
+      debounceRef.current = setTimeout(() => setText(newContent), 100);
     });
     return () => {
       unsubscribe();
@@ -83,13 +82,19 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
     const edit = getMinimalEdit(text, newText);
     if (!edit) return;
     applyEditsToEditor([edit], newText);
+    // Immediately update local text to avoid waiting for editor notification
+    setText(newText);
+    // Clear any pending debounce to avoid double update
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
   }, [text, applyEditsToEditor]);
 
   const handleEdit = useCallback((path: JSONPath, newValue: unknown) => {
-    const edits = getValueEdits(text, path, newValue);
     const newText = applyValueEdit(text, path, newValue);
-    applyEditsToEditor(edits, newText);
-  }, [text, applyEditsToEditor]);
+    applyToEditor(newText);
+  }, [text, applyToEditor]);
 
   const handleCopy = useCallback((parentPath: JSONPath, sourceKey: string | number, isObject: boolean) => {
     const { newText } = copyNode(text, parentPath, sourceKey, isObject);

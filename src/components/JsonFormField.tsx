@@ -113,7 +113,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
     if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
     commitTimerRef.current = setTimeout(() => {
       if (!composingRef.current) commitDraft(draft);
-    }, 500);
+    }, 200);
   }, [commitDraft]);
 
   const handleCopy = useCallback((e: React.MouseEvent) => {
