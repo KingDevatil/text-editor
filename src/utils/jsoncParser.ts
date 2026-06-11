@@ -112,6 +112,27 @@ function buildNodeInfo(
         info.comments = [...info.comments, ...transfer];
       }
     }
+
+    // Leading comments on non-first array elements are "inter-element"
+    // comments (e.g. "//赛季" between `},` and `{`). They belong to the
+    // array context, not to the individual element.
+    for (let i = 1; i < info.children.length; i++) {
+      const child = info.children[i];
+      const prevEnd = node.children[i - 1].offset + node.children[i - 1].length;
+      const transfer: JsonNodeComment[] = [];
+      const keep: JsonNodeComment[] = [];
+      for (const comment of child.comments) {
+        if (comment.position === 'leading' && comment.offset > prevEnd) {
+          transfer.push({ ...comment, position: 'leading' });
+        } else {
+          keep.push(comment);
+        }
+      }
+      if (transfer.length > 0) {
+        child.comments = keep;
+        info.comments = [...info.comments, ...transfer];
+      }
+    }
   }
 
   return info;
