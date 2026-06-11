@@ -133,11 +133,14 @@ describe('jsoncParser', () => {
   ]
 }`;
     const { newText } = copyNode(text, ['items'], 0, false);
-    // jsonc.modify transfers the trailing comment to the new element
-    expect(newText).toMatch(/"alpha"[^\n]*\/\/ first/);
+    // Both the original and the copy should have the trailing comment
     const root = parseJsonc(newText).root;
     const items = root?.children.find((c) => c.key === 'items');
     expect(items?.value).toHaveLength(3);
+    const elem0 = items?.children?.[0];
+    const elem1 = items?.children?.[1];
+    expect(elem0?.comments).toContainEqual(expect.objectContaining({ position: 'trailing', content: 'first' }));
+    expect(elem1?.comments).toContainEqual(expect.objectContaining({ position: 'trailing', content: 'first' }));
   });
 
   it('preserves internal trailing comments when copying a multi-line array element', () => {
@@ -426,5 +429,134 @@ describe('jsoncParser', () => {
         meta: { description: '' },
       },
     ]);
+  });
+
+  it('moves leading comments together with array elements when swapping', () => {
+    const text = `[
+  // comment for A
+  { "id": "a" },
+  // comment for B
+  { "id": "b" },
+  // comment for C
+  { "id": "c" }
+]`;
+
+    // Move element at index 1 (B) up → should become index 0
+    const { newText, newPath } = moveNode(text, [1], -1);
+    expect(newPath).toEqual([0]);
+    // B should now come before A, and its leading comment moved with it
+    expect(newText.indexOf('// comment for B')).toBeLessThan(newText.indexOf('// comment for A'));
+    expect(newText.indexOf('// comment for B')).toBeLessThan(newText.indexOf('"id": "b"'));
+    expect(newText.indexOf('"id": "b"')).toBeLessThan(newText.indexOf('"id": "a"'));
+    // C's comment stays with C (now at index 2)
+    expect(newText.indexOf('// comment for C')).toBeLessThan(newText.indexOf('"id": "c"'));
+  });
+
+  it('moves leading comments together with array elements when moving down', () => {
+    const text = `[
+  // comment A
+  { "id": "a" },
+  // comment B
+  { "id": "b" }
+]`;
+
+    // Move element at index 0 (A) down → should become index 1
+    const { newText, newPath } = moveNode(text, [0], 1);
+    expect(newPath).toEqual([1]);
+    // B should come first now, then A (with A's leading comment)
+    expect(newText.indexOf('"id": "b"')).toBeLessThan(newText.indexOf('// comment A'));
+    expect(newText.indexOf('// comment A')).toBeLessThan(newText.indexOf('"id": "a"'));
+  });
+
+  it('preserves element data unchanged when moving with leading comments', () => {
+    const text = `[
+  // A desc
+  { "id": "a", "val": 1 },
+  // B desc
+  { "id": "b", "val": 2 }
+]`;
+
+    const { newText } = moveNode(text, [1], -1);
+    const root = parseJsonc(newText).root;
+    expect(root?.children).toHaveLength(2);
+    // Both elements should still have correct data
+    expect(root?.children[0].value).toEqual({ id: 'b', val: 2 });
+    expect(root?.children[1].value).toEqual({ id: 'a', val: 1 });
+    // Leading comments should associate with their elements
+    const elem0 = root?.children[0];
+    const elem1 = root?.children[1];
+    expect(elem0?.comments).toContainEqual(expect.objectContaining({ position: 'leading', content: 'B desc' }));
+    expect(elem1?.comments).toContainEqual(expect.objectContaining({ position: 'leading', content: 'A desc' }));
+  });
+
+  it('also moves leading comments when swapping object properties', () => {
+    const text = `{
+  // section A
+  "alpha": 1,
+  // section B
+  "beta": 2
+}`;
+
+    const { newText } = moveNode(text, ['alpha'], 1);
+    // Beta should come first, its leading comment moves with it
+    expect(newText.indexOf('// section B')).toBeLessThan(newText.indexOf('"beta"'));
+    expect(newText.indexOf('"beta"')).toBeLessThan(newText.indexOf('"alpha"'));
+    // Alpha's leading comment moves with it
+    expect(newText.indexOf('// section A')).toBeLessThan(newText.indexOf('"alpha"'));
+  });
+
+  it('collects trailing comment on array element object as element trailing comment', () => {
+    const text = `{
+  "dimensions": [
+    { "id": "a" }, // comment on a
+    { "id": "b" }
+  ]
+}`;
+
+    const root = parseJsonc(text).root;
+    const dims = root?.children.find((child) => child.key === 'dimensions');
+    const elem0 = dims?.children?.[0];
+    const elem1 = dims?.children?.[1];
+
+    // First element should have trailing comment
+    expect(elem0?.comments).toContainEqual(expect.objectContaining({ position: 'trailing', content: 'comment on a' }));
+    // Second element should have no comments
+    expect(elem1?.comments).toHaveLength(0);
+  });
+
+  it('collects trailing comment on multi-line array element object', () => {
+    const text = `[
+    {
+      "id": "favor",
+      "name": "圣宠值"
+    }, // 赛季
+    {
+      "id": "blessing",
+      "name": "祝福值"
+    }, // 祝福
+]`;
+
+    const root = parseJsonc(text).root;
+    const elem0 = root?.children?.[0];
+    const elem1 = root?.children?.[1];
+
+    expect(elem0?.comments).toContainEqual(expect.objectContaining({ position: 'trailing', content: '赛季' }));
+    expect(elem1?.comments).toContainEqual(expect.objectContaining({ position: 'trailing', content: '祝福' }));
+  });
+
+  it('handles mixed case: one element has leading comment, the other does not', () => {
+    const text = `[
+  // only A has comment
+  { "id": "a" },
+  { "id": "b" }
+]`;
+
+    const { newText } = moveNode(text, [0], 1);
+    // B moves up, no leading comment for B
+    expect(newText.indexOf('"id": "b"')).toBeLessThan(newText.indexOf('"id": "a"'));
+    // A's leading comment should move with A down
+    expect(newText.indexOf('// only A has comment')).toBeLessThan(newText.indexOf('"id": "a"'));
+    // A's leading comment should be after B
+    expect(newText.indexOf('"id": "b"')).toBeLessThan(newText.indexOf('// only A has comment'));
   });
 });

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -13,6 +13,16 @@ import {
 import type { JsonNodeInfo, JSONPath } from '../utils/jsoncParser';
 import { isSimpleArray } from '../utils/jsoncParser';
 import type { JsonFormIssue } from '../utils/jsonFormAnalysis';
+
+/* ── Search context ─────────────────────────────────────────────── */
+
+interface FormSearchState {
+  query: string;
+  currentPath: JSONPath | null;
+  registerRef: (path: JSONPath, el: HTMLElement | null) => void;
+}
+
+export const FormSearchContext = React.createContext<FormSearchState | null>(null);
 
 interface JsonFormFieldProps {
   node: JsonNodeInfo;
@@ -47,6 +57,8 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
   depth,
   isRoot = false,
 }) => {
+  const searchCtx = useContext(FormSearchContext);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(depth < 4);
   const [valueDraft, setValueDraft] = useState(() => valueToDraft(node));
   const [keyDraft, setKeyDraft] = useState(() => String(node.key ?? pathKey));
@@ -84,6 +96,24 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
   useEffect(() => () => {
     if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
   }, []);
+
+  // ── Search: register ref & auto-expand on match ──────────────────
+  const pathKey_ = useMemo(() => JSON.stringify(node.path), [node.path]);
+  const isCurrentMatch = searchCtx && searchCtx.currentPath !== null
+    && JSON.stringify(searchCtx.currentPath) === pathKey_;
+
+  useEffect(() => {
+    if (!searchCtx || !containerRef.current) return;
+    searchCtx.registerRef(node.path, containerRef.current);
+    return () => searchCtx.registerRef(node.path, null);
+  }, [searchCtx, node.path]);
+
+  // Auto-expand when this node is the current match or an ancestor of it
+  const containsMatch = searchCtx && searchCtx.currentPath !== null
+    && isDescendantPath(searchCtx.currentPath, node.path);
+  useEffect(() => {
+    if ((isCurrentMatch || containsMatch) && !expanded) setExpanded(true);
+  }, [isCurrentMatch, containsMatch]);
 
   const handleValueChange = useCallback((newValue: unknown) => {
     onEdit(node.path, newValue);
@@ -244,7 +274,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
         }
         return (
           <input
-            key={String(node.offset)}
+            key={pathKey_}
             type="text"
             className="flex-1 min-w-0 px-2 py-0.5 rounded border text-xs"
             style={{
@@ -275,7 +305,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
       case 'number':
         return (
           <input
-            key={String(node.offset)}
+            key={pathKey_}
             type="number"
             className="w-32 px-2 py-0.5 rounded border text-xs"
             style={{
@@ -468,6 +498,9 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
                     ? getTrailingCommentText(node)
                     : getLeadingCommentText(node)
                 );
+              } else if (e.key === 'Enter' && !e.altKey) {
+                e.preventDefault();
+                commitComment();
               }
             }}
           />
@@ -508,7 +541,15 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
     // Display mode: show only leading comments as line comments
     return (
       <div className="ml-6 my-0.5 text-xs leading-5" style={{ color: 'var(--te-text-secondary)' }}>
-        {leadingText && <div className="whitespace-pre-wrap">// {leadingText}</div>}
+        {leadingText && (
+          <div
+            className="whitespace-pre-wrap cursor-pointer hover:underline"
+            onDoubleClick={handleEditComment}
+            title="双击编辑注释"
+          >
+            // {leadingText}
+          </div>
+        )}
       </div>
     );
   };
@@ -519,8 +560,11 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
     if (!trailingText) return null;
     return (
       <span
-        className="text-xs shrink-0"
+        className="text-xs shrink-0 cursor-pointer hover:underline"
         style={{ color: 'color-mix(in srgb, var(--te-text-secondary) 65%, transparent)' }}
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={handleEditComment}
+        title="双击编辑注释"
       >
         // {trailingText}
       </span>
@@ -530,7 +574,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
   if (node.type === 'object') {
     const childCount = node.children.length;
     return (
-      <div style={{ marginLeft: isRoot ? 0 : indent }}>
+      <div ref={isRoot ? undefined : containerRef} data-path={pathKey_} style={{ marginLeft: isRoot ? 0 : indent, ...(isCurrentMatch ? { backgroundColor: 'color-mix(in srgb, var(--te-primary) 12%, transparent)', borderRadius: 4 } : {}) }}>
         {!isRoot && (
           <div
             className="flex items-center gap-1 py-1 px-1 rounded group cursor-pointer hover:bg-[color-mix(in_srgb,var(--te-text-primary)_4%,transparent)]"
@@ -541,8 +585,8 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
             <span className="text-xs" style={{ color: 'var(--te-text-secondary)' }}>
               {'{'}...{'}'} ({childCount})
             </span>
-            {renderObjectSummary(node)}
             {renderIssueBadge()}
+            {renderInlineTrailingComment()}
             {renderActionButtons()}
           </div>
         )}
@@ -637,7 +681,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
 
     if (simple) {
       return (
-        <div style={{ marginLeft: isRoot ? 0 : indent }} className="py-1">
+        <div ref={isRoot ? undefined : containerRef} data-path={pathKey_} style={{ marginLeft: isRoot ? 0 : indent, ...(isCurrentMatch ? { backgroundColor: 'color-mix(in srgb, var(--te-primary) 12%, transparent)', borderRadius: 4 } : {}) }} className="py-1">
           {!isRoot && (
             <div className="flex items-center gap-1 mb-1 group">
               {renderKey()}
@@ -690,7 +734,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
     }
 
     return (
-      <div style={{ marginLeft: isRoot ? 0 : indent }}>
+      <div ref={isRoot ? undefined : containerRef} data-path={pathKey_} style={{ marginLeft: isRoot ? 0 : indent, ...(isCurrentMatch ? { backgroundColor: 'color-mix(in srgb, var(--te-primary) 12%, transparent)', borderRadius: 4 } : {}) }}>
         {!isRoot && (
           <div
             className="flex items-center gap-1 py-1 px-1 rounded group cursor-pointer hover:bg-[color-mix(in_srgb,var(--te-text-primary)_4%,transparent)]"
@@ -750,7 +794,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
   }
 
   return (
-    <div style={{ marginLeft: indent }}>
+    <div ref={containerRef} data-path={pathKey_} style={{ marginLeft: indent, ...(isCurrentMatch ? { backgroundColor: 'color-mix(in srgb, var(--te-primary) 12%, transparent)', borderRadius: 4 } : {}) }}>
       <div
         className="flex items-center gap-2 py-1 px-1 rounded group hover:bg-[color-mix(in_srgb,var(--te-text-primary)_4%,transparent)]"
       >
@@ -828,37 +872,6 @@ function isCompactNumberArray(value: unknown, maxLen = 6): value is number[] {
     value.every((item) => typeof item === 'number' && Number.isFinite(item));
 }
 
-function renderObjectSummary(node: JsonNodeInfo): React.ReactNode {
-  if (node.type !== 'object') return null;
-  const summary = summarizeObject(node);
-  if (!summary) return null;
-  return (
-    <span className="text-xs truncate max-w-[240px]" style={{ color: 'var(--te-text-secondary)' }}>
-      {summary}
-    </span>
-  );
-}
-
-function summarizeObject(node: JsonNodeInfo): string {
-  const preferred = ['id', 'name', 'key', 'code', 'title', 'label'];
-  const parts: string[] = [];
-  for (const key of preferred) {
-    const child = node.children.find((candidate) => candidate.key === key && isScalar(candidate.value));
-    if (child) parts.push(`${key}: ${String(child.value)}`);
-    if (parts.length >= 2) return parts.join(' · ');
-  }
-  for (const child of node.children) {
-    if (typeof child.key === 'string' && isScalar(child.value)) {
-      parts.push(`${child.key}: ${String(child.value)}`);
-    }
-    if (parts.length >= 2) break;
-  }
-  return parts.join(' · ');
-}
-
-function isScalar(value: unknown): boolean {
-  return value === null || ['string', 'number', 'boolean'].includes(typeof value);
-}
 
 function pathsEqual(a: JSONPath, b: JSONPath): boolean {
   return a.length === b.length && a.every((segment, index) => segment === b[index]);
@@ -869,7 +882,7 @@ function isDescendantPath(path: JSONPath, parent: JSONPath): boolean {
 }
 
 function nodeKey(node: JsonNodeInfo): string {
-  return `${node.offset}:${node.length}`;
+  return JSON.stringify(node.path);
 }
 
 export default JsonFormField;

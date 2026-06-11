@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Maximize2, Minimize2, X, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { ChevronDown, ChevronUp, Maximize2, Minimize2, Search, X, AlertCircle } from 'lucide-react';
 import { EditorState } from '@codemirror/state';
 import { subscribeContentChange, getActiveView } from '../hooks/useEditorStatePool';
 import {
@@ -16,7 +16,7 @@ import {
 } from '../utils/jsoncParser';
 import type { JsonNodeInfo, JSONPath, JsonTextEdit } from '../utils/jsoncParser';
 import type { ParseError } from 'jsonc-parser';
-import JsonFormField from './JsonFormField';
+import JsonFormField, { FormSearchContext } from './JsonFormField';
 import { analyzeJsonForm } from '../utils/jsonFormAnalysis';
 import type { JsonFormIssue } from '../utils/jsonFormAnalysis';
 
@@ -39,6 +39,75 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
   const [longTextDraft, setLongTextDraft] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const applyingEditRef = useRef(false);
+
+  // ── Search state ─────────────────────────────────────────────────
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [matchIndex, setMatchIndex] = useState(0);
+  const nodeRefs = useRef(new Map<string, HTMLElement>());
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const matches = useMemo<JSONPath[]>(() => {
+    if (!searchQuery.trim() || !parsedTree) return [];
+    const q = searchQuery.toLowerCase();
+    const result: JSONPath[] = [];
+    const walk = (node: JsonNodeInfo) => {
+      const keyMatch = typeof node.key === 'string' && node.key.toLowerCase().includes(q);
+      const valMatch = (node.type === 'string' || node.type === 'number' || node.type === 'boolean')
+        && node.value !== null && node.value !== undefined
+        && String(node.value).toLowerCase().includes(q);
+      const commentMatch = node.comments.some((c) => c.content.toLowerCase().includes(q));
+      if (keyMatch || valMatch || commentMatch) result.push([...node.path]);
+      node.children.forEach(walk);
+    };
+    walk(parsedTree);
+    return result;
+  }, [searchQuery, parsedTree]);
+
+  const currentPath = matchIndex < matches.length ? matches[matchIndex] : null;
+
+  const searchCtx = useMemo(() => ({
+    query: searchQuery.trim(),
+    currentPath,
+    registerRef: (path: JSONPath, el: HTMLElement | null) => {
+      const k = JSON.stringify(path);
+      if (el) nodeRefs.current.set(k, el);
+      else nodeRefs.current.delete(k);
+    },
+  }), [searchQuery, currentPath]);
+
+  const scrollToMatch = useCallback((path: JSONPath | null) => {
+    if (!path) return;
+    const el = nodeRefs.current.get(JSON.stringify(path));
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, []);
+
+  const goNext = useCallback(() => {
+    if (matches.length === 0) return;
+    const next = (matchIndex + 1) % matches.length;
+    setMatchIndex(next);
+    scrollToMatch(matches[next]);
+  }, [matches, matchIndex, scrollToMatch]);
+
+  const goPrev = useCallback(() => {
+    if (matches.length === 0) return;
+    const prev = (matchIndex - 1 + matches.length) % matches.length;
+    setMatchIndex(prev);
+    scrollToMatch(matches[prev]);
+  }, [matches, matchIndex, scrollToMatch]);
+
+  // Close search on Escape (only when search bar is focused)
+  useEffect(() => {
+    if (!searchOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSearchOpen(false);
+        setSearchQuery('');
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [searchOpen]);
 
   useEffect(() => {
     if (!visible) return;
@@ -175,6 +244,14 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
           JSON 表单
         </span>
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => { setSearchOpen(!searchOpen); setTimeout(() => searchInputRef.current?.focus(), 50); }}
+            title="查找"
+            className="flex items-center justify-center w-7 h-7 rounded hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)]"
+            style={{ color: searchOpen ? 'var(--te-primary)' : 'var(--te-text-primary)' }}
+          >
+            <Search size={14} />
+          </button>
           {onToggleFullScreen && (
             <button
               onClick={onToggleFullScreen}
@@ -197,6 +274,62 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
           )}
         </div>
       </div>
+
+      {/* Search bar */}
+      {searchOpen && (
+        <div
+          className="flex items-center gap-2 px-3 py-1.5 border-b shrink-0"
+          style={{ backgroundColor: 'var(--te-bg-secondary)', borderColor: 'var(--te-border)' }}
+        >
+          <Search size={13} style={{ color: 'var(--te-text-secondary)', flexShrink: 0 }} />
+          <input
+            ref={searchInputRef}
+            className="flex-1 min-w-0 px-2 py-1 rounded border text-xs"
+            style={{
+              borderColor: 'var(--te-border)',
+              color: 'var(--te-text-primary)',
+              backgroundColor: 'var(--te-bg-primary)',
+            }}
+            placeholder="搜索 key、value、注释..."
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setMatchIndex(0); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); e.shiftKey ? goPrev() : goNext(); }
+              if (e.key === 'Escape') { setSearchOpen(false); setSearchQuery(''); }
+            }}
+            autoFocus
+          />
+          <span className="text-xs shrink-0 tabular-nums" style={{ color: 'var(--te-text-secondary)', minWidth: 48, textAlign: 'center' }}>
+            {matches.length > 0 ? `${matchIndex + 1}/${matches.length}` : searchQuery ? '无结果' : ''}
+          </span>
+          <button
+            onClick={goPrev}
+            disabled={matches.length === 0}
+            className="flex items-center justify-center w-6 h-6 rounded hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)] disabled:opacity-30"
+            style={{ color: 'var(--te-text-primary)' }}
+            title="上一个 (Shift+Enter)"
+          >
+            <ChevronUp size={14} />
+          </button>
+          <button
+            onClick={goNext}
+            disabled={matches.length === 0}
+            className="flex items-center justify-center w-6 h-6 rounded hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)] disabled:opacity-30"
+            style={{ color: 'var(--te-text-primary)' }}
+            title="下一个 (Enter)"
+          >
+            <ChevronDown size={14} />
+          </button>
+          <button
+            onClick={() => { setSearchOpen(false); setSearchQuery(''); }}
+            className="flex items-center justify-center w-6 h-6 rounded hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)]"
+            style={{ color: 'var(--te-text-secondary)' }}
+            title="关闭 (Esc)"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto p-3">
         {parseErrors.length > 0 && (
@@ -244,22 +377,24 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
 
         {parsedTree ? (
           <JsonFormErrorBoundary>
-            <JsonFormField
-              node={parsedTree}
-              pathKey="root"
-              issues={issues}
-              onEdit={handleEdit}
-              onCopy={handleCopy}
-              onAddLike={handleAddLike}
-              onDelete={handleDelete}
-              onAdd={handleAdd}
-              onRename={handleRename}
-              onMove={handleMove}
-              onEditComment={handleEditComment}
-              onEditText={handleEditText}
-              depth={0}
-              isRoot
-            />
+            <FormSearchContext.Provider value={searchQuery.trim() ? searchCtx : null}>
+              <JsonFormField
+                node={parsedTree}
+                pathKey="root"
+                issues={issues}
+                onEdit={handleEdit}
+                onCopy={handleCopy}
+                onAddLike={handleAddLike}
+                onDelete={handleDelete}
+                onAdd={handleAdd}
+                onRename={handleRename}
+                onMove={handleMove}
+                onEditComment={handleEditComment}
+                onEditText={handleEditText}
+                depth={0}
+                isRoot
+              />
+            </FormSearchContext.Provider>
           </JsonFormErrorBoundary>
         ) : (
           !parseErrors.length && (
@@ -295,6 +430,16 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
               }}
               value={longTextDraft}
               onChange={(e) => setLongTextDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.altKey) {
+                  e.preventDefault();
+                  handleSaveLongText();
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setEditingLongText(null);
+                }
+              }}
               autoFocus
             />
             <div className="flex justify-end gap-2 px-4 py-2 border-t" style={{ borderColor: 'var(--te-border)' }}>

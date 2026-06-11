@@ -78,7 +78,7 @@ function buildNodeInfo(
   const info: JsonNodeInfo = {
     path: [...path],
     key: path.length > 0 ? path[path.length - 1] : undefined,
-    value: extractValue(node, text),
+    value: undefined, // filled after children are built for object/array
     type,
     children: [],
     offset: node.offset,
@@ -91,13 +91,17 @@ function buildNodeInfo(
       if (propNode.type !== 'property' || !propNode.children || propNode.children.length < 2) continue;
       const keyNode = propNode.children[0];
       const valNode = propNode.children[1];
-      const key = extractValue(keyNode, text) as string;
+      const key = extractScalarValue(keyNode, text) as string;
       info.children.push(buildNodeInfo(valNode, text, [...path, key], comments, propNode));
     }
+    // Assemble value from already-built children (avoids O(n²) via getNodeValue)
+    info.value = Object.fromEntries(info.children.map((c) => [c.key, c.value]));
   } else if (node.type === 'array' && node.children) {
     info.children = node.children.map((child, idx) =>
       buildNodeInfo(child, text, [...path, idx], comments, child)
     );
+    // Assemble value from already-built children (avoids O(n²) via getNodeValue)
+    info.value = info.children.map((c) => c.value);
 
     // For the first element: if comments between `[` and the element are
     // separated from the element by a blank line, those comments are
@@ -138,6 +142,9 @@ function buildNodeInfo(
         }
       }
     }
+  } else {
+    // Scalar types: use extractScalarValue (only handles string/number/boolean/null)
+    info.value = extractScalarValue(node, text);
   }
 
   return info;
@@ -152,6 +159,17 @@ function mapNodeType(type: string): JsonNodeInfo['type'] {
     case 'boolean': return 'boolean';
     case 'null': return 'null';
     default: return 'null';
+  }
+}
+
+function extractScalarValue(node: jsonc.Node, text: string): unknown {
+  switch (node.type) {
+    case 'string':
+      return jsonc.getNodeValue(node);
+    case 'number': return Number(text.substring(node.offset, node.offset + node.length));
+    case 'boolean': return text.substring(node.offset, node.offset + node.length) === 'true';
+    case 'null': return null;
+    default: return undefined;
   }
 }
 
@@ -311,6 +329,9 @@ export function copyNode(
   // Collect comments from source subtree before modification
   const sourceComments = collectSubtreeComments(text, sourceNode);
 
+  // Remember the trailing comment of the source node itself (jsonc.modify may lose it during reformat)
+  const sourceTrailingComment = getTrailingComment(text, sourceNode, scanJsonComments(text));
+
   let result: string;
   let newPath: JSONPath;
 
@@ -338,6 +359,19 @@ export function copyNode(
   // Restore comments from source into the new node
   if (sourceComments.length > 0) {
     result = applyCommentsToNewNode(result, newPath, sourceComments);
+  }
+
+  // Re-add the trailing comment to the source if it was lost during jsonc.modify
+  if (sourceTrailingComment) {
+    const recheckTree = jsonc.parseTree(result);
+    const recheckSource = recheckTree ? jsonc.findNodeAtLocation(recheckTree, sourcePath) : null;
+    if (recheckSource) {
+      const existingTrailing = getTrailingComment(result, recheckSource, scanJsonComments(result));
+      if (!existingTrailing) {
+        const commentContent = stripCommentSyntax(sourceTrailingComment.text, sourceTrailingComment.kind);
+        result = setTrailingComment(result, sourcePath, commentContent);
+      }
+    }
   }
 
   return { newText: result, newPath };
@@ -611,19 +645,27 @@ export function moveNode(
   const last = Math.max(index, targetIndex);
   const firstNode = children[first];
   const lastNode = children[last];
-  const rawFirst = text.slice(firstNode.offset, firstNode.offset + firstNode.length);
-  const rawLast = text.slice(lastNode.offset, lastNode.offset + lastNode.length);
 
-  let newText = applySingleEdit(text, {
-    offset: lastNode.offset,
-    length: lastNode.length,
-    content: rawFirst,
-  });
-  newText = applySingleEdit(newText, {
-    offset: firstNode.offset,
-    length: firstNode.length,
-    content: rawLast,
-  });
+  // Expand ranges to include leading comments so they move with the node
+  const firstBlock = nodeBlockRange(text, firstNode);
+  const lastBlock = nodeBlockRange(text, lastNode);
+
+  const rawFirst = text.slice(firstBlock.offset, firstBlock.offset + firstBlock.length);
+  const rawLast = text.slice(lastBlock.offset, lastBlock.offset + lastBlock.length);
+
+  // Single-operation swap: [prefix][firstBlock][middle][lastBlock][suffix]
+  // becomes:            [prefix][lastBlock] [middle][firstBlock][suffix]
+  const prefixEnd = firstBlock.offset;
+  const middleStart = firstBlock.offset + firstBlock.length;
+  const middleEnd = lastBlock.offset;
+  const suffixStart = lastBlock.offset + lastBlock.length;
+
+  const newText =
+    text.slice(0, prefixEnd) +
+    rawLast +
+    text.slice(middleStart, middleEnd) +
+    rawFirst +
+    text.slice(suffixStart);
 
   const newPath = parent.type === 'array' ? [...parentPath, targetIndex] : path;
   return { newText, newPath };
@@ -769,6 +811,22 @@ function getLeadingComments(
   return selected;
 }
 
+/**
+ * Expand a raw jsonc.Node range to include its leading comments.
+ * Returns { offset, length } of the full block (leading-comment lines + node).
+ */
+function nodeBlockRange(text: string, node: jsonc.Node): { offset: number; length: number } {
+  const allComments = scanJsonComments(text);
+  const leading = getLeadingComments(text, node, allComments);
+  if (leading.length === 0) {
+    return { offset: node.offset, length: node.length };
+  }
+  // Start from the beginning of the line of the first leading comment
+  const blockStart = lineStart(text, leading[0].offset);
+  const blockEnd = node.offset + node.length;
+  return { offset: blockStart, length: blockEnd - blockStart };
+}
+
 function getTrailingComment(
   text: string,
   target: jsonc.Node,
@@ -777,7 +835,12 @@ function getTrailingComment(
   const targetEnd = target.offset + target.length;
   return comments.find((comment) => {
     if (comment.offset <= target.offset) return false;
-    if (lineNumberAt(text, comment.offset) !== lineNumberAt(text, target.offset)) return false;
+    // Check if the comment is on the same line as either the start OR end of the target.
+    // For multi-line nodes like objects/arrays, trailing comments (e.g. `}, // comment`)
+    // sit on the closing-brace line, while bracket-trailing comments (`[ // comment`)
+    // sit on the opening-bracket line.
+    const commentLine = lineNumberAt(text, comment.offset);
+    if (commentLine !== lineNumberAt(text, target.offset) && commentLine !== lineNumberAt(text, targetEnd)) return false;
     if (comment.offset < targetEnd) return true;
     return /^[\t ,]*$/.test(text.slice(targetEnd, comment.offset));
   });
