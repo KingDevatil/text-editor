@@ -53,4 +53,24 @@ describe('parseTabDelimitedObjects', () => {
       ExchangeItem: [6, 100],
     });
   });
+
+  it('keeps array field hints as arrays for single and blank cells', () => {
+    const result = parseTabDelimitedObjects('ID\tExchangeItem\n1001\t6\n1002\t', {
+      fieldTypeHints: {
+        ID: 0,
+        ExchangeItem: [0],
+      },
+    });
+
+    expect(result.rows).toEqual([
+      {
+        ID: 1001,
+        ExchangeItem: [6],
+      },
+      {
+        ID: 1002,
+        ExchangeItem: [],
+      },
+    ]);
+  });
 });

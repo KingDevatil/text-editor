@@ -169,7 +169,7 @@ const Minimap: React.FC<MinimapProps> = ({ tabId, viewRef }) => {
         effects: EditorView.scrollIntoView(line.from, { y: 'start' }),
       });
     },
-    []
+    [viewRef]
   );
 
   const handleMouseDown = useCallback(

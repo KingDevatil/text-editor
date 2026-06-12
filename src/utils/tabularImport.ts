@@ -86,11 +86,13 @@ function parseBooleanCellValue(value: string): unknown {
 }
 
 function parseArrayCellValue(value: string, typeHint: unknown[]): unknown {
+  if (value.trim() === '') return [];
+
   const parsed = parseJsonValue(value);
   if (Array.isArray(parsed)) return parsed.map((item) => coerceValueLike(item, typeHint[0]));
 
   const separator = value.includes(';') ? ';' : value.includes(',') ? ',' : null;
-  if (!separator) return parseCellValueByFallback(value);
+  if (!separator) return [coerceValueLike(value, typeHint[0])];
 
   return value
     .split(separator)

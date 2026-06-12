@@ -18,17 +18,17 @@ export function analyzeJsonForm(root: JsonNodeInfo | null): JsonFormIssue[] {
 }
 
 function visit(node: JsonNodeInfo, issues: JsonFormIssue[]): void {
-  if (node.type === 'array') {
-    analyzeObjectArray(node, issues);
+  if (node.type === 'array' || node.type === 'object') {
+    analyzeObjectChildren(node, issues);
   }
   for (const child of node.children) {
     visit(child, issues);
   }
 }
 
-function analyzeObjectArray(arrayNode: JsonNodeInfo, issues: JsonFormIssue[]): void {
-  const objectItems = arrayNode.children.filter((child) => child.type === 'object');
-  if (objectItems.length < 2 || objectItems.length !== arrayNode.children.length) return;
+function analyzeObjectChildren(parentNode: JsonNodeInfo, issues: JsonFormIssue[]): void {
+  const objectItems = parentNode.children.filter((child) => child.type === 'object');
+  if (objectItems.length < 2 || objectItems.length !== parentNode.children.length) return;
 
   const keyCounts = new Map<string, number>();
   for (const item of objectItems) {
@@ -58,7 +58,7 @@ function analyzeObjectArray(arrayNode: JsonNodeInfo, issues: JsonFormIssue[]): v
     }
   }
 
-  for (const key of identityKeysForObjectArray(objectItems, commonKeys)) {
+  for (const key of identityKeysForObjectChildren(objectItems, commonKeys)) {
     const seen = new Map<string, JSONPath>();
     for (const item of objectItems) {
       const child = item.children.find((candidate) => candidate.key === key);
@@ -78,7 +78,7 @@ function analyzeObjectArray(arrayNode: JsonNodeInfo, issues: JsonFormIssue[]): v
   }
 }
 
-function identityKeysForObjectArray(objectItems: JsonNodeInfo[], commonKeys: string[]): string[] {
+function identityKeysForObjectChildren(objectItems: JsonNodeInfo[], commonKeys: string[]): string[] {
   const keys = new Set(commonKeys.filter((candidate) => IDENTITY_KEY_PATTERN.test(candidate)));
   const firstKey = objectItems[0]?.children.find((child) => typeof child.key === 'string')?.key;
   if (typeof firstKey === 'string' && commonKeys.includes(firstKey)) {

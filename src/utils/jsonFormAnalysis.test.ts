@@ -12,11 +12,12 @@ describe('jsonFormAnalysis', () => {
       ]
     }`);
 
-    expect(analyzeJsonForm(root)).toContainEqual(expect.objectContaining({
-      severity: 'warning',
-      path: ['items', 1],
-      message: '同类数组元素缺少字段 "weight"',
-    }));
+    const issue = analyzeJsonForm(root).find((candidate) =>
+      candidate.severity === 'warning' &&
+      candidate.path.join('.') === 'items.1'
+    );
+
+    expect(issue?.message).toContain('"weight"');
   });
 
   it('reports duplicate identity values in sibling object arrays', () => {
@@ -27,11 +28,13 @@ describe('jsonFormAnalysis', () => {
       ]
     }`);
 
-    expect(analyzeJsonForm(root)).toContainEqual(expect.objectContaining({
-      severity: 'error',
-      path: ['records', 1, 'code'],
-      message: '字段 "code" 的值 "same" 在同一数组内重复',
-    }));
+    const issue = analyzeJsonForm(root).find((candidate) =>
+      candidate.severity === 'error' &&
+      candidate.path.join('.') === 'records.1.code'
+    );
+
+    expect(issue?.message).toContain('"code"');
+    expect(issue?.message).toContain('"same"');
   });
 
   it('reports duplicate values for the first field in object arrays', () => {
@@ -42,11 +45,47 @@ describe('jsonFormAnalysis', () => {
       ]
     }`);
 
-    expect(analyzeJsonForm(root)).toContainEqual(expect.objectContaining({
-      severity: 'error',
-      path: ['records', 1, 'type'],
-      message: '字段 "type" 的值 "same" 在同一数组内重复',
-    }));
+    const issue = analyzeJsonForm(root).find((candidate) =>
+      candidate.severity === 'error' &&
+      candidate.path.join('.') === 'records.1.type'
+    );
+
+    expect(issue?.message).toContain('"type"');
+    expect(issue?.message).toContain('"same"');
+  });
+
+  it('reports duplicate values for the first field in object child collections', () => {
+    const { root } = parseJsonc(`{
+      "records": {
+        "row_a": { "type": "same", "value": 1 },
+        "row_b": { "type": "same", "value": 2 }
+      }
+    }`);
+
+    const issue = analyzeJsonForm(root).find((candidate) =>
+      candidate.severity === 'error' &&
+      candidate.path.join('.') === 'records.row_b.type'
+    );
+
+    expect(issue?.message).toContain('"type"');
+    expect(issue?.message).toContain('"same"');
+  });
+
+  it('warns when a homogeneous object child collection has a missing common field', () => {
+    const { root } = parseJsonc(`{
+      "records": {
+        "row_a": { "id": "a", "label": "A", "weight": 1 },
+        "row_b": { "id": "b", "label": "B" },
+        "row_c": { "id": "c", "label": "C", "weight": 3 }
+      }
+    }`);
+
+    const issue = analyzeJsonForm(root).find((candidate) =>
+      candidate.severity === 'warning' &&
+      candidate.path.join('.') === 'records.row_b'
+    );
+
+    expect(issue?.message).toContain('"weight"');
   });
 
   it('does not report duplicate first-field identity keys twice', () => {

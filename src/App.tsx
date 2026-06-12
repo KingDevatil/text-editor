@@ -993,7 +993,7 @@ function App() {
         }
       },
     }] : []),
-  ], [handleNewFile, handleOpenFile, handleSaveFile, handleFormat, handleCycleTheme, handleToggleSplit, handleToggleDiff, handleToggleReadMode, findReplaceVisible, setFindReplaceVisible, sidebarVisible, setSidebarVisible, isDark, wordWrap, showWhitespace, previewVisible, setPreviewVisible, splitMode, diffMode, readMode, activeTab, theme, columnAlignSupported, setTabColumnAlign]);
+  ], [handleNewFile, handleOpenFile, handleSaveFile, handleFormat, handleCycleTheme, handleToggleSplit, handleToggleDiff, handleToggleReadMode, findReplaceVisible, setFindReplaceVisible, sidebarVisible, setSidebarVisible, isDark, wordWrap, showWhitespace, previewVisible, setPreviewVisible, splitMode, diffMode, readMode, activeTab, theme, columnAlignSupported, setTabColumnAlign, jsonFormVisible, setJsonFormVisible, jsonFormFullScreen, setJsonFormFullScreen]);
 
   return (
     <div className={`flex flex-col h-screen ${theme !== 'light' ? 'dark' : ''}`}>

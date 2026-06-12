@@ -10,6 +10,7 @@ import {
   applyValueEdit,
   copyNode,
   addField,
+  appendFields,
   addFieldFromTemplate,
   removeField,
   renameObjectKey,
@@ -19,7 +20,8 @@ import {
 } from '../utils/jsoncParser';
 import type { JsonNodeInfo, JSONPath, JsonTextEdit } from '../utils/jsoncParser';
 import type { ParseError } from 'jsonc-parser';
-import JsonFormField, { FormSearchContext } from './JsonFormField';
+import JsonFormField from './JsonFormField';
+import { FormSearchContext } from './FormSearchContext';
 import { analyzeJsonForm } from '../utils/jsonFormAnalysis';
 import type { JsonFormIssue } from '../utils/jsonFormAnalysis';
 import { parseTabDelimitedObjects } from '../utils/tabularImport';
@@ -136,10 +138,9 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
     setIssues(errors.length ? [] : analyzeJsonForm(root));
   }, [text]);
 
-  const applyEditsToEditor = useCallback((edits: JsonTextEdit[], _newText: string) => {
+  const applyEditsToEditor = useCallback((edits: JsonTextEdit[]) => {
     const view = getActiveView(tabId);
-    if (!view) return;
-    if (edits.length === 0) return;
+    if (!view || edits.length === 0) return false;
     view.dispatch({
       changes: edits
         .slice()
@@ -150,6 +151,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
           insert: normalizeInsertForView(edit.content, view.state),
         })),
     });
+    return true;
     // Don't call setText here — the subscribeContentChange callback will
     // pick up the editor change after its 300 ms debounce, avoiding a
     // double parse (immediate + subscriber) on every edit.
@@ -159,7 +161,11 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
     const edit = getMinimalEdit(text, newText);
     if (!edit) return;
     applyingEditRef.current = true;
-    applyEditsToEditor([edit], newText);
+    const applied = applyEditsToEditor([edit]);
+    if (!applied) {
+      applyingEditRef.current = false;
+      return;
+    }
     setText(newText);
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
@@ -246,11 +252,9 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
     const { headers, rows } = parseTabDelimitedObjects(fileText, {
       fieldTypeHints: getImportFieldTypeHints(targetNode),
     });
-    let nextText = text;
+    let nextText: string;
     if (targetNode.type === 'array') {
-      for (const row of rows) {
-        nextText = addField(nextText, targetPath, false, undefined, row).newText;
-      }
+      nextText = appendFields(text, targetPath, false, rows.map((row) => ({ value: row })));
     } else {
       const usedKeys = new Set(
         targetNode.children
@@ -258,12 +262,14 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
           .filter((key): key is string => typeof key === 'string')
       );
       const keyHeader = headers[0];
+      const entries: Array<{ key: string; value: Record<string, unknown> }> = [];
       for (const row of rows) {
         const baseKey = String(row[keyHeader] ?? '').trim() || keyHeader;
         const key = uniqueObjectKey(baseKey, usedKeys);
         usedKeys.add(key);
-        nextText = addField(nextText, targetPath, true, key, row).newText;
+        entries.push({ key, value: row });
       }
+      nextText = appendFields(text, targetPath, true, entries);
     }
 
     applyToEditor(nextText);
@@ -368,7 +374,11 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); setMatchIndex(0); }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') { e.preventDefault(); e.shiftKey ? goPrev() : goNext(); }
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                if (e.shiftKey) goPrev();
+                else goNext();
+              }
               if (e.key === 'Escape') { setSearchOpen(false); setSearchQuery(''); }
             }}
             autoFocus
@@ -629,18 +639,65 @@ function uniqueObjectKey(baseKey: string, usedKeys: Set<string>): string {
 }
 
 function getImportFieldTypeHints(parentNode: JsonNodeInfo): Record<string, unknown> {
-  const hints: Record<string, unknown> = {};
+  const valuesByField = new Map<string, unknown[]>();
 
   for (const child of parentNode.children) {
     if (child.type !== 'object') continue;
     for (const field of child.children) {
       if (typeof field.key !== 'string') continue;
-      if (Object.prototype.hasOwnProperty.call(hints, field.key)) continue;
-      hints[field.key] = field.value;
+      const values = valuesByField.get(field.key) ?? [];
+      values.push(field.value);
+      valuesByField.set(field.key, values);
     }
   }
 
+  const hints: Record<string, unknown> = {};
+  for (const [field, values] of valuesByField.entries()) {
+    const hint = chooseImportTypeHint(values);
+    if (hint !== undefined) hints[field] = hint;
+  }
   return hints;
+}
+
+function chooseImportTypeHint(values: unknown[]): unknown {
+  const buckets = new Map<string, { count: number; sample: unknown; rank: number }>();
+  for (const value of values) {
+    const kind = importTypeKind(value);
+    const rank = importHintRank(value);
+    const bucket = buckets.get(kind);
+    if (!bucket) {
+      buckets.set(kind, { count: 1, sample: value, rank });
+      continue;
+    }
+    bucket.count += 1;
+    if (rank > bucket.rank) {
+      bucket.sample = value;
+      bucket.rank = rank;
+    }
+  }
+
+  let best: { count: number; sample: unknown; rank: number } | undefined;
+  for (const bucket of buckets.values()) {
+    if (!best || bucket.count > best.count || (bucket.count === best.count && bucket.rank > best.rank)) {
+      best = bucket;
+    }
+  }
+  return best?.sample;
+}
+
+function importTypeKind(value: unknown): string {
+  if (Array.isArray(value)) return 'array';
+  if (value === null) return 'null';
+  return typeof value;
+}
+
+function importHintRank(value: unknown): number {
+  if (Array.isArray(value)) return value.length > 0 ? 5 : 3;
+  if (typeof value === 'object' && value !== null) return 4;
+  if (typeof value === 'number' || typeof value === 'boolean') return 3;
+  if (typeof value === 'string') return value.trim() ? 2 : 0;
+  if (value === null) return 1;
+  return 0;
 }
 
 function formatPath(path: JSONPath): string {

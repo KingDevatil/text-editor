@@ -42,6 +42,8 @@ import MarkdownToolbar from './MarkdownToolbar';
 import { getOrCreateCompartments, buildBaseExtensions, loadLanguageExtensions, largeFileLineHighlighter, largeFileLineHighlightTheme, createMarkdownKeymap, type EditorCompartments } from '../utils/editorExtensions';
 import { useEditorContextMenu } from '../hooks/useEditorContextMenu';
 
+const LARGE_FILE_THRESHOLD = 2 * 1024 * 1024;
+
 interface CmEditorProps {
   tabId: string;
   language: Language;
@@ -88,8 +90,6 @@ const CmEditor: React.FC<CmEditorProps> = ({
   const lightCustomColors = useSettingsStore((s) => s.lightCustomColors);
   const darkCustomColors = useSettingsStore((s) => s.darkCustomColors);
   const customColors = useSettingsStore((s) => s.customColors);
-
-  const LARGE_FILE_THRESHOLD = 2 * 1024 * 1024;
 
   // Initialize or switch editor state when tabId changes
   useEffect(() => {

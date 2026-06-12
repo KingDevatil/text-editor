@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addFieldFromTemplate,
   addFieldLike,
+  appendFields,
   applyValueEdit,
   copyNode,
   getValueEdits,
@@ -11,6 +12,7 @@ import {
   setLeadingComment,
   setTrailingComment,
 } from './jsoncParser';
+import type { JsonNodeComment, JsonNodeInfo } from './jsoncParser';
 
 const sample = `{
   // keep this comment
@@ -159,10 +161,10 @@ describe('jsoncParser', () => {
     expect(items?.value).toHaveLength(2);
     // Check that the new element has comments
     const elem1 = items?.children?.[1];
-    const idField = elem1?.children?.find((c: any) => c.key === 'id');
-    const nameField = elem1?.children?.find((c: any) => c.key === 'name');
-    expect(idField?.comments.some((c: any) => c.position === 'trailing' && c.content === 'comment-a')).toBe(true);
-    expect(nameField?.comments.some((c: any) => c.position === 'trailing' && c.content === 'name-a')).toBe(true);
+    const idField = elem1?.children?.find((c: JsonNodeInfo) => c.key === 'id');
+    const nameField = elem1?.children?.find((c: JsonNodeInfo) => c.key === 'name');
+    expect(idField?.comments.some((c: JsonNodeComment) => c.position === 'trailing' && c.content === 'comment-a')).toBe(true);
+    expect(nameField?.comments.some((c: JsonNodeComment) => c.position === 'trailing' && c.content === 'name-a')).toBe(true);
   });
 
   it('formats copied object fields onto their own lines', () => {
@@ -429,6 +431,54 @@ describe('jsoncParser', () => {
         meta: { description: '' },
       },
     ]);
+  });
+
+  it('appends multiple array entries with one preserved parent edit', () => {
+    const text = `{
+  "items": [
+    // keep existing item comment
+    { "id": "a" }
+  ]
+}`;
+
+    const newText = appendFields(text, ['items'], false, [
+      { value: { id: 'b', value: 2 } },
+      { value: { id: 'c', value: 3 } },
+    ]);
+    const items = parseJsonc(newText).root
+      ?.children.find((child) => child.key === 'items')
+      ?.value;
+
+    expect(newText).toContain('// keep existing item comment');
+    expect(items).toEqual([
+      { id: 'a' },
+      { id: 'b', value: 2 },
+      { id: 'c', value: 3 },
+    ]);
+  });
+
+  it('appends multiple object entries with one preserved parent edit', () => {
+    const text = `{
+  "items": {
+    // keep existing child comment
+    "a": { "id": 1 }
+  }
+}`;
+
+    const newText = appendFields(text, ['items'], true, [
+      { key: 'b', value: { id: 2 } },
+      { key: 'c', value: { id: 3 } },
+    ]);
+    const items = parseJsonc(newText).root
+      ?.children.find((child) => child.key === 'items')
+      ?.value;
+
+    expect(newText).toContain('// keep existing child comment');
+    expect(items).toEqual({
+      a: { id: 1 },
+      b: { id: 2 },
+      c: { id: 3 },
+    });
   });
 
   it('moves leading comments together with array elements when swapping', () => {

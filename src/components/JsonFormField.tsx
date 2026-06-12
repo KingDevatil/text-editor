@@ -14,16 +14,9 @@ import {
 import type { JsonNodeInfo, JSONPath } from '../utils/jsoncParser';
 import { isSimpleArray } from '../utils/jsoncParser';
 import type { JsonFormIssue } from '../utils/jsonFormAnalysis';
+import { FormSearchContext } from './FormSearchContext';
 
 /* ── Search context ─────────────────────────────────────────────── */
-
-interface FormSearchState {
-  query: string;
-  currentPath: JSONPath | null;
-  registerRef: (path: JSONPath, el: HTMLElement | null) => void;
-}
-
-export const FormSearchContext = React.createContext<FormSearchState | null>(null);
 
 interface JsonFormFieldProps {
   node: JsonNodeInfo;
@@ -90,14 +83,6 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
   }, [focused, node]);
 
   useEffect(() => {
-    setKeyDraft(String(node.key ?? pathKey));
-  }, [node.key, pathKey]);
-
-  useEffect(() => {
-    if (!editingComment) setCommentDraft(getLeadingCommentText(node));
-  }, [editingComment, node]);
-
-  useEffect(() => {
     if (!editingComment) return;
     requestAnimationFrame(() => {
       const textarea = commentTextareaRef.current;
@@ -126,9 +111,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
   // Auto-expand when this node is the current match or an ancestor of it
   const containsMatch = searchCtx && searchCtx.currentPath !== null
     && isDescendantPath(searchCtx.currentPath, node.path);
-  useEffect(() => {
-    if ((isCurrentMatch || containsMatch) && !expanded) setExpanded(true);
-  }, [isCurrentMatch, containsMatch]);
+  const visibleExpanded = expanded || Boolean(isCurrentMatch || containsMatch);
 
   const handleValueChange = useCallback((newValue: unknown) => {
     onEdit(node.path, newValue);
@@ -608,9 +591,9 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
         {!isRoot && (
           <div
             className="flex items-center gap-1 py-1 px-1 rounded group cursor-pointer hover:bg-[color-mix(in_srgb,var(--te-text-primary)_4%,transparent)]"
-            onClick={() => setExpanded(!expanded)}
+            onClick={() => setExpanded(!visibleExpanded)}
           >
-            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            {visibleExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             {renderKey()}
             <span className="text-xs" style={{ color: 'var(--te-text-secondary)' }}>
               {'{'}...{'}'} ({childCount})
@@ -621,7 +604,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
           </div>
         )}
         {renderCommentEditor()}
-        {expanded && (
+        {visibleExpanded && (
           <div className={isRoot ? '' : 'ml-2 border-l pl-2'} style={isRoot ? {} : { borderColor: 'var(--te-border)' }}>
             {node.children.map((child) => (
               <JsonFormField
@@ -763,9 +746,9 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
         {!isRoot && (
           <div
             className="flex items-center gap-1 py-1 px-1 rounded group cursor-pointer hover:bg-[color-mix(in_srgb,var(--te-text-primary)_4%,transparent)]"
-            onClick={() => setExpanded(!expanded)}
+            onClick={() => setExpanded(!visibleExpanded)}
           >
-            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            {visibleExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             {renderKey()}
             <span className="text-xs" style={{ color: 'var(--te-text-secondary)' }}>
               [...] ({childCount})
@@ -776,7 +759,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
           </div>
         )}
         {renderCommentEditor()}
-        {expanded && (
+        {visibleExpanded && (
           <div className={isRoot ? '' : 'ml-2 border-l pl-2'} style={isRoot ? {} : { borderColor: 'var(--te-border)' }}>
             {node.children.map((child, idx) => (
               <JsonFormField

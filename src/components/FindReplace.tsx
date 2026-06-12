@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { ChevronDown, ChevronUp, X, Replace, ReplaceAll, ChevronRight, ChevronLeft, Wand2, Search, FolderOpen } from 'lucide-react';
 import { SearchCursor, RegExpCursor } from '@codemirror/search';
 import type { Text } from '@codemirror/state';
@@ -38,7 +38,7 @@ interface FindReplaceProps {
   projectPath?: string;
   activeTabFilePath?: string;
   onSearchInFolder?: (query: string, options: SearchOptions, directory: string) => void;
-  folderModeRef?: React.RefObject<{ setFolderMode: (v: boolean) => void } | null>;
+  folderModeRef?: React.MutableRefObject<{ setFolderMode: (v: boolean) => void } | null>;
 }
 
 const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath, activeTabFilePath, onSearchInFolder, folderModeRef }) => {
@@ -56,35 +56,31 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
   const findInputRef = useRef<HTMLInputElement>(null);
   const dirInputRef = useRef<HTMLInputElement>(null);
 
-  // Expose setFolderMode to parent via ref
-  useEffect(() => {
-    if (folderModeRef && 'current' in folderModeRef) {
-      (folderModeRef as React.MutableRefObject<{ setFolderMode: (v: boolean) => void } | null>).current = {
-        setFolderMode: (v: boolean) => setFolderMode(v),
-      };
-    }
-  }, [folderModeRef]);
-
   const activeTabId = useEditorStore((s) => s.activeTabId);
 
-  // Set default search directory when folder mode is enabled
-  useEffect(() => {
-    if (folderMode && !searchDir) {
-      let defaultDir = '';
-      if (activeTabFilePath) {
-        const lastSep = activeTabFilePath.lastIndexOf('\\');
-        const lastSepPosix = activeTabFilePath.lastIndexOf('/');
-        const sepIdx = Math.max(lastSep, lastSepPosix);
-        if (sepIdx > 0) {
-          defaultDir = activeTabFilePath.slice(0, sepIdx);
-        }
-      }
-      if (!defaultDir && projectPath) {
-        defaultDir = projectPath;
-      }
-      setSearchDir(defaultDir);
+  const defaultSearchDir = useMemo(() => {
+    if (activeTabFilePath) {
+      const lastSep = activeTabFilePath.lastIndexOf('\\');
+      const lastSepPosix = activeTabFilePath.lastIndexOf('/');
+      const sepIdx = Math.max(lastSep, lastSepPosix);
+      if (sepIdx > 0) return activeTabFilePath.slice(0, sepIdx);
     }
-  }, [folderMode, activeTabFilePath, projectPath, searchDir]);
+    return projectPath ?? '';
+  }, [activeTabFilePath, projectPath]);
+
+  const setFolderModeWithDefaultDir = useCallback((enabled: boolean) => {
+    if (enabled && !searchDir) setSearchDir(defaultSearchDir);
+    setFolderMode(enabled);
+  }, [defaultSearchDir, searchDir]);
+
+  // Expose setFolderMode to parent via ref
+  useEffect(() => {
+    if (!folderModeRef) return;
+    folderModeRef.current = { setFolderMode: setFolderModeWithDefaultDir };
+    return () => {
+      folderModeRef.current = null;
+    };
+  }, [folderModeRef, setFolderModeWithDefaultDir]);
 
   useEffect(() => {
     if (visible) {
@@ -510,7 +506,7 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
           <input
             type="checkbox"
             checked={folderMode}
-            onChange={(e) => setFolderMode(e.target.checked)}
+            onChange={(e) => setFolderModeWithDefaultDir(e.target.checked)}
             className="rounded border-[var(--te-border)] text-[var(--te-primary)] focus:ring-[var(--te-primary)]"
           />
           <span>在文件夹中查找</span>

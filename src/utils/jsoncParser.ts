@@ -428,6 +428,44 @@ export function addField(
   return { newText: jsonc.applyEdits(text, edits), newPath: [...parentPath, idx] };
 }
 
+export function appendFields(
+  text: string,
+  parentPath: JSONPath,
+  isObject: boolean,
+  entries: Array<{ key?: string; value: unknown }>
+): string {
+  if (entries.length === 0) return text;
+  const tree = jsonc.parseTree(text);
+  if (!tree) return text;
+  const parent = jsonc.findNodeAtLocation(tree, parentPath);
+  if (!parent) return text;
+
+  if (isObject && parent.type !== 'object') return text;
+  if (!isObject && parent.type !== 'array') return text;
+
+  const eol = detectEol(text);
+  const baseIndent = lineIndentAt(text, parent.offset);
+  const childIndent = `${baseIndent}  `;
+  const closeOffset = parent.offset + parent.length - 1;
+  const hasChildren = (parent.children?.length ?? 0) > 0;
+  const beforeClose = text.slice(parent.offset, closeOffset).trimEnd();
+  const needsComma = hasChildren && !beforeClose.endsWith(',');
+  const body = entries
+    .map((entry) => isObject
+      ? `${JSON.stringify(entry.key ?? '')}: ${formatJsonValue(entry.value, childIndent, eol)}`
+      : formatJsonValue(entry.value, childIndent, eol))
+    .join(`,${eol}${childIndent}`);
+  const content = hasChildren
+    ? `${needsComma ? ',' : ''}${eol}${childIndent}${body}`
+    : `${eol}${childIndent}${body}${eol}${baseIndent}`;
+
+  return applySingleEdit(text, {
+    offset: closeOffset,
+    length: 0,
+    content,
+  });
+}
+
 export function addFieldLike(
   text: string,
   sourcePath: JSONPath
@@ -934,6 +972,11 @@ function lineStart(text: string, offset: number): number {
   return previousLf < 0 ? 0 : previousLf + 1;
 }
 
+function lineIndentAt(text: string, offset: number): string {
+  const match = /^[\t ]*/.exec(text.slice(lineStart(text, offset), offset));
+  return match?.[0] ?? '';
+}
+
 function lineEndWithBreak(text: string, offset: number): number {
   const nextLf = text.indexOf('\n', offset);
   return nextLf < 0 ? text.length : nextLf + 1;
@@ -978,4 +1021,8 @@ function formatNodeAtPath(text: string, path: JSONPath): string {
     { tabSize: 2, insertSpaces: true, eol: detectEol(text) }
   );
   return jsonc.applyEdits(text, edits);
+}
+
+function formatJsonValue(value: unknown, indent: string, eol: string): string {
+  return JSON.stringify(value, null, 2).replace(/\n/g, eol + indent);
 }

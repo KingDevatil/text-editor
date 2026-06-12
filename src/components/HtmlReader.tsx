@@ -57,6 +57,7 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
         setContent(newContent);
       }, 300);
     });
+    const iframeForCleanup = iframeRef.current;
     return () => {
       unsubscribe();
       if (debounceRef.current) {
@@ -64,8 +65,7 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
         debounceRef.current = null;
       }
       // Save iframe scroll position before unmount/tab switch
-      const iframe = iframeRef.current;
-      savedScrollYRef.current = iframe?.contentWindow?.scrollY || 0;
+      savedScrollYRef.current = iframeForCleanup?.contentWindow?.scrollY || 0;
     };
   }, [tabId, visible]);
 
