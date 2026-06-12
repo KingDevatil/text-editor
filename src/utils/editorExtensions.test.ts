@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import {
@@ -7,6 +7,7 @@ import {
   largeFileLineHighlighter,
   largeFileLineHighlightTheme,
   jsoncCommentHighlighter,
+  isImePunctuationCommit,
 } from './editorExtensions';
 import { defaultDarkColors } from './themeDefaults';
 import { getLinterExtension } from './lint';
@@ -20,6 +21,10 @@ import { bracketColorization } from './bracketColorization';
 import { signatureHelp } from './signatureHelp';
 import { columnAlignExtension } from './columnAlign';
 import { markedLinesField, pairGutter, bracketAndTagMatcher } from './bracketTagMatching';
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('buildBaseExtensions', () => {
   it('creates a valid EditorState with largeFileOptimize=false', () => {
@@ -174,6 +179,55 @@ describe('buildBaseExtensions', () => {
 
     view.destroy();
     parent.remove();
+  });
+
+  it('falls back to inserting a committed IME punctuation mark when composition makes no document change', () => {
+    vi.useFakeTimers();
+
+    const compartments = createCompartments();
+    const state = EditorState.create({
+      doc: '',
+      extensions: buildBaseExtensions(
+        compartments,
+        'plaintext',
+        defaultDarkColors,
+        14,
+        false,
+        false,
+        false,
+        false,
+        false,
+        'tab-ime-punctuation',
+        false,
+        true,
+      ),
+    });
+    const parent = document.createElement('div');
+    document.body.appendChild(parent);
+    const view = new EditorView({ state, parent });
+
+    view.contentDOM.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    view.contentDOM.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '，' }));
+    expect(view.state.doc.toString()).toBe('');
+
+    vi.advanceTimersByTime(50);
+    expect(view.state.doc.toString()).toBe('，');
+
+    view.destroy();
+    parent.remove();
+  });
+});
+
+describe('isImePunctuationCommit', () => {
+  it('only accepts short punctuation or symbol composition commits', () => {
+    expect(isImePunctuationCommit('，')).toBe(true);
+    expect(isImePunctuationCommit('。')).toBe(true);
+    expect(isImePunctuationCommit('……')).toBe(true);
+    expect(isImePunctuationCommit('你')).toBe(false);
+    expect(isImePunctuationCommit('中文')).toBe(false);
+    expect(isImePunctuationCommit('a')).toBe(false);
+    expect(isImePunctuationCommit('1')).toBe(false);
+    expect(isImePunctuationCommit('')).toBe(false);
   });
 });
 

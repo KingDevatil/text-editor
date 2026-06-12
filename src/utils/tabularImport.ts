@@ -91,6 +91,9 @@ function parseArrayCellValue(value: string, typeHint: unknown[]): unknown {
   const parsed = parseJsonValue(value);
   if (Array.isArray(parsed)) return parsed.map((item) => coerceValueLike(item, typeHint[0]));
 
+  const objectItems = parseDelimitedObjectArrayCellValue(value, typeHint[0]);
+  if (objectItems) return objectItems;
+
   const separator = value.includes(';') ? ';' : value.includes(',') ? ',' : null;
   if (!separator) return [coerceValueLike(value, typeHint[0])];
 
@@ -106,10 +109,102 @@ function parseObjectCellValue(value: string): unknown {
     : parseCellValueByFallback(value);
 }
 
+function parseDelimitedObjectArrayCellValue(value: string, itemHint: unknown): unknown[] | null {
+  if (!isPlainObject(itemHint)) return null;
+
+  const fields = Object.keys(itemHint);
+  if (fields.length === 0) return null;
+
+  const groups = splitObjectArrayGroups(value, fields.length);
+  if (!groups) return null;
+
+  const itemHints = itemHint as Record<string, unknown>;
+  return groups.map((group) => Object.fromEntries(
+    fields.map((field, index) => [
+      field,
+      coerceValueLike(group[index] ?? '', itemHints[field]),
+    ])
+  ));
+}
+
+function splitObjectArrayGroups(value: string, fieldCount: number): string[][] | null {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+
+  const explicitGroupSeparator = ['|', '\n'].find((separator) => trimmed.includes(separator));
+  if (explicitGroupSeparator) {
+    const groups = splitNonEmpty(trimmed, explicitGroupSeparator);
+    const fieldSeparator = chooseBestFieldSeparator(groups, fieldCount);
+    return fieldSeparator
+      ? groups.map((group) => splitObjectFields(group, fieldSeparator, fieldCount))
+      : null;
+  }
+
+  const mixedSeparators = [',', ';'].filter((separator) => trimmed.includes(separator));
+  if (mixedSeparators.length >= 2) {
+    const groupSeparator = chooseBestGroupSeparator(trimmed, fieldCount, mixedSeparators);
+    const fieldSeparator = mixedSeparators.find((separator) => separator !== groupSeparator);
+    if (groupSeparator && fieldSeparator) {
+      return splitNonEmpty(trimmed, groupSeparator)
+        .map((group) => splitObjectFields(group, fieldSeparator, fieldCount));
+    }
+  }
+
+  for (const fieldSeparator of [',', ';']) {
+    if (!trimmed.includes(fieldSeparator)) continue;
+    const fields = splitObjectFields(trimmed, fieldSeparator, fieldCount);
+    if (fields.length === fieldCount) return [fields];
+  }
+
+  return null;
+}
+
+function chooseBestFieldSeparator(groups: string[], fieldCount: number): string | null {
+  let best: { separator: string; score: number } | null = null;
+  for (const separator of [',', ';', '\t']) {
+    const score = groups.filter((group) => splitObjectFields(group, separator, fieldCount).length === fieldCount).length;
+    if (!best || score > best.score) best = { separator, score };
+  }
+  return best && best.score > 0 ? best.separator : null;
+}
+
+function chooseBestGroupSeparator(value: string, fieldCount: number, separators: string[]): string | null {
+  let best: { separator: string; score: number } | null = null;
+  for (const separator of separators) {
+    const groups = splitNonEmpty(value, separator);
+    if (groups.length <= 1) continue;
+    const fieldSeparator = separators.find((candidate) => candidate !== separator);
+    if (!fieldSeparator) continue;
+    const score = groups.filter((group) => splitObjectFields(group, fieldSeparator, fieldCount).length === fieldCount).length;
+    if (!best || score > best.score) best = { separator, score };
+  }
+  return best && best.score > 0 ? best.separator : null;
+}
+
+function splitObjectFields(value: string, separator: string, fieldCount: number): string[] {
+  const parts = splitNonEmpty(value, separator);
+  if (parts.length <= fieldCount) return parts;
+  return [
+    ...parts.slice(0, fieldCount - 1),
+    parts.slice(fieldCount - 1).join(separator),
+  ];
+}
+
+function splitNonEmpty(value: string, separator: string): string[] {
+  return value
+    .split(separator)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
 function coerceValueLike(value: unknown, typeHint: unknown): unknown {
   if (typeof value !== 'string') return value;
   if (typeHint === undefined) return parseCellValueByFallback(value);
   return parseCellValueLike(value, typeHint);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function parseJsonValue(value: string): unknown {

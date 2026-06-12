@@ -250,6 +250,56 @@ const ctrlClickMultiCursor = EditorView.domEventHandlers({
   },
 });
 
+interface PendingImePunctuationCommit {
+  doc: string;
+  data: string;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+const pendingImePunctuationCommits = new WeakMap<EditorView, PendingImePunctuationCommit>();
+
+const imePunctuationCommitFallback = Prec.highest(EditorView.domEventHandlers({
+  compositionstart(_event, view) {
+    const pending = pendingImePunctuationCommits.get(view);
+    if (pending?.timer) clearTimeout(pending.timer);
+    pendingImePunctuationCommits.set(view, {
+      doc: view.state.doc.toString(),
+      data: '',
+      timer: null,
+    });
+    return false;
+  },
+  compositionupdate(event, view) {
+    const pending = pendingImePunctuationCommits.get(view);
+    if (pending && event.data) pending.data = event.data;
+    return false;
+  },
+  compositionend(event, view) {
+    const pending = pendingImePunctuationCommits.get(view);
+    const data = event.data || pending?.data || '';
+    if (!pending || !isImePunctuationCommit(data)) {
+      pendingImePunctuationCommits.delete(view);
+      return false;
+    }
+
+    pending.data = data;
+    pending.timer = setTimeout(() => {
+      pendingImePunctuationCommits.delete(view);
+      if (!view.dom.isConnected) return;
+      if (view.state.doc.toString() !== pending.doc) return;
+
+      view.dispatch(view.state.replaceSelection(data));
+    }, 50);
+    return false;
+  },
+}));
+
+export function isImePunctuationCommit(data: string): boolean {
+  const chars = Array.from(data);
+  if (chars.length === 0 || chars.length > 2) return false;
+  return chars.every((char) => !/[\p{L}\p{N}\s]/u.test(char) && /[\p{P}\p{S}]/u.test(char));
+}
+
 export function buildBaseExtensions(
   compartments: EditorCompartments,
   lang: Language,
@@ -276,6 +326,7 @@ export function buildBaseExtensions(
     rectangularSelection(),
     crosshairCursor(),
     ctrlClickMultiCursor,
+    imePunctuationCommitFallback,
     indentUnit.of('\t'),
     keymap.of([...defaultKeymap, ...historyKeymap, ...closeBracketsKeymap]),
     keymap.of([
