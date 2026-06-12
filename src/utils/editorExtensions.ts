@@ -109,8 +109,103 @@ const largeFileLineHighlightTheme = EditorView.theme({
   '.cm-lf-log-level': { fontWeight: 'bold' },
   '.cm-lf-url': { color: '#60a5fa', textDecoration: 'underline' },
   '.cm-lf-stack': { color: '#f87171' },
-  '.cm-lf-comment': { color: '#6b7280', fontStyle: 'italic' },
+  '.cm-lf-comment': { color: '#6b7280', fontStyle: 'normal' },
 });
+
+const jsoncCommentMark = Decoration.mark({ class: 'cm-json-comment' });
+
+const jsoncCommentHighlighter = ViewPlugin.fromClass(
+  class {
+    decorations = Decoration.none;
+    constructor(view: import('@codemirror/view').EditorView) {
+      this.decorations = this.buildDecorations(view);
+    }
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.viewportChanged) {
+        this.decorations = this.buildDecorations(update.view);
+      }
+    }
+    buildDecorations(view: import('@codemirror/view').EditorView) {
+      const builder = new RangeSetBuilder<Decoration>();
+      let inBlockComment = false;
+      for (const { from, to } of view.visibleRanges) {
+        let pos = from;
+        while (pos < to) {
+          const line = view.state.doc.lineAt(pos);
+          const result = scanJsoncCommentSegments(line.text, inBlockComment);
+          inBlockComment = result.inBlockComment;
+          for (const segment of result.segments) {
+            builder.add(line.from + segment.from, line.from + segment.to, jsoncCommentMark);
+          }
+          pos = line.to + 1;
+        }
+      }
+      return builder.finish();
+    }
+  },
+  { decorations: (v) => v.decorations }
+);
+
+function scanJsoncCommentSegments(text: string, startsInBlockComment: boolean): {
+  segments: Array<{ from: number; to: number }>;
+  inBlockComment: boolean;
+} {
+  const segments: Array<{ from: number; to: number }> = [];
+  let inBlockComment = startsInBlockComment;
+  let blockStart = startsInBlockComment ? 0 : -1;
+  let inString = false;
+  let quote = '';
+  let escaped = false;
+
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (inBlockComment) {
+      if (char === '*' && next === '/') {
+        segments.push({ from: Math.max(0, blockStart), to: index + 2 });
+        inBlockComment = false;
+        blockStart = -1;
+        index++;
+      }
+      continue;
+    }
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === quote) {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      inString = true;
+      quote = char;
+      continue;
+    }
+
+    if (char === '/' && next === '/') {
+      segments.push({ from: index, to: text.length });
+      break;
+    }
+
+    if (char === '/' && next === '*') {
+      inBlockComment = true;
+      blockStart = index;
+      index++;
+    }
+  }
+
+  if (inBlockComment && blockStart >= 0) {
+    segments.push({ from: blockStart, to: text.length });
+  }
+
+  return { segments, inBlockComment };
+}
 
 /** Insert a literal tab at the cursor when not in in leading whitespace;
  *  otherwise fall back to indenting the line (indentMore). */
@@ -201,6 +296,7 @@ export function buildBaseExtensions(
     highlightActiveLineGutter(),
     highlightActiveLine(),
     syntaxHighlightExtension,
+    ...(lang === 'json' || lang === 'jsonl' ? [jsoncCommentHighlighter] : []),
     compartments.language.of(getLanguageExtensionsSync(lang)),
     compartments.theme.of(buildDynamicTheme(colors, isDark)),
     compartments.fontSize.of(
@@ -279,4 +375,4 @@ export function createMarkdownKeymap(): Extension {
   );
 }
 
-export { loadLanguageExtensions, largeFileLineHighlighter, largeFileLineHighlightTheme };
+export { loadLanguageExtensions, largeFileLineHighlighter, largeFileLineHighlightTheme, jsoncCommentHighlighter };

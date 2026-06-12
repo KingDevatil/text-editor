@@ -6,6 +6,7 @@ import {
   buildBaseExtensions,
   largeFileLineHighlighter,
   largeFileLineHighlightTheme,
+  jsoncCommentHighlighter,
 } from './editorExtensions';
 import { defaultDarkColors } from './themeDefaults';
 import { getLinterExtension } from './lint';
@@ -157,6 +158,22 @@ describe('buildBaseExtensions', () => {
     // extension list length is stable and the state builds cleanly.
     const state = EditorState.create({ doc: 'const x = 1;', extensions: exts });
     expect(state).toBeDefined();
+  });
+
+  it('marks JSONC comments without marking comment-like text inside strings', () => {
+    const state = EditorState.create({
+      doc: '{\n  "url": "https://example.com", // visible comment\n  "text": "// not a comment"\n}',
+      extensions: [jsoncCommentHighlighter],
+    });
+    const parent = document.createElement('div');
+    document.body.appendChild(parent);
+    const view = new EditorView({ state, parent });
+
+    const comments = [...parent.querySelectorAll('.cm-json-comment')].map((node) => node.textContent);
+    expect(comments).toEqual(['// visible comment']);
+
+    view.destroy();
+    parent.remove();
   });
 });
 

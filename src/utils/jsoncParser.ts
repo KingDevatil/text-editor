@@ -75,6 +75,25 @@ function buildNodeInfo(
   commentTarget: jsonc.Node
 ): JsonNodeInfo {
   const type = mapNodeType(node.type);
+  const nodeComments = collectNodeComments(text, commentTarget, comments);
+
+  // Detect bracket-level comments: `[//comment` or `{//comment`
+  // These sit between the opening bracket and the first child on the same line.
+  // getLeadingComments skips them (line prefix is `[`/`{`, not whitespace).
+  // getTrailingComment skips them (offset is before target start).
+  if ((node.type === 'array' || node.type === 'object') && node.children && node.children.length > 0) {
+    const firstChild = node.children[0];
+    const bracketLine = lineNumberAt(text, node.offset);
+    const bracketComment = comments.find((c) => {
+      if (c.offset <= node.offset || c.offset >= firstChild.offset) return false;
+      if (lineNumberAt(text, c.offset) !== bracketLine) return false;
+      return /^[ \t]*$/.test(text.slice(node.offset + 1, c.offset));
+    });
+    if (bracketComment && !nodeComments.some((c) => c.offset === bracketComment.offset)) {
+      nodeComments.push(toNodeComment(bracketComment, 'trailing'));
+    }
+  }
+
   const info: JsonNodeInfo = {
     path: [...path],
     key: path.length > 0 ? path[path.length - 1] : undefined,
@@ -83,7 +102,7 @@ function buildNodeInfo(
     children: [],
     offset: node.offset,
     length: node.length,
-    comments: collectNodeComments(text, commentTarget, comments),
+    comments: nodeComments,
   };
 
   if (node.type === 'object' && node.children) {

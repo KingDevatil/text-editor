@@ -44,6 +44,17 @@ input, textarea, select {
   transition: box-shadow 120ms ease-out, border-color 120ms ease-out;
 }
 
+/* JSON form panel defaults: keep the editing surface readable even when
+   individual controls use compact Tailwind text utilities. */
+.json-form-panel {
+  font-size: 14px;
+}
+.json-form-panel .text-xs,
+.json-form-panel .text-\[10px\] {
+  font-size: 14px !important;
+  line-height: 1.35rem;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 10px;
@@ -228,7 +239,11 @@ input[type="range"]::-webkit-slider-thumb {
 .tok-keyword       { color: #0000ff; }
 .tok-string        { color: #a31515; }
 .tok-number        { color: #098658; }
-.tok-comment       { color: #6b7280; font-style: italic; opacity: 0.72; }
+.tok-comment,
+.cm-lineComment,
+.cm-blockComment,
+.cm-docComment,
+.cm-json-comment   { color: #5f6b7a !important; font-style: normal; opacity: 1; }
 .tok-variableName  { color: #001080; }
 .tok-typeName      { color: #267f99; }
 .tok-propertyName  { color: #001080; }
@@ -246,7 +261,11 @@ input[type="range"]::-webkit-slider-thumb {
 .dark .tok-keyword       { color: #569cd6; }
 .dark .tok-string        { color: #ce9178; }
 .dark .tok-number        { color: #b5cea8; }
-.dark .tok-comment       { color: #7b8492; font-style: italic; opacity: 0.72; }
+.dark .tok-comment,
+.dark .cm-lineComment,
+.dark .cm-blockComment,
+.dark .cm-docComment,
+.dark .cm-json-comment   { color: #9aa3af !important; font-style: normal; opacity: 1; }
 .dark .tok-variableName  { color: #9cdcfe; }
 .dark .tok-typeName      { color: #4ec9b0; }
 .dark .tok-propertyName  { color: #9cdcfe; }

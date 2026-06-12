@@ -58,7 +58,7 @@ function analyzeObjectArray(arrayNode: JsonNodeInfo, issues: JsonFormIssue[]): v
     }
   }
 
-  for (const key of commonKeys.filter((candidate) => IDENTITY_KEY_PATTERN.test(candidate))) {
+  for (const key of identityKeysForObjectArray(objectItems, commonKeys)) {
     const seen = new Map<string, JSONPath>();
     for (const item of objectItems) {
       const child = item.children.find((candidate) => candidate.key === key);
@@ -76,6 +76,15 @@ function analyzeObjectArray(arrayNode: JsonNodeInfo, issues: JsonFormIssue[]): v
       }
     }
   }
+}
+
+function identityKeysForObjectArray(objectItems: JsonNodeInfo[], commonKeys: string[]): string[] {
+  const keys = new Set(commonKeys.filter((candidate) => IDENTITY_KEY_PATTERN.test(candidate)));
+  const firstKey = objectItems[0]?.children.find((child) => typeof child.key === 'string')?.key;
+  if (typeof firstKey === 'string' && commonKeys.includes(firstKey)) {
+    keys.add(firstKey);
+  }
+  return [...keys];
 }
 
 function objectKeys(node: JsonNodeInfo): string[] {

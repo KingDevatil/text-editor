@@ -34,6 +34,37 @@ describe('jsonFormAnalysis', () => {
     }));
   });
 
+  it('reports duplicate values for the first field in object arrays', () => {
+    const { root } = parseJsonc(`{
+      "records": [
+        { "type": "same", "value": 1 },
+        { "type": "same", "value": 2 }
+      ]
+    }`);
+
+    expect(analyzeJsonForm(root)).toContainEqual(expect.objectContaining({
+      severity: 'error',
+      path: ['records', 1, 'type'],
+      message: '字段 "type" 的值 "same" 在同一数组内重复',
+    }));
+  });
+
+  it('does not report duplicate first-field identity keys twice', () => {
+    const { root } = parseJsonc(`{
+      "records": [
+        { "code": "same", "value": 1 },
+        { "code": "same", "value": 2 }
+      ]
+    }`);
+
+    const duplicateCodeIssues = analyzeJsonForm(root).filter((issue) =>
+      issue.severity === 'error' &&
+      issue.path.join('.') === 'records.1.code'
+    );
+
+    expect(duplicateCodeIssues).toHaveLength(1);
+  });
+
   it('does not analyze mixed arrays as homogeneous config rows', () => {
     const { root } = parseJsonc(`{
       "mixed": [

@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Plus,
   Trash2,
+  Upload,
 } from 'lucide-react';
 import type { JsonNodeInfo, JSONPath } from '../utils/jsoncParser';
 import { isSimpleArray } from '../utils/jsoncParser';
@@ -37,6 +38,7 @@ interface JsonFormFieldProps {
   onMove: (path: JSONPath, direction: -1 | 1) => void;
   onEditComment: (path: JSONPath, content: string, position: 'leading' | 'trailing') => void;
   onEditText: (path: JSONPath, value: string) => void;
+  onBatchImport: (path: JSONPath) => void;
   depth: number;
   isRoot?: boolean;
 }
@@ -54,11 +56,13 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
   onMove,
   onEditComment,
   onEditText,
+  onBatchImport,
   depth,
   isRoot = false,
 }) => {
   const searchCtx = useContext(FormSearchContext);
   const containerRef = useRef<HTMLDivElement>(null);
+  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [expanded, setExpanded] = useState(depth < 4);
   const [valueDraft, setValueDraft] = useState(() => valueToDraft(node));
   const [keyDraft, setKeyDraft] = useState(() => String(node.key ?? pathKey));
@@ -92,6 +96,17 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
   useEffect(() => {
     if (!editingComment) setCommentDraft(getLeadingCommentText(node));
   }, [editingComment, node]);
+
+  useEffect(() => {
+    if (!editingComment) return;
+    requestAnimationFrame(() => {
+      const textarea = commentTextareaRef.current;
+      if (!textarea) return;
+      const end = textarea.value.length;
+      textarea.focus();
+      textarea.setSelectionRange(end, end);
+    });
+  }, [editingComment, commentPosition]);
 
   useEffect(() => () => {
     if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
@@ -197,6 +212,11 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
     if (node.type === 'array') onAdd(node.path, false);
   }, [node.path, node.type, onAdd]);
 
+  const handleBatchImport = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onBatchImport(node.path);
+  }, [node.path, onBatchImport]);
+
   const commitNewField = useCallback(() => {
     const key = newFieldKey.trim();
     if (!key) return;
@@ -235,6 +255,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
         }}
         value={keyDraft}
         onClick={(e) => e.stopPropagation()}
+        onDoubleClick={selectTextSegment}
         onChange={(e) => setKeyDraft(e.target.value)}
         onBlur={commitKey}
         onKeyDown={(e) => {
@@ -283,6 +304,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
               backgroundColor: 'var(--te-bg-primary)',
             }}
             value={valueDraft}
+            onDoubleClick={selectTextSegment}
             onFocus={() => setFocused(true)}
             onBlur={() => {
               setFocused(false);
@@ -368,6 +390,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
               backgroundColor: 'var(--te-bg-primary)',
             }}
             value={String(value)}
+            onDoubleClick={selectTextSegment}
             onChange={(e) => {
               const raw = e.target.value;
               if (raw === '') {
@@ -390,6 +413,11 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
 
   const renderActionButtons = () => (
     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+      {(node.type === 'object' || node.type === 'array') && (
+        <IconButton title="批量导入 TXT/TSV" onClick={handleBatchImport}>
+          <Upload size={12} />
+        </IconButton>
+      )}
       <IconButton title="编辑注释" onClick={handleEditComment}>
         <MessageSquare size={12} />
       </IconButton>
@@ -479,6 +507,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
             </button>
           </div>
           <textarea
+            ref={commentTextareaRef}
             className="w-full min-h-[52px] px-2 py-1 rounded border text-xs resize-y"
             style={{
               borderColor: 'var(--te-border)',
@@ -488,6 +517,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
             value={commentDraft}
             autoFocus
             placeholder="字段注释"
+            onDoubleClick={selectTextSegment}
             onChange={(e) => setCommentDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
@@ -540,7 +570,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
 
     // Display mode: show only leading comments as line comments
     return (
-      <div className="ml-6 my-0.5 text-xs leading-5" style={{ color: 'var(--te-text-secondary)' }}>
+      <div className="ml-6 my-0.5 text-xs leading-5" style={commentTextStyle}>
         {leadingText && (
           <div
             className="whitespace-pre-wrap cursor-pointer hover:underline"
@@ -561,7 +591,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
     return (
       <span
         className="text-xs shrink-0 cursor-pointer hover:underline"
-        style={{ color: 'color-mix(in srgb, var(--te-text-secondary) 65%, transparent)' }}
+        style={commentTextStyle}
         onClick={(e) => e.stopPropagation()}
         onDoubleClick={handleEditComment}
         title="双击编辑注释"
@@ -608,6 +638,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
                 onMove={onMove}
                 onEditComment={onEditComment}
                 onEditText={onEditText}
+                onBatchImport={onBatchImport}
                 depth={depth + 1}
               />
             ))}
@@ -688,14 +719,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
               <span className="text-xs" style={{ color: 'var(--te-text-secondary)' }}>
                 [简单数组] ({childCount})
               </span>
-              {getTrailingCommentText(node) && (
-                <span
-                  className="text-xs shrink-0"
-                  style={{ color: 'color-mix(in srgb, var(--te-text-secondary) 65%, transparent)' }}
-                >
-                  {' '}// {getTrailingCommentText(node)}
-                </span>
-              )}
+              {renderInlineTrailingComment()}
               {renderIssueBadge()}
               {renderActionButtons()}
             </div>
@@ -710,6 +734,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
                 backgroundColor: 'var(--te-bg-primary)',
               }}
               value={valueDraft}
+              onDoubleClick={selectTextSegment}
               onFocus={() => setFocused(true)}
               onBlur={() => {
                 setFocused(false);
@@ -745,14 +770,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
             <span className="text-xs" style={{ color: 'var(--te-text-secondary)' }}>
               [...] ({childCount})
             </span>
-            {getTrailingCommentText(node) && (
-              <span
-                className="text-xs shrink-0"
-                style={{ color: 'color-mix(in srgb, var(--te-text-secondary) 65%, transparent)' }}
-              >
-                {' '}// {getTrailingCommentText(node)}
-              </span>
-            )}
+            {renderInlineTrailingComment()}
             {renderIssueBadge()}
             {renderActionButtons()}
           </div>
@@ -775,6 +793,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
                 onMove={onMove}
                 onEditComment={onEditComment}
                 onEditText={onEditText}
+                onBatchImport={onBatchImport}
                 depth={depth + 1}
               />
             ))}
@@ -840,6 +859,74 @@ const primaryActionStyle: React.CSSProperties = {
   color: '#ffffff',
   border: '1px solid color-mix(in srgb, var(--te-primary) 82%, #000000)',
 };
+
+const commentTextStyle: React.CSSProperties = {
+  color: 'color-mix(in srgb, var(--te-text-primary) 74%, var(--te-bg-primary))',
+};
+
+function selectTextSegment(e: React.MouseEvent<HTMLInputElement | HTMLTextAreaElement>) {
+  e.stopPropagation();
+  const target = e.currentTarget;
+  requestAnimationFrame(() => {
+    const { value } = target;
+    const nativeStart = target.selectionStart ?? 0;
+    const nativeEnd = target.selectionEnd ?? nativeStart;
+    const selectedStart = Math.min(nativeStart, nativeEnd);
+    const selectedEnd = Math.max(nativeStart, nativeEnd);
+    const anchor = selectedStart === selectedEnd ? selectedStart : Math.floor((selectedStart + selectedEnd) / 2);
+    const word = wordRangeAt(value, anchor) ?? wordRangeAt(value, selectedStart) ?? wordRangeAt(value, selectedEnd);
+    if (word) target.setSelectionRange(word.from, word.to);
+  });
+}
+
+function wordRangeAt(value: string, offset: number): { from: number; to: number } | null {
+  let start = Math.max(0, Math.min(offset, value.length));
+  let end = start;
+
+  while (start > 0) {
+    const prev = previousCharStart(value, start);
+    if (!isCodeMirrorWordChar(value.slice(prev, start))) break;
+    start = prev;
+  }
+
+  while (end < value.length) {
+    const next = nextCharEnd(value, end);
+    if (!isCodeMirrorWordChar(value.slice(end, next))) break;
+    end = next;
+  }
+
+  return start === end ? null : { from: start, to: end };
+}
+
+function previousCharStart(value: string, offset: number): number {
+  let cursor = offset - 1;
+  if (cursor > 0 && isLowSurrogate(value.charCodeAt(cursor)) && isHighSurrogate(value.charCodeAt(cursor - 1))) {
+    cursor--;
+  }
+  return cursor;
+}
+
+function nextCharEnd(value: string, offset: number): number {
+  let cursor = offset + 1;
+  if (cursor < value.length && isHighSurrogate(value.charCodeAt(offset)) && isLowSurrogate(value.charCodeAt(cursor))) {
+    cursor++;
+  }
+  return cursor;
+}
+
+function isHighSurrogate(code: number): boolean {
+  return code >= 0xd800 && code <= 0xdbff;
+}
+
+function isLowSurrogate(code: number): boolean {
+  return code >= 0xdc00 && code <= 0xdfff;
+}
+
+function isCodeMirrorWordChar(char: string): boolean {
+  if (!/\S/u.test(char)) return false;
+  if (/[\p{Alphabetic}\p{Number}_]/u.test(char)) return true;
+  return /[\u00df\u0587\u0590-\u05f4\u0600-\u06ff\u3040-\u309f\u30a0-\u30ff\u3400-\u4db5\u4e00-\u9fcc\uac00-\ud7af]/u.test(char);
+}
 
 function commentToggleStyle(active: boolean): React.CSSProperties {
   return active

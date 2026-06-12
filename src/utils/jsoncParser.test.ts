@@ -544,6 +544,20 @@ describe('jsoncParser', () => {
     expect(elem1?.comments).toContainEqual(expect.objectContaining({ position: 'trailing', content: '祝福' }));
   });
 
+  it('collects bracket-level comment on array opening bracket', () => {
+    const text = `{
+  "arr": [// bracket comment
+    1,
+    2
+  ]
+}`;
+
+    const root = parseJsonc(text).root;
+    const arr = root?.children.find((c) => c.key === 'arr');
+    // The bracket comment should be collected as a trailing comment of the array node
+    expect(arr?.comments).toContainEqual(expect.objectContaining({ position: 'trailing', content: 'bracket comment' }));
+  });
+
   it('handles mixed case: one element has leading comment, the other does not', () => {
     const text = `[
   // only A has comment

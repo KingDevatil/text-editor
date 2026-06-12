@@ -22,10 +22,14 @@ function deriveFocusedSelection(selection: string): string {
  */
 export const syntaxHighlightExtension: Extension = syntaxHighlighting(classHighlighter);
 
+const LIGHT_COMMENT_COLOR = '#5f6b7a';
+const DARK_COMMENT_COLOR = '#9aa3af';
+
 /**
  * Build a dynamic CodeMirror 6 theme from ThemeColors.
  */
 export function buildDynamicTheme(colors: ThemeColors, isDark: boolean = false): Extension {
+  const commentColor = isDark ? DARK_COMMENT_COLOR : LIGHT_COMMENT_COLOR;
   return EditorView.theme(
     {
       '&': {
@@ -86,6 +90,31 @@ export function buildDynamicTheme(colors: ThemeColors, isDark: boolean = false):
       '.cm-log-warn': { color: colors.warning, fontWeight: 'bold' },
       '.cm-log-info': { color: colors.primary, fontWeight: 'bold' },
       '.cm-log-debug': { color: colors.textSecondary },
+      '.tok-comment': {
+        color: commentColor,
+        fontStyle: 'normal',
+        opacity: '1',
+      },
+      '.cm-lineComment': {
+        color: commentColor,
+        fontStyle: 'normal',
+        opacity: '1',
+      },
+      '.cm-blockComment': {
+        color: commentColor,
+        fontStyle: 'normal',
+        opacity: '1',
+      },
+      '.cm-docComment': {
+        color: commentColor,
+        fontStyle: 'normal',
+        opacity: '1',
+      },
+      '.cm-json-comment': {
+        color: commentColor,
+        fontStyle: 'normal',
+        opacity: '1',
+      },
     },
     { dark: isDark }
   );

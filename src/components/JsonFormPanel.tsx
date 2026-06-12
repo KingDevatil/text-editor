@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { ChevronDown, ChevronUp, Maximize2, Minimize2, Search, X, AlertCircle } from 'lucide-react';
 import { EditorState } from '@codemirror/state';
+import { isTauri } from '@tauri-apps/api/core';
+import { open, message } from '@tauri-apps/plugin-dialog';
 import { subscribeContentChange, getActiveView } from '../hooks/useEditorStatePool';
+import { readFileAuto } from '../hooks/useFileOpener';
 import {
   parseJsonc,
   applyValueEdit,
@@ -19,6 +22,7 @@ import type { ParseError } from 'jsonc-parser';
 import JsonFormField, { FormSearchContext } from './JsonFormField';
 import { analyzeJsonForm } from '../utils/jsonFormAnalysis';
 import type { JsonFormIssue } from '../utils/jsonFormAnalysis';
+import { parseTabDelimitedObjects } from '../utils/tabularImport';
 
 interface JsonFormPanelProps {
   tabId: string;
@@ -39,6 +43,8 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
   const [longTextDraft, setLongTextDraft] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const applyingEditRef = useRef(false);
+  const pendingBrowserImportPathRef = useRef<JSONPath | null>(null);
+  const browserImportInputRef = useRef<HTMLInputElement>(null);
 
   // ── Search state ─────────────────────────────────────────────────
   const [searchOpen, setSearchOpen] = useState(false);
@@ -231,9 +237,77 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
     setEditingLongText(null);
   }, [text, editingLongText, longTextDraft, applyToEditor]);
 
+  const appendImportedRows = useCallback((targetPath: JSONPath, fileText: string) => {
+    const targetNode = findNode(parsedTree, targetPath);
+    if (!targetNode || (targetNode.type !== 'object' && targetNode.type !== 'array')) {
+      throw new Error('只能导入到对象或数组节点');
+    }
+
+    const { headers, rows } = parseTabDelimitedObjects(fileText, {
+      fieldTypeHints: getImportFieldTypeHints(targetNode),
+    });
+    let nextText = text;
+    if (targetNode.type === 'array') {
+      for (const row of rows) {
+        nextText = addField(nextText, targetPath, false, undefined, row).newText;
+      }
+    } else {
+      const usedKeys = new Set(
+        targetNode.children
+          .map((child) => child.key)
+          .filter((key): key is string => typeof key === 'string')
+      );
+      const keyHeader = headers[0];
+      for (const row of rows) {
+        const baseKey = String(row[keyHeader] ?? '').trim() || keyHeader;
+        const key = uniqueObjectKey(baseKey, usedKeys);
+        usedKeys.add(key);
+        nextText = addField(nextText, targetPath, true, key, row).newText;
+      }
+    }
+
+    applyToEditor(nextText);
+  }, [text, parsedTree, applyToEditor]);
+
+  const handleBatchImport = useCallback(async (targetPath: JSONPath) => {
+    try {
+      if (isTauri()) {
+        const selected = await open({
+          multiple: false,
+          filters: [{ name: 'Text', extensions: ['txt', 'tsv'] }],
+        });
+        if (!selected || Array.isArray(selected)) return;
+        const { text: importedText } = await readFileAuto(selected);
+        appendImportedRows(targetPath, importedText);
+        return;
+      }
+
+      pendingBrowserImportPathRef.current = targetPath;
+      browserImportInputRef.current?.click();
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      if (isTauri()) await message(text, { title: '批量导入失败', kind: 'error' });
+      else window.alert(text);
+    }
+  }, [appendImportedRows]);
+
+  const handleBrowserImportSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    const targetPath = pendingBrowserImportPathRef.current;
+    event.target.value = '';
+    pendingBrowserImportPathRef.current = null;
+    if (!file || !targetPath) return;
+
+    try {
+      appendImportedRows(targetPath, await file.text());
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+    }
+  }, [appendImportedRows]);
+
   return (
     <div
-      className={`flex flex-col w-full h-full overflow-hidden ${fullScreen ? 'absolute inset-0 z-30' : ''}`}
+      className={`json-form-panel flex flex-col w-full h-full overflow-hidden ${fullScreen ? 'absolute inset-0 z-30' : ''}`}
       style={{ backgroundColor: 'var(--te-bg-primary)' }}
     >
       <div
@@ -391,6 +465,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
                 onMove={handleMove}
                 onEditComment={handleEditComment}
                 onEditText={handleEditText}
+                onBatchImport={handleBatchImport}
                 depth={0}
                 isRoot
               />
@@ -461,6 +536,14 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
           </div>
         </div>
       )}
+
+      <input
+        ref={browserImportInputRef}
+        type="file"
+        accept=".txt,.tsv,text/plain,text/tab-separated-values"
+        className="hidden"
+        onChange={handleBrowserImportSelected}
+      />
     </div>
   );
 });
@@ -532,6 +615,32 @@ function findNode(root: JsonNodeInfo | null, path: JSONPath): JsonNodeInfo | nul
     if (!current) return null;
   }
   return current;
+}
+
+function uniqueObjectKey(baseKey: string, usedKeys: Set<string>): string {
+  if (!usedKeys.has(baseKey)) return baseKey;
+  let index = 1;
+  let candidate = `${baseKey}_${index}`;
+  while (usedKeys.has(candidate)) {
+    index += 1;
+    candidate = `${baseKey}_${index}`;
+  }
+  return candidate;
+}
+
+function getImportFieldTypeHints(parentNode: JsonNodeInfo): Record<string, unknown> {
+  const hints: Record<string, unknown> = {};
+
+  for (const child of parentNode.children) {
+    if (child.type !== 'object') continue;
+    for (const field of child.children) {
+      if (typeof field.key !== 'string') continue;
+      if (Object.prototype.hasOwnProperty.call(hints, field.key)) continue;
+      hints[field.key] = field.value;
+    }
+  }
+
+  return hints;
 }
 
 function formatPath(path: JSONPath): string {
