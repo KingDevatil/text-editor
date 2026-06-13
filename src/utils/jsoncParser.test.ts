@@ -433,6 +433,44 @@ describe('jsoncParser', () => {
     ]);
   });
 
+  it('aligns new object array elements with the source element indentation', () => {
+    const text = `{
+  "season": [
+    {
+      "ID": 1111,
+      "ExchangeItem": [
+        {
+            "itemid": 6,
+            "count": 10
+        }
+      ]
+    }
+  ]
+}`;
+
+    const { newText, newPath } = addFieldFromTemplate(
+      text,
+      ['season', 0, 'ExchangeItem'],
+      ['season', 0, 'ExchangeItem', 0]
+    );
+    const lines = newText.split('\n');
+    const exchangeItemLine = lines.findIndex((line) => line.includes('"ExchangeItem"'));
+    const closeExchangeItemLine = lines.findIndex((line, index) =>
+      index > exchangeItemLine && line.trim() === ']'
+    );
+    const objectLines = lines
+      .map((line, index) => ({ line, index }))
+      .filter(({ line, index }) =>
+        index > exchangeItemLine && index < closeExchangeItemLine && line.trim() === '{'
+      );
+
+    expect(newPath).toEqual(['season', 0, 'ExchangeItem', 1]);
+    expect(objectLines).toHaveLength(2);
+    expect(objectLines[1].line.match(/^\s*/)?.[0]).toBe(objectLines[0].line.match(/^\s*/)?.[0]);
+    expect(newText).toContain('            "itemid": 0');
+    expect(newText).toContain('            "count": 0');
+  });
+
   it('appends multiple array entries with one preserved parent edit', () => {
     const text = `{
   "items": [
@@ -455,6 +493,44 @@ describe('jsoncParser', () => {
       { id: 'b', value: 2 },
       { id: 'c', value: 3 },
     ]);
+  });
+
+  it('appends imported rows without collapsing the array closing brackets', () => {
+    const text = `{
+  "season": [
+    {
+      "ID": 1111,
+      "ExchangeItem": [
+        {
+            "itemid": 6,
+            "count": 10
+        }
+      ]
+    }
+  ]
+}`;
+
+    const newText = appendFields(text, ['season'], false, [
+      {
+        value: {
+          ID: 1112,
+          ExchangeItem: [
+            { itemid: 6, count: 100 },
+            { itemid: 7, count: 100 },
+          ],
+        },
+      },
+    ]);
+    const lines = newText.split('\n');
+
+    expect(newText).not.toContain('}]');
+    expect(newText).not.toContain('}],');
+    expect(newText).toContain('    {');
+    expect(newText).toContain('      "ID": 1112');
+    expect(newText).toContain('        {');
+    expect(newText).toContain('          "itemid": 6');
+    expect(lines.some((line) => line.trim() === ']')).toBe(true);
+    expect(parseJsonc(newText).errors).toEqual([]);
   });
 
   it('appends multiple object entries with one preserved parent edit', () => {

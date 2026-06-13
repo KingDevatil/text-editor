@@ -250,46 +250,101 @@ const ctrlClickMultiCursor = EditorView.domEventHandlers({
   },
 });
 
+function removeContentAutocorrect(view: EditorView): void {
+  if (view.contentDOM.getAttribute('autocorrect') === 'off') {
+    view.contentDOM.removeAttribute('autocorrect');
+  }
+}
+
+const chromiumChineseImeAutocorrectWorkaround = ViewPlugin.fromClass(
+  class {
+    constructor(view: EditorView) {
+      removeContentAutocorrect(view);
+      queueMicrotask(() => removeContentAutocorrect(view));
+    }
+
+    update(update: ViewUpdate) {
+      removeContentAutocorrect(update.view);
+      queueMicrotask(() => removeContentAutocorrect(update.view));
+    }
+  }
+);
+
 interface PendingImePunctuationCommit {
-  doc: string;
   data: string;
+  doc: string;
+  from: number;
+  to: number;
   timer: ReturnType<typeof setTimeout> | null;
 }
 
 const pendingImePunctuationCommits = new WeakMap<EditorView, PendingImePunctuationCommit>();
 
+function clearPendingImePunctuationCommit(view: EditorView): void {
+  const pending = pendingImePunctuationCommits.get(view);
+  if (pending?.timer) clearTimeout(pending.timer);
+  pendingImePunctuationCommits.delete(view);
+}
+
+function scheduleImePunctuationCommit(
+  view: EditorView,
+  pending: PendingImePunctuationCommit,
+  delay: number,
+): void {
+  if (pending.timer) clearTimeout(pending.timer);
+  pending.timer = setTimeout(() => {
+    if (!view.dom.isConnected) {
+      pendingImePunctuationCommits.delete(view);
+      return;
+    }
+
+    if (view.state.doc.toString() !== pending.doc) {
+      pendingImePunctuationCommits.delete(view);
+      return;
+    }
+
+    const from = Math.min(pending.from, view.state.doc.length);
+    const to = Math.min(Math.max(pending.to, from), view.state.doc.length);
+    view.dispatch({
+      changes: { from, to, insert: pending.data },
+      selection: { anchor: from + pending.data.length },
+      userEvent: 'input.type.compose',
+    });
+    pendingImePunctuationCommits.delete(view);
+  }, delay);
+}
+
 const imePunctuationCommitFallback = Prec.highest(EditorView.domEventHandlers({
   compositionstart(_event, view) {
-    const pending = pendingImePunctuationCommits.get(view);
-    if (pending?.timer) clearTimeout(pending.timer);
+    clearPendingImePunctuationCommit(view);
+    const selection = view.state.selection.main;
     pendingImePunctuationCommits.set(view, {
-      doc: view.state.doc.toString(),
       data: '',
+      doc: view.state.doc.toString(),
+      from: selection.from,
+      to: selection.to,
       timer: null,
     });
     return false;
   },
   compositionupdate(event, view) {
     const pending = pendingImePunctuationCommits.get(view);
-    if (pending && event.data) pending.data = event.data;
+    if (!pending || !isImePunctuationCommit(event.data)) return false;
+
+    pending.data = event.data;
+    scheduleImePunctuationCommit(view, pending, 50);
     return false;
   },
   compositionend(event, view) {
     const pending = pendingImePunctuationCommits.get(view);
     const data = event.data || pending?.data || '';
     if (!pending || !isImePunctuationCommit(data)) {
-      pendingImePunctuationCommits.delete(view);
+      clearPendingImePunctuationCommit(view);
       return false;
     }
 
     pending.data = data;
-    pending.timer = setTimeout(() => {
-      pendingImePunctuationCommits.delete(view);
-      if (!view.dom.isConnected) return;
-      if (view.state.doc.toString() !== pending.doc) return;
-
-      view.dispatch(view.state.replaceSelection(data));
-    }, 50);
+    scheduleImePunctuationCommit(view, pending, 0);
     return false;
   },
 }));
@@ -326,6 +381,7 @@ export function buildBaseExtensions(
     rectangularSelection(),
     crosshairCursor(),
     ctrlClickMultiCursor,
+    chromiumChineseImeAutocorrectWorkaround,
     imePunctuationCommitFallback,
     indentUnit.of('\t'),
     keymap.of([...defaultKeymap, ...historyKeymap, ...closeBracketsKeymap]),

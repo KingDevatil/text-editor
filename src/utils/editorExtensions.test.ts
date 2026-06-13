@@ -27,6 +27,20 @@ afterEach(() => {
 });
 
 describe('buildBaseExtensions', () => {
+  function mockRangeClientRects() {
+    const originalCreateRange = document.createRange.bind(document);
+    const createRangeSpy = vi.spyOn(document, 'createRange').mockImplementation(() => {
+      const range = originalCreateRange();
+      range.getClientRects = () => ({
+        length: 0,
+        item: () => null,
+        [Symbol.iterator]: function* () {},
+      });
+      return range;
+    });
+    return () => createRangeSpy.mockRestore();
+  }
+
   it('creates a valid EditorState with largeFileOptimize=false', () => {
     const compartments = createCompartments();
     const exts = buildBaseExtensions(
@@ -165,6 +179,40 @@ describe('buildBaseExtensions', () => {
     expect(state).toBeDefined();
   });
 
+  it('removes CodeMirror autocorrect=off from contentDOM for Chromium Chinese IME punctuation', async () => {
+    const compartments = createCompartments();
+    const state = EditorState.create({
+      doc: '',
+      extensions: buildBaseExtensions(
+        compartments,
+        'plaintext',
+        defaultDarkColors,
+        14,
+        false,
+        false,
+        false,
+        false,
+        false,
+        'tab-ime-autocorrect',
+        false,
+        true,
+      ),
+    });
+    const parent = document.createElement('div');
+    document.body.appendChild(parent);
+    const view = new EditorView({ state, parent });
+
+    await Promise.resolve();
+    expect(view.contentDOM.hasAttribute('autocorrect')).toBe(false);
+
+    view.dispatch({ selection: { anchor: 0 } });
+    await Promise.resolve();
+    expect(view.contentDOM.hasAttribute('autocorrect')).toBe(false);
+
+    view.destroy();
+    parent.remove();
+  });
+
   it('marks JSONC comments without marking comment-like text inside strings', () => {
     const state = EditorState.create({
       doc: '{\n  "url": "https://example.com", // visible comment\n  "text": "// not a comment"\n}',
@@ -181,8 +229,9 @@ describe('buildBaseExtensions', () => {
     parent.remove();
   });
 
-  it('falls back to inserting a committed IME punctuation mark when composition makes no document change', () => {
+  it('falls back to inserting an IME punctuation mark when compositionupdate does not change the document', () => {
     vi.useFakeTimers();
+    const restoreRange = mockRangeClientRects();
 
     const compartments = createCompartments();
     const state = EditorState.create({
@@ -207,14 +256,57 @@ describe('buildBaseExtensions', () => {
     const view = new EditorView({ state, parent });
 
     view.contentDOM.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
-    view.contentDOM.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '，' }));
+    view.contentDOM.dispatchEvent(new CompositionEvent('compositionupdate', { bubbles: true, data: '，' }));
     expect(view.state.doc.toString()).toBe('');
 
     vi.advanceTimersByTime(50);
     expect(view.state.doc.toString()).toBe('，');
 
+    view.contentDOM.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '，' }));
+    vi.runOnlyPendingTimers();
+    expect(view.state.doc.toString()).toBe('，');
+
     view.destroy();
     parent.remove();
+    restoreRange();
+  });
+
+  it('does not fall back when CodeMirror has already committed the IME punctuation', () => {
+    vi.useFakeTimers();
+    const restoreRange = mockRangeClientRects();
+
+    const compartments = createCompartments();
+    const state = EditorState.create({
+      doc: '',
+      extensions: buildBaseExtensions(
+        compartments,
+        'plaintext',
+        defaultDarkColors,
+        14,
+        false,
+        false,
+        false,
+        false,
+        false,
+        'tab-ime-punctuation-committed',
+        false,
+        true,
+      ),
+    });
+    const parent = document.createElement('div');
+    document.body.appendChild(parent);
+    const view = new EditorView({ state, parent });
+
+    view.contentDOM.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    view.contentDOM.dispatchEvent(new CompositionEvent('compositionupdate', { bubbles: true, data: '。' }));
+    view.dispatch(view.state.replaceSelection('。'));
+
+    vi.advanceTimersByTime(50);
+    expect(view.state.doc.toString()).toBe('。');
+
+    view.destroy();
+    parent.remove();
+    restoreRange();
   });
 });
 

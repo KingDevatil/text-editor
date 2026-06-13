@@ -421,11 +421,57 @@ export function addField(
 
   const parentArr = jsonc.findNodeAtLocation(tree, parentPath);
   const idx = typeof insertAfterKey === 'number' ? insertAfterKey + 1 : parentArr?.children?.length ?? 0;
-  const edits = jsonc.modify(text, [...parentPath, idx], value ?? '', {
-    isArrayInsertion: true,
-    formattingOptions: { tabSize: 2, insertSpaces: true, eol: detectEol(text) },
+  if (!parentArr || parentArr.type !== 'array') return { newText: text, newPath: parentPath };
+  return {
+    newText: insertArrayValue(text, parentArr, idx, value ?? ''),
+    newPath: [...parentPath, idx],
+  };
+}
+
+function insertArrayValue(
+  text: string,
+  parent: jsonc.Node,
+  index: number,
+  value: unknown
+): string {
+  const eol = detectEol(text);
+  const children = parent.children ?? [];
+  const closeOffset = parent.offset + parent.length - 1;
+  const targetIndex = Math.max(0, Math.min(index, children.length));
+  const reference = children[targetIndex] ?? children[targetIndex - 1];
+  const childIndent = reference
+    ? lineIndentAt(text, reference.offset)
+    : `${lineIndentAt(text, closeOffset)}  `;
+  const indentUnit = reference ? inferNestedIndentUnit(text, reference) : '  ';
+  const body = formatJsonValue(value, childIndent, eol, indentUnit);
+
+  if (children.length === 0) {
+    const closeIndent = lineIndentAt(text, closeOffset);
+    return applySingleEdit(text, {
+      offset: closeOffset,
+      length: 0,
+      content: `${eol}${childIndent}${body}${eol}${closeIndent}`,
+    });
+  }
+
+  if (targetIndex < children.length) {
+    return applySingleEdit(text, {
+      offset: children[targetIndex].offset,
+      length: 0,
+      content: `${body},${eol}${childIndent}`,
+    });
+  }
+
+  let insertOffset = closeOffset;
+  while (insertOffset > parent.offset && /[\t \r\n]/.test(text[insertOffset - 1])) {
+    insertOffset--;
+  }
+  const beforeClose = text.slice(parent.offset, insertOffset).trimEnd();
+  return applySingleEdit(text, {
+    offset: insertOffset,
+    length: 0,
+    content: `${beforeClose.endsWith(',') ? '' : ','}${eol}${childIndent}${body}`,
   });
-  return { newText: jsonc.applyEdits(text, edits), newPath: [...parentPath, idx] };
 }
 
 export function appendFields(
@@ -444,23 +490,27 @@ export function appendFields(
   if (!isObject && parent.type !== 'array') return text;
 
   const eol = detectEol(text);
-  const baseIndent = lineIndentAt(text, parent.offset);
-  const childIndent = `${baseIndent}  `;
   const closeOffset = parent.offset + parent.length - 1;
   const hasChildren = (parent.children?.length ?? 0) > 0;
-  const beforeClose = text.slice(parent.offset, closeOffset).trimEnd();
+  const closeIndent = lineIndentAt(text, closeOffset);
+  const reference = parent.children?.[(parent.children?.length ?? 0) - 1];
+  const referenceValue = isObject ? reference?.children?.[1] : reference;
+  const childIndent = reference ? lineIndentAt(text, reference.offset) : `${closeIndent}  `;
+  const indentUnit = referenceValue ? inferNestedIndentUnit(text, referenceValue) : '  ';
+  const insertOffset = hasChildren ? trailingWhitespaceStartBefore(text, parent.offset, closeOffset) : closeOffset;
+  const beforeClose = text.slice(parent.offset, insertOffset).trimEnd();
   const needsComma = hasChildren && !beforeClose.endsWith(',');
   const body = entries
     .map((entry) => isObject
-      ? `${JSON.stringify(entry.key ?? '')}: ${formatJsonValue(entry.value, childIndent, eol)}`
-      : formatJsonValue(entry.value, childIndent, eol))
+      ? `${JSON.stringify(entry.key ?? '')}: ${formatJsonValue(entry.value, childIndent, eol, indentUnit)}`
+      : formatJsonValue(entry.value, childIndent, eol, indentUnit))
     .join(`,${eol}${childIndent}`);
   const content = hasChildren
     ? `${needsComma ? ',' : ''}${eol}${childIndent}${body}`
-    : `${eol}${childIndent}${body}${eol}${baseIndent}`;
+    : `${eol}${childIndent}${body}${eol}${closeIndent}`;
 
   return applySingleEdit(text, {
-    offset: closeOffset,
+    offset: insertOffset,
     length: 0,
     content,
   });
@@ -962,6 +1012,12 @@ function trailingWhitespaceStart(text: string, target: jsonc.Node, commentOffset
   return offset;
 }
 
+function trailingWhitespaceStartBefore(text: string, minOffset: number, offset: number): number {
+  let cursor = offset;
+  while (cursor > minOffset && /[\t \r\n]/.test(text[cursor - 1])) cursor--;
+  return cursor;
+}
+
 function stripCommentSyntax(text: string, kind: ScannedComment['kind']): string {
   if (kind === 'line') return text.replace(/^\/\/\s?/, '').trim();
   return text.replace(/^\/\*/, '').replace(/\*\/$/, '').trim();
@@ -1023,6 +1079,21 @@ function formatNodeAtPath(text: string, path: JSONPath): string {
   return jsonc.applyEdits(text, edits);
 }
 
-function formatJsonValue(value: unknown, indent: string, eol: string): string {
-  return JSON.stringify(value, null, 2).replace(/\n/g, eol + indent);
+function inferNestedIndentUnit(text: string, node: jsonc.Node): string {
+  const child = node.children?.[0];
+  if (!child) return '  ';
+  const nodeIndent = lineIndentAt(text, node.offset);
+  const childIndent = lineIndentAt(text, child.offset);
+  return childIndent.startsWith(nodeIndent) && childIndent.length > nodeIndent.length
+    ? childIndent.slice(nodeIndent.length)
+    : '  ';
+}
+
+function formatJsonValue(
+  value: unknown,
+  indent: string,
+  eol: string,
+  indentUnit: string | number = 2
+): string {
+  return JSON.stringify(value, null, indentUnit).replace(/\n/g, eol + indent);
 }
