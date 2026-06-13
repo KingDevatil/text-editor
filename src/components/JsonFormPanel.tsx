@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { ChevronDown, ChevronUp, Maximize2, Minimize2, Search, X, AlertCircle } from 'lucide-react';
+import { undo, redo } from '@codemirror/commands';
 import { EditorState } from '@codemirror/state';
 import { isTauri } from '@tauri-apps/api/core';
 import { open, message } from '@tauri-apps/plugin-dialog';
@@ -103,6 +104,26 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
     setMatchIndex(prev);
     scrollToMatch(matches[prev]);
   }, [matches, matchIndex, scrollToMatch]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (isEditableShortcutTarget(e.target)) return;
+
+      const key = e.key.toLowerCase();
+      const view = getActiveView(tabId);
+      if (!view) return;
+
+      if (key === 'z' && !e.shiftKey) {
+        if (undo(view)) e.preventDefault();
+      } else if (key === 'y' || (key === 'z' && e.shiftKey)) {
+        if (redo(view)) e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [tabId, visible]);
 
   // Close search on Escape (only when search bar is focused)
   useEffect(() => {
@@ -712,4 +733,13 @@ function normalizeInsertForView(content: string, state: EditorState): string {
   if (separator === '\n') return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const lf = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   return lf.replace(/\n/g, separator);
+}
+
+function isEditableShortcutTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName.toLowerCase();
+  return tag === 'input'
+    || tag === 'textarea'
+    || tag === 'select'
+    || target.isContentEditable;
 }

@@ -367,11 +367,9 @@ export function copyNode(
   } else {
     const parentArr = jsonc.findNodeAtLocation(tree, parentPath);
     const idx = typeof sourceKey === 'number' ? sourceKey + 1 : parentArr?.children?.length ?? 0;
-    const edits = jsonc.modify(text, [...parentPath, idx], sourceValue, {
-      isArrayInsertion: true,
-      formattingOptions: { tabSize: 2, insertSpaces: true, eol: detectEol(text) },
-    });
-    result = jsonc.applyEdits(text, edits);
+    result = parentArr && parentArr.type === 'array'
+      ? insertArrayValue(text, parentArr, idx, sourceValue)
+      : text;
     newPath = [...parentPath, idx];
   }
 

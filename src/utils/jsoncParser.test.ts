@@ -114,6 +114,41 @@ describe('jsoncParser', () => {
     ]);
   });
 
+  it('copies array elements without changing the source indentation style', () => {
+    const text = `{
+  "season": [
+    {
+      "ID": 1111,
+      "ExchangeItem": [
+        {
+            "itemid": 6,
+            "count": 10
+        }
+      ]
+    }
+  ]
+}`;
+
+    const { newText, newPath } = copyNode(text, ['season', 0, 'ExchangeItem'], 0, false);
+    const lines = newText.split('\n');
+    const exchangeItemLine = lines.findIndex((line) => line.includes('"ExchangeItem"'));
+    const closeExchangeItemLine = lines.findIndex((line, index) =>
+      index > exchangeItemLine && line.trim() === ']'
+    );
+    const objectLines = lines
+      .map((line, index) => ({ line, index }))
+      .filter(({ line, index }) =>
+        index > exchangeItemLine && index < closeExchangeItemLine && line.trim() === '{'
+      );
+
+    expect(newPath).toEqual(['season', 0, 'ExchangeItem', 1]);
+    expect(objectLines).toHaveLength(2);
+    expect(objectLines[1].line.match(/^\s*/)?.[0]).toBe(objectLines[0].line.match(/^\s*/)?.[0]);
+    expect(newText).toContain('            "itemid": 6');
+    expect(newText).not.toContain('}]');
+    expect(parseJsonc(newText).errors).toEqual([]);
+  });
+
   it('preserves trailing comments when copying an object property', () => {
     const text = `{
   "id": "favor", // ID
