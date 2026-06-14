@@ -1,36 +1,26 @@
-/** Write text to clipboard — uses Tauri plugin in desktop, falls back to navigator API in browser. */
+import { desktopApi } from '../platform/desktop';
+
+/** Write text to clipboard using the desktop bridge when available. */
 export async function writeClipboard(text: string): Promise<void> {
   try {
-    const { isTauri } = await import('@tauri-apps/api/core');
-    if (isTauri()) {
-      try {
-        const { writeText } = await import('@tauri-apps/plugin-clipboard-manager');
-        await writeText(text);
-        return;
-      } catch {
-        // fall through to navigator API
-      }
+    if (desktopApi.isDesktop()) {
+      await desktopApi.writeClipboard(text);
+      return;
     }
   } catch {
-    // module load error (e.g. tests) — fall through
+    // Fall through to the browser API.
   }
   navigator.clipboard.writeText(text).catch(() => {});
 }
 
-/** Read text from clipboard — uses Tauri plugin in desktop, falls back to navigator API in browser. */
+/** Read text from clipboard using the desktop bridge when available. */
 export async function readClipboard(): Promise<string> {
   try {
-    const { isTauri } = await import('@tauri-apps/api/core');
-    if (isTauri()) {
-      try {
-        const { readText } = await import('@tauri-apps/plugin-clipboard-manager');
-        return await readText();
-      } catch {
-        // fall through to navigator API
-      }
+    if (desktopApi.isDesktop()) {
+      return await desktopApi.readClipboard();
     }
   } catch {
-    // module load error (e.g. tests) — fall through
+    // Fall through to the browser API.
   }
   return navigator.clipboard.readText();
 }

@@ -8,6 +8,7 @@ import { goToDefinition } from '../utils/cmCommands';
 import { useEditorStore } from './useEditorStore';
 import { useSettingsStore } from './useSettingsStore';
 import type { ContextMenuItem } from '../components/ContextMenu';
+import { desktopApi } from '../platform/desktop';
 
 export function useEditorContextMenu(
   viewRef: React.MutableRefObject<EditorView | null>,
@@ -160,8 +161,7 @@ export function useEditorContextMenu(
           action: async () => {
             if (currentTab.filePath) {
               try {
-                const { invoke } = await import('@tauri-apps/api/core');
-                await invoke('reveal_in_folder', { path: currentTab.filePath });
+                await desktopApi.revealInFolder(currentTab.filePath);
               } catch (err) {
                 console.error('[Reveal] 打开文件夹失败:', err);
               }

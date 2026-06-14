@@ -11,12 +11,12 @@ import {
   Copy,
   Clipboard,
 } from 'lucide-react';
-import { openUrl } from '@tauri-apps/plugin-opener';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 import { subscribeContentChange } from '../hooks/useEditorStatePool';
 import { useSettingsStore } from '../hooks/useSettingsStore';
 import type { ThemeMode } from '../types';
 import { generateHeadingSlugs, slugify } from '../utils/slugify';
+import { desktopApi } from '../platform/desktop';
 
 interface MarkdownReaderProps {
   tabId: string;
@@ -133,7 +133,7 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
       return;
     }
     e.preventDefault();
-    openUrl(href).catch(() => {});
+    desktopApi.openExternal(href).catch(() => {});
   }, []);
 
   // Keyboard: ESC to exit (only when this instance is visible)

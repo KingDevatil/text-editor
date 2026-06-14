@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { FileText, ChevronRight, ChevronDown, Folder, FolderOpen, RotateCcw } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
 import type { DirEntry, EditorTab } from '../types';
+import { desktopApi } from '../platform/desktop';
 
 interface SidebarProps {
   visible: boolean;
@@ -113,7 +113,7 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
 
   const loadDirectory = useCallback(async (path: string) => {
     try {
-      const entries = await invoke<DirEntry[]>('list_directory', { path });
+      const entries = await desktopApi.listDirectory(path);
       setDirCache((prev) => {
         const next = new Map(prev);
         next.set(path, entries);

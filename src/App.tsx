@@ -1,10 +1,5 @@
 import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { FilePlus, FolderOpen, Save, Search, Braces, PanelLeft, Sun, Moon, WrapText, Space, BookOpen, Columns2, GitCompare, X, Eye, Table, ListTree, Maximize2 } from 'lucide-react';
-import { listen } from '@tauri-apps/api/event';
-import { invoke, isTauri } from '@tauri-apps/api/core';
-import { getCurrentWebview } from '@tauri-apps/api/webview';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { open, confirm, message } from '@tauri-apps/plugin-dialog';
 import { useEditorStore } from './hooks/useEditorStore';
 import { useSettingsStore } from './hooks/useSettingsStore';
 import { useUIStore } from './hooks/useUIStore';
@@ -41,6 +36,7 @@ import ExternalChangeDialog from './components/ExternalChangeDialog';
 import SearchResultsView from './components/SearchResultsView';
 import type { SearchMatch, SearchOptions } from './services/searchService';
 import { searchDirectory } from './services/searchService';
+import { desktopApi, dirname, joinPath } from './platform/desktop';
 
 const SEARCH_RESULTS_PATH = '__search_results__';
 
@@ -152,9 +148,7 @@ function App() {
     let externalText: string;
     let externalEncoding: string;
     try {
-      const result = await invoke<{ text: string; encoding: string }>('read_file_auto_detect', {
-        path: changedPath,
-      });
+      const result = await desktopApi.readFileAuto(changedPath);
       externalText = result.text;
       externalEncoding = result.encoding;
     } catch (err) {
@@ -222,10 +216,10 @@ function App() {
 
   // Show window after paint completes to avoid blank screen
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!desktopApi.isDesktop()) return;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        getCurrentWindow().show().catch(() => {});
+        desktopApi.windowShow().catch(() => {});
       });
     });
   }, []);
@@ -237,20 +231,14 @@ function App() {
 
   // Listen for file open events from backend (single instance / file association)
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!desktopApi.isDesktop()) return;
 
-    let unlisten: (() => void) | undefined;
+    const unlisten = desktopApi.onOpenFile((filePath) => {
+      recordUserOpenedFile(filePath);
+      openFile(filePath);
+    });
 
-    const setupListener = async () => {
-      unlisten = await listen<string>('open-file', (event) => {
-        recordUserOpenedFile(event.payload);
-        openFile(event.payload);
-      });
-    };
-
-    setupListener();
-
-    invoke<string[]>('get_pending_files')
+    desktopApi.getPendingFiles()
       .then(async (files) => {
         if (files.length > 0) {
           recordUserOpenedFile(files[files.length - 1]);
@@ -267,7 +255,7 @@ function App() {
       });
 
     return () => {
-      if (unlisten) unlisten();
+      unlisten();
     };
   }, [openFile]);
 
@@ -358,7 +346,7 @@ function App() {
         useUIStore.getState().setJsonFormFullScreen(false);
       }
       // Go to definition shortcut (only intercept in Tauri; let F12 open DevTools in browser)
-      if (e.key === 'F12' && isTauri()) {
+      if (e.key === 'F12' && desktopApi.isDesktop()) {
         e.preventDefault();
         const currentTab = activeTabRef.current;
         if (currentTab) {
@@ -391,14 +379,11 @@ function App() {
   }, [createTab]);
 
   const handleOpenFile = useCallback(async () => {
-    if (isTauri()) {
+    if (desktopApi.isDesktop()) {
       try {
-        const selected = await open({ multiple: true });
-        if (selected) {
-          const paths = Array.isArray(selected) ? selected : [selected];
-          for (const filePath of paths) {
-            await openFile(filePath);
-          }
+        const paths = await desktopApi.openFileDialog({ multiple: true });
+        for (const filePath of paths) {
+          await openFile(filePath);
         }
       } catch (err) {
         console.log('Open cancelled or failed', err);
@@ -425,7 +410,7 @@ function App() {
 
         filePromises.push((async () => {
           try {
-            if (isTauri() && filePath) {
+            if (desktopApi.isDesktop() && filePath) {
               await openFile(filePath);
             } else {
               const text = await file.text();
@@ -442,7 +427,7 @@ function App() {
             }
           } catch (err) {
             console.error('Failed to read file:', fileName, err);
-            if (isTauri() && filePath) {
+            if (desktopApi.isDesktop() && filePath) {
               console.warn(`[OpenFile] 无法读取文件: ${fileName}`);
             }
           }
@@ -459,14 +444,10 @@ function App() {
     if (!activeTab) return;
 
     try {
-      if (isTauri() && activeTab.filePath) {
+      if (desktopApi.isDesktop() && activeTab.filePath) {
         const content = normalizeLineEnding(getEditorContent(activeTab.id), activeTab.lineEnding);
         await pauseWatch(activeTab.filePath);
-        await invoke('write_file_with_encoding', {
-          path: activeTab.filePath,
-          content,
-          encoding: activeTab.encoding,
-        });
+        await desktopApi.writeFile(activeTab.filePath, content, activeTab.encoding);
         await resumeWatch(activeTab.filePath);
         markTabSaved(activeTab.id);
         return;
@@ -508,11 +489,11 @@ function App() {
       console.error('Save failed:', err);
 
       // Resume file watch if it was paused for a Tauri save attempt
-      if (isTauri() && activeTab?.filePath) {
+      if (desktopApi.isDesktop() && activeTab?.filePath) {
         await resumeWatch(activeTab.filePath).catch(() => {});
       }
 
-      await message(msg, { title: '保存失败', kind: 'error' });
+      await desktopApi.message(msg, { title: '保存失败', kind: 'error' });
     }
   }, [activeTab, markTabSaved, renameTab, pauseWatch, resumeWatch]);
   useEffect(() => {
@@ -520,13 +501,10 @@ function App() {
   });
 
   const handleOpenFolder = useCallback(async () => {
-    if (!isTauri()) return;
+    if (!desktopApi.isDesktop()) return;
     try {
-      const selected = await open({ directory: true });
-      if (selected) {
-        const path = Array.isArray(selected) ? selected[0] : selected;
-        setProjectPath(path);
-      }
+      const selected = await desktopApi.openFolderDialog();
+      if (selected) setProjectPath(selected);
     } catch (err) {
       console.error('[OpenFolder] failed:', err);
     }
@@ -534,7 +512,7 @@ function App() {
 
   const handleSidebarOpenFile = useCallback(
     async (filePath: string) => {
-      if (!isTauri()) return;
+      if (!desktopApi.isDesktop()) return;
       const existing = useEditorStore.getState().tabs.find((t) => normalizePath(t.filePath || '') === normalizePath(filePath));
       if (existing) {
         setReaderScrollToTop(false);
@@ -637,12 +615,11 @@ function App() {
     const tab = tabs.find((t) => t.id === tabId);
     if (!tab) return;
 
-    if (tab.filePath && isTauri()) {
+    if (tab.filePath && desktopApi.isDesktop()) {
       try {
-        const { dirname, join } = await import('@tauri-apps/api/path');
-        const dir = await dirname(tab.filePath);
-        const newPath = await join(dir, newTitle);
-        await invoke('rename_file', { oldPath: tab.filePath, newPath });
+        const dir = dirname(tab.filePath);
+        const newPath = joinPath(dir, newTitle);
+        await desktopApi.renameFile(tab.filePath, newPath);
         renameTab(tabId, newTitle, newPath);
       } catch (err) {
         console.error('[Rename] 重命名文件失败:', err);
@@ -687,12 +664,9 @@ function App() {
       console.log('[EncodingChange] switching encoding:', enc, 'tabId:', tabId, 'filePath:', filePath);
       setTabEncoding(tabId, enc);
 
-      if (isTauri() && filePath) {
+      if (desktopApi.isDesktop() && filePath) {
         try {
-          const text = await invoke<string>('read_file_with_encoding', {
-            path: filePath,
-            encoding: enc,
-          });
+          const { text } = await desktopApi.readFileWithEncoding(filePath, enc);
           console.log('[EncodingChange] re-read file, length:', text.length);
           updateEditorContent(tabId, text);
         } catch (err) {
@@ -709,23 +683,21 @@ function App() {
 
   // Handle file drop using Tauri native drag-drop events
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!desktopApi.isDesktop()) return;
 
     let processing = false;
-    const p1 = getCurrentWebview().onDragDropEvent((event) => {
-      if (event.payload.type === 'drop') {
-        if (processing) return;
-        processing = true;
-        setTimeout(() => { processing = false; }, 500);
-        for (const filePath of event.payload.paths) {
-          invoke<{ text: string; encoding: string }>('read_file_auto_detect', { path: filePath })
-            .then((result) => {
-              openFile(filePath, { text: result.text, encoding: result.encoding });
-            })
-            .catch((err) => {
-              console.error('Failed to read dropped file:', filePath, err);
-            });
-        }
+    const p1 = desktopApi.onDragDropEvent((paths) => {
+      if (processing) return;
+      processing = true;
+      setTimeout(() => { processing = false; }, 500);
+      for (const filePath of paths) {
+        desktopApi.readFileAuto(filePath)
+          .then((result) => {
+            openFile(filePath, { text: result.text, encoding: result.encoding });
+          })
+          .catch((err) => {
+            console.error('Failed to read dropped file:', filePath, err);
+          });
       }
     });
 
@@ -746,32 +718,14 @@ function App() {
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
 
-    let tauriUnlisten: (() => void) | undefined;
-    if (isTauri()) {
-      getCurrentWindow().onCloseRequested((event) => {
-        saveSession();
-        const dirtyTabs = getStore().tabs.filter((t) => t.isDirty);
-        if (dirtyTabs.length > 0) {
-          const names = dirtyTabs.map((t) => `"${t.title}"`).join(', ');
-          event.preventDefault();
-          confirm(`${names} 有未保存的更改，确定要退出吗？`, { title: '未保存的更改' }).then((ok) => {
-            if (ok) {
-              getCurrentWindow().destroy();
-            }
-          }).catch(() => {});
-        }
-      }).then((unlisten) => { tauriUnlisten = unlisten; }).catch(() => {});
-    }
-
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      if (tauriUnlisten) tauriUnlisten();
     };
   }, []);
 
   // Browser fallback: HTML5 Drag and Drop
   useEffect(() => {
-    if (isTauri()) return;
+    if (desktopApi.isDesktop()) return;
 
     const handleDragOver = (e: DragEvent) => {
       e.preventDefault();
@@ -822,13 +776,13 @@ function App() {
 
   const handleFormat = useCallback(async () => {
     if (!activeTab) {
-      if (isTauri()) await message('没有打开的文件，请先打开或新建一个文件。', { title: '格式化' });
+      if (desktopApi.isDesktop()) await desktopApi.message('没有打开的文件，请先打开或新建一个文件。', { title: '格式化' });
       else alert('没有打开的文件，请先打开或新建一个文件。');
       return;
     }
     const view = getActiveView(activeTab.id);
     if (!view) {
-      if (isTauri()) await message('无法获取编辑器实例，请尝试切换标签页后重试。', { title: '格式化' });
+      if (desktopApi.isDesktop()) await desktopApi.message('无法获取编辑器实例，请尝试切换标签页后重试。', { title: '格式化' });
       else alert('无法获取编辑器实例，请尝试切换标签页后重试。');
       return;
     }
@@ -842,7 +796,7 @@ function App() {
       const msg = scope === 'selection'
         ? '格式化失败：请确保选区内容是有效的可格式化文本（如 JSON、XML、CSS、SQL 等）。'
         : '格式化失败：当前文件类型暂不支持全文格式化，或 JSON 存在语法错误。';
-      if (isTauri()) await message(msg, { title: '格式化' });
+      if (desktopApi.isDesktop()) await desktopApi.message(msg, { title: '格式化' });
       else alert(msg);
     }
   }, [activeTab, markTabDirty]);
@@ -912,8 +866,8 @@ function App() {
     } catch (err) {
       console.error('[App] 文件夹搜索失败:', err);
       const errMsg = String(err);
-      if (isTauri()) {
-        await message(errMsg, { title: '搜索失败', kind: 'error' });
+      if (desktopApi.isDesktop()) {
+        await desktopApi.message(errMsg, { title: '搜索失败', kind: 'error' });
       } else {
         alert(`搜索失败: ${errMsg}`);
       }
@@ -987,7 +941,9 @@ function App() {
       icon: <FolderOpen size={16} />,
       action: async () => {
         try {
-          await invoke('reveal_in_folder', { path: activeTab.filePath });
+          const filePath = activeTab.filePath;
+          if (!filePath) return;
+          await desktopApi.revealInFolder(filePath);
         } catch (err) {
           console.error('[Reveal] 打开文件夹失败:', err);
         }

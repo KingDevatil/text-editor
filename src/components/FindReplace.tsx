@@ -2,13 +2,12 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { ChevronDown, ChevronUp, X, Replace, ReplaceAll, ChevronRight, ChevronLeft, Wand2, Search, FolderOpen } from 'lucide-react';
 import { SearchCursor, RegExpCursor } from '@codemirror/search';
 import type { Text } from '@codemirror/state';
-import { open } from '@tauri-apps/plugin-dialog';
-import { isTauri } from '@tauri-apps/api/core';
 import { useEditorStore } from '../hooks/useEditorStore';
 import { getActiveView } from '../hooks/useEditorStatePool';
 import RegexBuilderModal from './RegexBuilderModal';
 import { setSearchQuery } from '../utils/searchHighlight';
 import type { SearchOptions } from '../services/searchService';
+import { desktopApi } from '../platform/desktop';
 
 /** Maximum characters to scan for match counting (prevents UI freeze on large files). */
 const MAX_SCAN_CHARS = 200_000;
@@ -312,12 +311,10 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
   }, [findText, searchDir, caseSensitive, regexMode, onSearchInFolder]);
 
   const handlePickDirectory = useCallback(async () => {
-    if (!isTauri()) return;
+    if (!desktopApi.isDesktop()) return;
     try {
-      const selected = await open({ directory: true, multiple: false });
-      if (selected && typeof selected === 'string') {
-        setSearchDir(selected);
-      }
+      const selected = await desktopApi.openFolderDialog();
+      if (selected) setSearchDir(selected);
     } catch (err) {
       console.error('[FindReplace] 选择目录失败:', err);
     }

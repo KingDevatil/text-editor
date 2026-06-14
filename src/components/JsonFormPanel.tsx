@@ -2,8 +2,6 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { ChevronDown, ChevronUp, Maximize2, Minimize2, Search, X, AlertCircle } from 'lucide-react';
 import { undo, redo } from '@codemirror/commands';
 import { EditorState } from '@codemirror/state';
-import { isTauri } from '@tauri-apps/api/core';
-import { open, message } from '@tauri-apps/plugin-dialog';
 import { subscribeContentChange, getActiveView } from '../hooks/useEditorStatePool';
 import { readFileAuto } from '../hooks/useFileOpener';
 import {
@@ -26,6 +24,7 @@ import { FormSearchContext } from './FormSearchContext';
 import { analyzeJsonForm } from '../utils/jsonFormAnalysis';
 import type { JsonFormIssue } from '../utils/jsonFormAnalysis';
 import { parseTabDelimitedObjects } from '../utils/tabularImport';
+import { desktopApi } from '../platform/desktop';
 
 interface JsonFormPanelProps {
   tabId: string;
@@ -298,13 +297,14 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
 
   const handleBatchImport = useCallback(async (targetPath: JSONPath) => {
     try {
-      if (isTauri()) {
-        const selected = await open({
+      if (desktopApi.isDesktop()) {
+        const selected = await desktopApi.openFileDialog({
           multiple: false,
           filters: [{ name: 'Text', extensions: ['txt', 'tsv'] }],
         });
-        if (!selected || Array.isArray(selected)) return;
-        const { text: importedText } = await readFileAuto(selected);
+        if (selected.length === 0) return;
+        const filePath = selected[0];
+        const { text: importedText } = await readFileAuto(filePath);
         appendImportedRows(targetPath, importedText);
         return;
       }
@@ -313,7 +313,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
       browserImportInputRef.current?.click();
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
-      if (isTauri()) await message(text, { title: '批量导入失败', kind: 'error' });
+      if (desktopApi.isDesktop()) await desktopApi.message(text, { title: '批量导入失败', kind: 'error' });
       else window.alert(text);
     }
   }, [appendImportedRows]);

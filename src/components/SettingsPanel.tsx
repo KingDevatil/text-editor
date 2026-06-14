@@ -1,10 +1,10 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { X, Pencil, Palette, Star, Sun, Moon, Sparkles, HelpCircle, Puzzle } from 'lucide-react';
-import { invoke, isTauri } from '@tauri-apps/api/core';
 import { useSettingsStore } from '../hooks/useSettingsStore';
 import ThemeEditor from './ThemeEditor';
 import EditorHelp from './EditorHelp';
 import type { ThemeMode } from '../types';
+import { desktopApi } from '../platform/desktop';
 
 interface SettingsPanelProps {
   visible: boolean;
@@ -99,9 +99,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
   }, [visible, showThemeEditor, showHelp, handleClose]);
 
   const handleRegisterDefaultApp = useCallback(async () => {
-    if (!isTauri()) return;
+    if (!desktopApi.isDesktop()) return;
     try {
-      const result = await invoke<string>('register_as_default_app');
+      const result = await desktopApi.registerDefaultApp();
       console.log('[RegisterDefault]', result);
     } catch (err) {
       console.error('[RegisterDefault]', err);
@@ -310,7 +310,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
                     应用
                   </label>
                   <div className="rounded-lg p-4 border space-y-4" style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)' }}>
-                    {isTauri() && (
+                    {desktopApi.isDesktop() && (
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="text-sm font-medium" style={{ color: 'var(--te-text-primary)' }}>设为默认文本编辑器</div>
@@ -339,7 +339,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
                       </div>
                     )}
 
-                    <div className={isTauri() ? 'pt-3 border-t' : ''} style={{ borderColor: 'var(--te-border)' }}>
+                    <div className={desktopApi.isDesktop() ? 'pt-3 border-t' : ''} style={{ borderColor: 'var(--te-border)' }}>
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="text-sm font-medium" style={{ color: 'var(--te-text-primary)' }}>使用说明</div>

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Minus, Square, X, Maximize2 } from 'lucide-react';
-import { invoke, isTauri } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { desktopApi } from '../platform/desktop';
 
 interface TitleBarProps {
   title?: string;
@@ -12,11 +11,10 @@ const TitleBar: React.FC<TitleBarProps> = ({ title = 'Text Editor' }) => {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!desktopApi.isDesktop()) return;
     const check = async () => {
       try {
-        const w = getCurrentWindow();
-        const max = await w.isMaximized();
+        const max = await desktopApi.windowIsMaximized();
         setIsMaximized(max);
       } catch {
         // ignore
@@ -26,18 +24,18 @@ const TitleBar: React.FC<TitleBarProps> = ({ title = 'Text Editor' }) => {
   }, []);
 
   const handleMinimize = async () => {
-    if (!isTauri()) return;
+    if (!desktopApi.isDesktop()) return;
     try {
-      await invoke('window_minimize');
+      await desktopApi.windowMinimize();
     } catch (err) {
       console.error('[TitleBar] minimize failed:', err);
     }
   };
 
   const handleMaximize = async () => {
-    if (!isTauri()) return;
+    if (!desktopApi.isDesktop()) return;
     try {
-      const result = await invoke<boolean>('window_maximize');
+      const result = await desktopApi.windowToggleMaximize();
       setIsMaximized(result);
     } catch (err) {
       console.error('[TitleBar] maximize failed:', err);
@@ -45,9 +43,9 @@ const TitleBar: React.FC<TitleBarProps> = ({ title = 'Text Editor' }) => {
   };
 
   const handleClose = async () => {
-    if (!isTauri()) return;
+    if (!desktopApi.isDesktop()) return;
     try {
-      await invoke('window_close');
+      await desktopApi.windowClose();
     } catch (err) {
       console.error('[TitleBar] close failed:', err);
     }
@@ -55,15 +53,14 @@ const TitleBar: React.FC<TitleBarProps> = ({ title = 'Text Editor' }) => {
 
   return (
     <div
-      data-tauri-drag-region
       className="relative flex items-center h-8 select-none shrink-0 border-b"
-      style={{ backgroundColor: 'var(--te-bg-secondary)', borderBottomColor: 'var(--te-border)' }}
+      style={{ WebkitAppRegion: 'drag', backgroundColor: 'var(--te-bg-secondary)', borderBottomColor: 'var(--te-border)' } as React.CSSProperties}
     >
       {/* Left spacer — same width as right controls so title truly centers */}
       <div className="w-[120px] shrink-0" />
 
       {/* Drag region — title */}
-      <div data-tauri-drag-region className="flex-1 flex items-center justify-center h-full px-2 overflow-hidden">
+      <div className="flex-1 flex items-center justify-center h-full px-2 overflow-hidden">
         <span className="text-xs font-medium truncate" style={{ color: 'var(--te-text-primary)' }}>
           {title}
         </span>
@@ -74,7 +71,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ title = 'Text Editor' }) => {
         <button
           onClick={handleMinimize}
           className="flex items-center justify-center w-10 h-full transition-colors hover:opacity-80"
-          style={{ color: 'var(--te-text-primary)' }}
+          style={{ WebkitAppRegion: 'no-drag', color: 'var(--te-text-primary)' } as React.CSSProperties}
           title="最小化"
         >
           <Minus size={14} />
@@ -82,7 +79,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ title = 'Text Editor' }) => {
         <button
           onClick={handleMaximize}
           className="flex items-center justify-center w-10 h-full transition-colors hover:opacity-80"
-          style={{ color: 'var(--te-text-primary)' }}
+          style={{ WebkitAppRegion: 'no-drag', color: 'var(--te-text-primary)' } as React.CSSProperties}
           title={isMaximized ? '还原' : '最大化'}
         >
           {isMaximized ? <Maximize2 size={12} /> : <Square size={12} />}
@@ -90,7 +87,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ title = 'Text Editor' }) => {
         <button
           onClick={handleClose}
           className="flex items-center justify-center w-10 h-full transition-colors hover:bg-[var(--te-error)]"
-          style={{ color: 'var(--te-text-primary)' }}
+          style={{ WebkitAppRegion: 'no-drag', color: 'var(--te-text-primary)' } as React.CSSProperties}
           title="关闭"
         >
           <X size={14} />

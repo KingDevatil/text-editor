@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { invoke, isTauri } from '@tauri-apps/api/core';
 import { useEditorStore } from './useEditorStore';
 import {
   getEditorState,
@@ -9,6 +8,7 @@ import {
 } from './useEditorStatePool';
 import type { Encoding } from '../types';
 import { normalizeLineEnding } from '../utils/lineEnding';
+import { desktopApi } from '../platform/desktop';
 
 const SESSION_KEY = 'te2-session';
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -142,12 +142,9 @@ export function useSessionRestore() {
 
       for (const st of session.tabs) {
         let newTab;
-        if (st.filePath && isTauri()) {
+        if (st.filePath && desktopApi.isDesktop()) {
           try {
-            const result = await invoke<{ text: string; encoding: string }>(
-              'read_file_auto_detect',
-              { path: st.filePath }
-            );
+            const result = await desktopApi.readFileAuto(st.filePath);
             // Normalize file content to the session's line ending so CodeMirror's
             // lineSeparator matches the document (prevents \n from being treated as
             // plain text when lineSeparator is \r\n).

@@ -1,5 +1,4 @@
 import { useCallback } from 'react';
-import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { Encoding, Language } from '../types';
 import { EXT_TO_LANGUAGE } from '../types';
 import { useEditorStore } from './useEditorStore';
@@ -8,6 +7,7 @@ import { updateEditorContent } from './useEditorStatePool';
 import { addToMru } from './useMru';
 import { detectLineEnding } from '../utils/lineEnding';
 import { perf } from '../utils/perf';
+import { desktopApi, type FileMeta, type ReadFileResult } from '../platform/desktop';
 
 const LARGE_FILE_THRESHOLD = 2 * 1024 * 1024; // 2MB
 const PROGRESSIVE_THRESHOLD = 2 * 1024 * 1024; // 2MB
@@ -21,24 +21,14 @@ export function normalizePath(p: string): string {
   return p.toLowerCase().replace(/\\/g, '/');
 }
 
-export interface OpenFileResult {
-  text: string;
-  encoding: string;
-}
-
-export interface FileMeta {
-  file_size: number;
-  encoding: string;
-  total_lines: number;
-  first_chunk: string;
-}
+export type OpenFileResult = ReadFileResult;
 
 export async function readFileAuto(filePath: string): Promise<OpenFileResult> {
-  return await invoke<OpenFileResult>('read_file_auto_detect', { path: filePath });
+  return await desktopApi.readFileAuto(filePath);
 }
 
 export async function readFileMeta(filePath: string): Promise<FileMeta> {
-  return await invoke<FileMeta>('read_file_meta', { path: filePath });
+  return await desktopApi.readFileMeta(filePath);
 }
 
 const runBackground = (cb: () => void, delay = 100) => {
@@ -55,7 +45,7 @@ export function useFileOpener() {
 
   const openFile = useCallback(
     async (filePath: string, options?: { text?: string; encoding?: string; fromDrop?: boolean }) => {
-      if (!isTauri() && !options?.text) return;
+      if (!desktopApi.isDesktop() && !options?.text) return;
 
       const openStart = performance.now();
 

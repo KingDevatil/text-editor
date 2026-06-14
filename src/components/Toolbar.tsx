@@ -1,5 +1,4 @@
 import React from 'react';
-import { isTauri } from '@tauri-apps/api/core';
 import {
   FilePlus,
   FolderOpen,
@@ -18,6 +17,7 @@ import {
   ListTree,
 } from 'lucide-react';
 import type { ThemeMode } from '../types';
+import { desktopApi } from '../platform/desktop';
 
 interface ToolbarProps {
   onNewFile: () => void;
@@ -104,7 +104,7 @@ const Toolbar: React.FC<ToolbarProps> = React.memo(({
           <FolderOpen size={16} />
           <span className="hidden sm:inline font-medium">打开</span>
         </button>
-        {isTauri() && (
+        {desktopApi.isDesktop() && (
           <button className={btnBase} style={btnStyle} onClick={onOpenFolder} title="打开文件夹">
             <FolderTree size={16} />
             <span className="hidden sm:inline font-medium">文件夹</span>

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { marked } from 'marked';
 import { Copy, Clipboard } from 'lucide-react';
-import { openUrl } from '@tauri-apps/plugin-opener';
 import { subscribeContentChange } from '../hooks/useEditorStatePool';
 import { generateHeadingSlugs, slugify } from '../utils/slugify';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
+import { desktopApi } from '../platform/desktop';
 
 interface MarkdownPreviewProps {
   tabId: string;
@@ -74,7 +74,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ tabId, the
       return;
     }
     e.preventDefault();
-    openUrl(href).catch(() => {});
+    desktopApi.openExternal(href).catch(() => {});
   }, []);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {

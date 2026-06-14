@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { desktopApi } from '../platform/desktop';
 
 export interface SearchOptions {
   query: string;
@@ -19,29 +19,7 @@ export async function searchDirectory(
   options: SearchOptions,
   maxResults?: number
 ): Promise<SearchMatch[]> {
-  const results = await invoke<
-    Array<{
-      file_path: string;
-      line_number: number;
-      line_text: string;
-      match_start: number;
-      match_end: number;
-    }>
-  >('search_directory', {
-    dir,
-    query: options.query,
-    caseSensitive: options.caseSensitive,
-    regexMode: options.regexMode,
-    maxResults: maxResults ?? 1000,
-  });
-
-  return results.map((r) => ({
-    filePath: r.file_path,
-    lineNumber: r.line_number,
-    lineText: r.line_text,
-    matchStart: r.match_start,
-    matchEnd: r.match_end,
-  }));
+  return desktopApi.searchDirectory(dir, options, maxResults);
 }
 
 export interface MatchPreview {

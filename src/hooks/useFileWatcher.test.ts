@@ -4,29 +4,33 @@ import { useFileWatcher } from './useFileWatcher';
 import type { EditorTab } from '../types';
 
 const invokeMock = vi.fn(() => Promise.resolve());
-const listenCallbacks: Array<(event: { payload: string }) => void> = [];
+const watchFileMock = vi.fn(() => Promise.resolve());
+const unwatchFileMock = vi.fn(() => Promise.resolve());
+const listenCallbacks: Array<(path: string) => void> = [];
 const unlistenFns: Array<() => void> = [];
 
-const listenMock = vi.fn((_event: string, cb: (event: { payload: string }) => void) => {
+const onFileChangedMock = vi.fn((cb: (path: string) => void) => {
   listenCallbacks.push(cb);
   const unlisten = vi.fn();
   unlistenFns.push(unlisten);
-  return Promise.resolve(unlisten);
+  return unlisten;
 });
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: (...args: unknown[]) => invokeMock(...args),
-  isTauri: () => true,
-}));
-
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: (...args: unknown[]) => listenMock(...args),
+vi.mock('../platform/desktop', () => ({
+  desktopApi: {
+    isDesktop: () => true,
+    watchFile: (...args: unknown[]) => watchFileMock(...args),
+    unwatchFile: (...args: unknown[]) => unwatchFileMock(...args),
+    onFileChanged: (...args: [(path: string) => void]) => onFileChangedMock(...args),
+  },
 }));
 
 describe('useFileWatcher', () => {
   beforeEach(() => {
     invokeMock.mockClear();
-    listenMock.mockClear();
+    watchFileMock.mockClear();
+    unwatchFileMock.mockClear();
+    onFileChangedMock.mockClear();
     listenCallbacks.length = 0;
     unlistenFns.length = 0;
   });
@@ -49,11 +53,11 @@ describe('useFileWatcher', () => {
       initialProps: { tabs: [] as EditorTab[] },
     });
 
-    expect(invokeMock).not.toHaveBeenCalledWith('watch_file', expect.anything);
+    expect(watchFileMock).not.toHaveBeenCalled();
 
     rerender({ tabs: [tab] });
 
-    expect(invokeMock).toHaveBeenCalledWith('watch_file', { path: '/project/test.txt' });
+    expect(watchFileMock).toHaveBeenCalledWith('/project/test.txt');
   });
 
   it('unwatches file paths removed from tabs', () => {
@@ -70,12 +74,13 @@ describe('useFileWatcher', () => {
       initialProps: { tabs: [tab] },
     });
 
-    expect(invokeMock).toHaveBeenCalledWith('watch_file', { path: '/project/test.txt' });
-    invokeMock.mockClear();
+    expect(watchFileMock).toHaveBeenCalledWith('/project/test.txt');
+    watchFileMock.mockClear();
+    unwatchFileMock.mockClear();
 
     rerender({ tabs: [] });
 
-    expect(invokeMock).toHaveBeenCalledWith('unwatch_file', { path: '/project/test.txt' });
+    expect(unwatchFileMock).toHaveBeenCalledWith('/project/test.txt');
   });
 
   it('does not re-watch already watched paths', () => {
@@ -92,10 +97,12 @@ describe('useFileWatcher', () => {
       initialProps: { tabs: [tab] },
     });
 
-    invokeMock.mockClear();
+    watchFileMock.mockClear();
+    unwatchFileMock.mockClear();
     rerender({ tabs: [tab] });
 
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(watchFileMock).not.toHaveBeenCalled();
+    expect(unwatchFileMock).not.toHaveBeenCalled();
   });
 
   it('does not invoke watch/unwatch when only tab references change but file paths stay the same', () => {
@@ -114,10 +121,12 @@ describe('useFileWatcher', () => {
 
     // simulate markTabDirty creating a new tab reference with same filePath
     const newTabRef = { ...tab, isDirty: true };
-    invokeMock.mockClear();
+    watchFileMock.mockClear();
+    unwatchFileMock.mockClear();
     rerender({ tabs: [newTabRef] });
 
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(watchFileMock).not.toHaveBeenCalled();
+    expect(unwatchFileMock).not.toHaveBeenCalled();
   });
 
   it('calls onFileChanged when file-changed event fires', async () => {
@@ -138,7 +147,7 @@ describe('useFileWatcher', () => {
 
     await waitFor(() => expect(listenCallbacks.length).toBeGreaterThan(0));
 
-    listenCallbacks[listenCallbacks.length - 1]({ payload: '/project/test.txt' });
+    listenCallbacks[listenCallbacks.length - 1]('/project/test.txt');
 
     await waitFor(() => expect(onFileChanged).toHaveBeenCalledWith('/project/test.txt'));
   });
@@ -161,7 +170,7 @@ describe('useFileWatcher', () => {
 
     await waitFor(() => expect(listenCallbacks.length).toBeGreaterThan(0));
 
-    listenCallbacks[listenCallbacks.length - 1]({ payload: '/project/other.txt' });
+    listenCallbacks[listenCallbacks.length - 1]('/project/other.txt');
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 

@@ -3,9 +3,12 @@
   "private": true,
   "version": "1.1.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "electron-dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:1420 && electron .\"",
+    "electron-build": "npm run build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview",
     "tauri": "tauri",
@@ -41,6 +44,9 @@
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-opener": "^2.5.3",
+    "chokidar": "^4.0.3",
+    "iconv-lite": "^0.6.3",
+    "jschardet": "^3.1.4",
     "jsonc-parser": "^3.3.1",
     "lucide-react": "^1.8.0",
     "marked": "^18.0.2",
@@ -60,6 +66,9 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.5.0",
+    "concurrently": "^9.2.1",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12",
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
@@ -70,6 +79,44 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
     "vite": "^8.0.10",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wait-on": "^9.0.3"
+  },
+  "build": {
+    "appId": "com.kimicode.texteditor",
+    "productName": "Text Editor V2",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "src-tauri/icons",
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "src-tauri/icons/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "src-tauri/icons/icon.icns"
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "txt",
+          "md",
+          "js",
+          "ts",
+          "json",
+          "html",
+          "css",
+          "log"
+        ],
+        "name": "Text File",
+        "role": "Editor"
+      }
+    ]
   }
 }

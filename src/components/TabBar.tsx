@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
-import { confirm } from '@tauri-apps/plugin-dialog';
 import type { EditorTab } from '../types';
+import { desktopApi } from '../platform/desktop';
 
 interface TabBarProps {
   tabs: EditorTab[];
@@ -279,7 +279,7 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
     if (contextMenu) {
       const tab = tabs.find((t) => t.id === contextMenu.tabId);
       if (tab?.isDirty) {
-        confirm(`"${tab.title}" 有未保存的更改，确定要关闭吗？`, { title: '未保存的更改' }).then((ok) => {
+        desktopApi.confirm(`"${tab.title}" 有未保存的更改，确定要关闭吗？`, { title: '未保存的更改' }).then((ok) => {
           if (ok) {
             onTabClose(contextMenu.tabId);
           }
@@ -303,7 +303,7 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
     const idsToClose = groupTabs.filter((t) => t.id !== contextMenu.tabId).map((t) => t.id);
     const hasDirty = idsToClose.some((id) => tabs.find((t) => t.id === id)?.isDirty);
     if (hasDirty) {
-      confirm('要关闭的页签中有未保存的更改，确定关闭吗？', { title: '未保存的更改' }).then((ok) => {
+      desktopApi.confirm('要关闭的页签中有未保存的更改，确定关闭吗？', { title: '未保存的更改' }).then((ok) => {
         if (ok && idsToClose.length > 0) onCloseTabs(idsToClose);
         closeContextMenu();
       }).catch(() => {
@@ -328,7 +328,7 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
       const idsToClose = groupTabs.slice(0, index).map((t) => t.id);
       const hasDirty = idsToClose.some((id) => tabs.find((t) => t.id === id)?.isDirty);
       if (hasDirty) {
-        confirm('要关闭的页签中有未保存的更改，确定关闭吗？', { title: '未保存的更改' }).then((ok) => {
+        desktopApi.confirm('要关闭的页签中有未保存的更改，确定关闭吗？', { title: '未保存的更改' }).then((ok) => {
           if (ok) onCloseTabs(idsToClose);
           closeContextMenu();
         }).catch(() => {
@@ -352,7 +352,7 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
       const idsToClose = groupTabs.slice(index + 1).map((t) => t.id);
       const hasDirty = idsToClose.some((id) => tabs.find((t) => t.id === id)?.isDirty);
       if (hasDirty) {
-        confirm('要关闭的页签中有未保存的更改，确定关闭吗？', { title: '未保存的更改' }).then((ok) => {
+        desktopApi.confirm('要关闭的页签中有未保存的更改，确定关闭吗？', { title: '未保存的更改' }).then((ok) => {
           if (ok) onCloseTabs(idsToClose);
           closeContextMenu();
         }).catch(() => {
@@ -452,7 +452,7 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
           onClick={(e) => {
             e.stopPropagation();
             if (isDirty) {
-              confirm(`"${tab.title}" 有未保存的更改，确定要关闭吗？`, { title: '未保存的更改' }).then((ok) => {
+              desktopApi.confirm(`"${tab.title}" 有未保存的更改，确定要关闭吗？`, { title: '未保存的更改' }).then((ok) => {
                 if (ok) onTabClose(tab.id);
               }).catch(() => onTabClose(tab.id));
               return;
