@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld('electronDesktop', {
   windowMinimize: () => ipcRenderer.invoke('window:minimize'),
   windowToggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
   windowClose: () => ipcRenderer.invoke('window:close'),
+  windowForceClose: () => ipcRenderer.invoke('window:forceClose'),
   registerDefaultApp: () => ipcRenderer.invoke('app:registerDefaultApp'),
   onFileChanged: (handler) => on('file:changed', handler),
   onOpenFile: (handler) => on('open-file', handler),

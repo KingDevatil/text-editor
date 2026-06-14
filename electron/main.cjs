@@ -160,6 +160,7 @@ function registerIpc() {
     return mainWindow.isMaximized();
   });
   ipcMain.handle('window:close', () => mainWindow?.close());
+  ipcMain.handle('window:forceClose', () => mainWindow?.destroy());
   ipcMain.handle('app:registerDefaultApp', () => 'Electron installer file associations handle default app registration.');
 }
 

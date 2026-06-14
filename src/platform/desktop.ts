@@ -40,6 +40,7 @@ interface ElectronDesktopBridge {
   windowMinimize(): Promise<void>;
   windowToggleMaximize(): Promise<boolean>;
   windowClose(): Promise<void>;
+  windowForceClose(): Promise<void>;
   registerDefaultApp(): Promise<string>;
   onFileChanged(handler: (path: string) => void): Unlisten;
   onOpenFile(handler: (path: string) => void): Unlisten;
@@ -176,6 +177,11 @@ export const desktopApi = {
   async windowClose(): Promise<void> {
     const electron = electronBridge();
     if (electron) await electron.windowClose();
+  },
+
+  async windowForceClose(): Promise<void> {
+    const electron = electronBridge();
+    if (electron) await electron.windowForceClose();
   },
 
   async registerDefaultApp(): Promise<string> {

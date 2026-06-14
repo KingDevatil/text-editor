@@ -28,6 +28,8 @@ Updated: 2026-06-14
 - Replaced runtime Tauri usage in app/components/hooks/services with `desktopApi`.
 - Added Electron scripts and builder metadata in `package.json`.
 - Added a release cleanup script and disabled Windows ASAR integrity resource embedding to avoid `UNKNOWN open ... Text Editor V2.exe` failures during packaging.
+- Set Vite's production base path to `./` so packaged Electron windows load JS and CSS from `app.asar/dist/assets` instead of `/assets`.
+- Routed the custom title-bar close button through an app-level dirty-tab confirmation flow, then force-closes Electron after confirmation so `beforeunload` cannot trap the packaged window.
 - Added Electron-related dependencies and updated `package-lock.json`.
 - Updated `useFileWatcher` tests to mock the new platform abstraction.
 - Migrated `.github/workflows/release.yml` from Tauri builds to Electron builder outputs.
@@ -45,6 +47,8 @@ Updated: 2026-06-14
 - Electron builder smoke test passed: `npx electron-builder --win --dir` produced `release/win-unpacked`.
 - Full Windows package build passed: `npm run electron-build` produced the NSIS installer.
 - Packaged Windows exe smoke test passed: `release/win-unpacked/Text Editor V2.exe` stayed running after 8 seconds with empty stderr.
+- Packaged renderer verification passed via remote debugging: `#root` rendered app content, JS/CSS loaded from `app.asar/dist/assets`, and no console errors were reported.
+- Title-bar close fix verified by `npm run build`, `npm run lint`, and `npm run electron-build`.
 
 ## Notes / Deviations
 
@@ -52,3 +56,5 @@ Updated: 2026-06-14
 - `rg "@tauri|isTauri|data-tauri"` should only report migration documentation, not runtime code.
 - Electron preload uses a fixed API surface rather than exposing arbitrary IPC.
 - Windows builds set `disableAsarIntegrity: true` because electron-builder 26 can fail while writing ASAR integrity metadata into `Text Editor V2.exe` on this environment.
+- Vite uses a relative production base path because Electron loads the built UI through `file://`.
+- The custom title-bar close button uses `windowForceClose` only after renderer-side unsaved-change confirmation.

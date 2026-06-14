@@ -5,9 +5,10 @@ import { desktopApi } from '../platform/desktop';
 interface TitleBarProps {
   title?: string;
   isDark?: boolean;
+  onClose?: () => void | Promise<void>;
 }
 
-const TitleBar: React.FC<TitleBarProps> = ({ title = 'Text Editor' }) => {
+const TitleBar: React.FC<TitleBarProps> = ({ title = 'Text Editor', onClose }) => {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
@@ -45,7 +46,8 @@ const TitleBar: React.FC<TitleBarProps> = ({ title = 'Text Editor' }) => {
   const handleClose = async () => {
     if (!desktopApi.isDesktop()) return;
     try {
-      await desktopApi.windowClose();
+      if (onClose) await onClose();
+      else await desktopApi.windowClose();
     } catch (err) {
       console.error('[TitleBar] close failed:', err);
     }

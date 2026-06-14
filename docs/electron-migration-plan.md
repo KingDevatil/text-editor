@@ -12,7 +12,7 @@
 - 阶段 5 已完成：已加入 `electron-builder` 基础配置、图标、file associations，并将 Release workflow 迁移到 Electron 产物。
 - 阶段 6 已完成：已删除 `src-tauri/`、Tauri npm 依赖、Tauri scripts 和运行时代码中的 Tauri fallback。
 
-验证说明：已通过 `npm run build`、`npm run test`、`npm run lint`，并完成 `NODE_ENV=production electron .`、`npx electron-builder --win --dir`、`npm run electron-build` 和打包后 Windows exe 烟测；Electron 进程启动后 8 秒仍保持运行且 stderr 为空。Windows 打包已设置 `disableAsarIntegrity: true`，用于规避 electron-builder 26 在当前环境写入 `Text Editor V2.exe` ASAR integrity 资源时出现的 `UNKNOWN open` 错误。
+验证说明：已通过 `npm run build`、`npm run test`、`npm run lint`，并完成 `NODE_ENV=production electron .`、`npx electron-builder --win --dir`、`npm run electron-build` 和打包后 Windows exe 烟测；Electron 进程启动后 8 秒仍保持运行且 stderr 为空。已通过远程调试确认打包后 renderer 能从 `app.asar/dist/assets` 加载 JS/CSS，`#root` 已挂载应用内容且无控制台错误。Windows 打包已设置 `disableAsarIntegrity: true`，用于规避 electron-builder 26 在当前环境写入 `Text Editor V2.exe` ASAR integrity 资源时出现的 `UNKNOWN open` 错误。
 
 ## 目标与边界
 
@@ -158,6 +158,7 @@
   - icon
   - fileAssociations
 - Windows 构建保留 asar 打包，但通过 `disableAsarIntegrity: true` 跳过 exe 内 ASAR integrity 资源写入，避免本地/CI 打包时因 `Text Editor V2.exe` 被拒绝写入而失败。
+- Vite 生产构建必须使用相对 `base`，否则 Electron 通过 `file://` 加载 `index.html` 时会把 `/assets/...` 解析到磁盘根目录，导致安装后窗口无界面。
 - 迁移 Windows 默认应用注册能力。
 - 迁移 reveal in folder、open external URL、clipboard。
 - 调整 GitHub Actions release workflow。

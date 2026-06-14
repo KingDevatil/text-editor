@@ -62,6 +62,7 @@ function App() {
   const handleOpenFileRef = useRef<(() => void) | null>(null);
   const handleSaveFileRef = useRef<(() => void) | null>(null);
   const handleFormatRef = useRef<(() => void) | null>(null);
+  const forceClosingRef = useRef(false);
   const findReplaceVisibleRef = useRef(findReplaceVisible);
   const columnAlignSupportedRef = useRef(false);
   const columnAlignSupported = useSettingsStore((s) => s.columnAlignSupported);
@@ -611,6 +612,23 @@ function App() {
     closeTabs(ids);
   }, [closeTabs]);
 
+  const handleWindowClose = useCallback(async () => {
+    const dirtyTabs = useEditorStore.getState().tabs.filter((tab) => tab.isDirty);
+    if (dirtyTabs.length > 0) {
+      const ok = await desktopApi.confirm(
+        dirtyTabs.length === 1
+          ? `"${dirtyTabs[0].title}" 有未保存的更改，确定要退出吗？`
+          : `有 ${dirtyTabs.length} 个文件包含未保存的更改，确定要退出吗？`,
+        { title: '未保存的更改' }
+      );
+      if (!ok) return;
+    }
+
+    saveSession();
+    forceClosingRef.current = true;
+    await desktopApi.windowForceClose();
+  }, []);
+
   const handleRenameTab = useCallback(async (tabId: string, newTitle: string) => {
     const tab = tabs.find((t) => t.id === tabId);
     if (!tab) return;
@@ -712,6 +730,7 @@ function App() {
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       saveSession();
+      if (forceClosingRef.current) return;
       if (getStore().tabs.some((t) => t.isDirty)) {
         e.preventDefault();
       }
@@ -961,7 +980,7 @@ function App() {
         accept=".txt,.md,.js,.jsx,.mjs,.cjs,.ts,.tsx,.mts,.cts,.html,.htm,.xhtml,.css,.scss,.sass,.less,.json,.jsonc,.json5,.py,.pyw,.java,.cpp,.cc,.cxx,.c,.h,.hpp,.cs,.rs,.go,.mdx,.yml,.yaml,.xml,.svg,.wsdl,.xsd,.xsl,.xslt,.sql,.mysql,.pgsql,.sqlite,.ini,.cfg,.inf,.csv,.tsv,.env,.properties,.log,.sh,.bash,.zsh"
       />
 
-      <TitleBar title={activeTab ? activeTab.title : 'Text Editor'} isDark={isDark} />
+      <TitleBar title={activeTab ? activeTab.title : 'Text Editor'} isDark={isDark} onClose={handleWindowClose} />
 
       <Toolbar
         onNewFile={handleNewFile}
