@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const validChannels = new Set(['file:changed', 'open-file']);
 
@@ -7,6 +7,25 @@ function on(channel, handler) {
   const listener = (_event, payload) => handler(payload);
   ipcRenderer.on(channel, listener);
   return () => ipcRenderer.removeListener(channel, listener);
+}
+
+function onDragDropEvent(handler) {
+  const handleDragOver = (event) => {
+    event.preventDefault();
+  };
+  const handleDrop = (event) => {
+    event.preventDefault();
+    const paths = Array.from(event.dataTransfer?.files ?? [])
+      .map((file) => webUtils.getPathForFile(file))
+      .filter(Boolean);
+    if (paths.length > 0) handler(paths);
+  };
+  window.addEventListener('dragover', handleDragOver);
+  window.addEventListener('drop', handleDrop);
+  return () => {
+    window.removeEventListener('dragover', handleDragOver);
+    window.removeEventListener('drop', handleDrop);
+  };
 }
 
 contextBridge.exposeInMainWorld('electronDesktop', {
@@ -37,6 +56,5 @@ contextBridge.exposeInMainWorld('electronDesktop', {
   registerDefaultApp: () => ipcRenderer.invoke('app:registerDefaultApp'),
   onFileChanged: (handler) => on('file:changed', handler),
   onOpenFile: (handler) => on('open-file', handler),
-  onDragDropEvent: async () => () => {},
-  onCloseRequested: async () => () => {},
+  onDragDropEvent: async (handler) => onDragDropEvent(handler),
 });

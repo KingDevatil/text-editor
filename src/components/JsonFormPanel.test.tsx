@@ -5,12 +5,6 @@ import JsonFormPanel from './JsonFormPanel';
 import { getActiveView } from '../hooks/useEditorStatePool';
 import { undo, redo } from '@codemirror/commands';
 
-vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => false }));
-vi.mock('@tauri-apps/plugin-dialog', () => ({
-  open: vi.fn(),
-  message: vi.fn(),
-}));
-
 vi.mock('@codemirror/commands', () => ({
   undo: vi.fn(() => true),
   redo: vi.fn(() => true),

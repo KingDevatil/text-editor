@@ -9,10 +9,10 @@
 - 阶段 2 已完成基础实现：Node 端已实现文件读写、编码检测、元信息读取、重命名和原子保存。
 - 阶段 3 已完成基础实现：Electron dialog、pending files、单实例 handoff、shell、clipboard 和窗口控制已接入。
 - 阶段 4 已完成基础实现：目录读取、搜索和 watcher 已接入 Electron 服务。
-- 阶段 5 部分完成：已加入 `electron-builder` 基础配置、图标和 file associations；CI/release 仍待迁移。
-- 阶段 6 未开始：Tauri 代码和依赖仍按计划保留，待 Electron 手工回归验证后再删除。
+- 阶段 5 已完成：已加入 `electron-builder` 基础配置、图标、file associations，并将 Release workflow 迁移到 Electron 产物。
+- 阶段 6 已完成：已删除 `src-tauri/`、Tauri npm 依赖、Tauri scripts 和运行时代码中的 Tauri fallback。
 
-偏差说明：本次环境中 Electron 二进制下载卡住，依赖安装使用了 `ELECTRON_SKIP_BINARY_DOWNLOAD=1` 更新 lockfile，因此尚未手工启动 Electron 窗口验证。
+验证说明：已通过 `npm run build`、`npm run test`、`npm run lint`，并完成 `NODE_ENV=production electron .`、`npx electron-builder --win --dir` 和打包后 Windows exe 烟测；Electron 进程启动后 8 秒仍保持运行且 stderr 为空。
 
 ## 目标与边界
 

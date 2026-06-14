@@ -1,10 +1,7 @@
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import CmEditor from './CmEditor';
-
-// Mock @tauri-apps/api/core so isTauri() returns false in test
-vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => false }));
 
 describe('CmEditor', () => {
   it('renders editor container for a tab', () => {

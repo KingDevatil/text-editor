@@ -10,10 +10,10 @@ Updated: 2026-06-14
 - [x] Phase 2: Implement Electron file read/write, encoding detection, metadata reads, rename, and atomic save.
 - [x] Phase 3: Implement Electron dialogs, pending file queue, single instance handoff, shell actions, clipboard, and window controls.
 - [x] Phase 4: Implement Electron directory listing, search, and file watcher services.
-- [~] Phase 5: Add `electron-builder` configuration for Windows NSIS, macOS DMG, icons, and file associations.
-- [ ] Phase 5: Update release CI for Electron artifacts.
-- [ ] Phase 6: Remove Tauri code and dependencies after Electron parity is manually verified.
-- [ ] Phase 6: Update README, user guide, and release notes after final cutover.
+- [x] Phase 5: Add `electron-builder` configuration for Windows NSIS, macOS DMG, icons, and file associations.
+- [x] Phase 5: Update release CI for Electron artifacts.
+- [x] Phase 6: Remove Tauri code and dependencies after Electron smoke verification.
+- [x] Phase 6: Update README and migration notes after final cutover.
 
 ## Completed This Pass
 
@@ -29,15 +29,23 @@ Updated: 2026-06-14
 - Added Electron scripts and builder metadata in `package.json`.
 - Added Electron-related dependencies and updated `package-lock.json`.
 - Updated `useFileWatcher` tests to mock the new platform abstraction.
+- Migrated `.github/workflows/release.yml` from Tauri builds to Electron builder outputs.
+- Moved icons from `src-tauri/icons` to `build/icons`.
+- Removed `src-tauri/`, Tauri npm dependencies, Tauri scripts, and stale `eslint-report.json`.
+- Removed Tauri fallback code from `src/platform/desktop.ts`.
+- Updated `README.md` for the Electron-based project.
 
 ## Verification
 
 - `npm run build` passed.
 - `npm run test` passed: 29 files, 222 tests.
+- `npm run lint` passed.
+- Electron production smoke test passed: `NODE_ENV=production electron .` stayed running after 8 seconds with empty stderr.
+- Electron builder smoke test passed: `npx electron-builder --win --dir` produced `release/win-unpacked`.
+- Packaged Windows exe smoke test passed: `release/win-unpacked/Text Editor V2.exe` stayed running after 8 seconds with empty stderr.
 
 ## Notes / Deviations
 
-- Tauri code and dependencies are intentionally retained as fallback and behavior reference, per the migration plan.
-- `rg "@tauri|isTauri|invoke\\(|data-tauri" src -n` now reports only `src/platform/desktop.ts` and legacy test mocks, not runtime business code.
-- Electron binary download hung in this environment during `npm install`; dependencies and lockfile were updated with `ELECTRON_SKIP_BINARY_DOWNLOAD=1`. Because of that, Electron window launch was not manually verified in this pass.
+- Tauri fallback has been removed; Electron is now the only desktop backend.
+- `rg "@tauri|isTauri|data-tauri"` should only report migration documentation, not runtime code.
 - Electron preload uses a fixed API surface rather than exposing arbitrary IPC.

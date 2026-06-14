@@ -6,7 +6,7 @@ const { listDirectory } = require('./services/directory.cjs');
 const { searchDirectory } = require('./services/search.cjs');
 const { createWatcherManager } = require('./services/watcher.cjs');
 
-const isDev = !app.isPackaged;
+const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 const pendingFiles = [];
 let mainWindow = null;
 let watcherManager = null;

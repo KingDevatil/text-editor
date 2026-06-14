@@ -3,16 +3,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-// Mock Tauri APIs
-vi.mock('@tauri-apps/api/core', () => ({
-  isTauri: () => false,
-  invoke: vi.fn(),
-}));
-vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(() => Promise.resolve(() => {})) }));
-vi.mock('@tauri-apps/api/webview', () => ({ getCurrentWebview: () => ({ onDragDropEvent: vi.fn(() => Promise.resolve(() => {})) }) }));
-vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ show: vi.fn(), onCloseRequested: vi.fn(() => Promise.resolve(() => {})) }) }));
-vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn(), confirm: vi.fn(), message: vi.fn() }));
-
 // Mock CodeMirror-heavy child components to keep the test lightweight
 vi.mock('./components/CmEditor', () => ({
   default: () => <div data-testid="cm-editor">Editor</div>,
