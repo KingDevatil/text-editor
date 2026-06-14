@@ -37,7 +37,8 @@ Thumbs.db
 CHANGELOG_v1.1.0.md
 
 # Docs
-docs/
+docs/*
+!docs/electron-migration-plan.md
 
 # CodeBuddy
 .codebuddy/
