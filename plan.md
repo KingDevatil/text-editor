@@ -27,6 +27,7 @@ Updated: 2026-06-14
   - `services/watcher.cjs`
 - Replaced runtime Tauri usage in app/components/hooks/services with `desktopApi`.
 - Added Electron scripts and builder metadata in `package.json`.
+- Added a release cleanup script and disabled Windows ASAR integrity resource embedding to avoid `UNKNOWN open ... Text Editor V2.exe` failures during packaging.
 - Added Electron-related dependencies and updated `package-lock.json`.
 - Updated `useFileWatcher` tests to mock the new platform abstraction.
 - Migrated `.github/workflows/release.yml` from Tauri builds to Electron builder outputs.
@@ -42,6 +43,7 @@ Updated: 2026-06-14
 - `npm run lint` passed.
 - Electron production smoke test passed: `NODE_ENV=production electron .` stayed running after 8 seconds with empty stderr.
 - Electron builder smoke test passed: `npx electron-builder --win --dir` produced `release/win-unpacked`.
+- Full Windows package build passed: `npm run electron-build` produced the NSIS installer.
 - Packaged Windows exe smoke test passed: `release/win-unpacked/Text Editor V2.exe` stayed running after 8 seconds with empty stderr.
 
 ## Notes / Deviations
@@ -49,3 +51,4 @@ Updated: 2026-06-14
 - Tauri fallback has been removed; Electron is now the only desktop backend.
 - `rg "@tauri|isTauri|data-tauri"` should only report migration documentation, not runtime code.
 - Electron preload uses a fixed API surface rather than exposing arbitrary IPC.
+- Windows builds set `disableAsarIntegrity: true` because electron-builder 26 can fail while writing ASAR integrity metadata into `Text Editor V2.exe` on this environment.

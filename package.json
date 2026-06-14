@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "electron-dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:1420 && electron .\"",
-    "electron-build": "npm run build && electron-builder",
+    "clean:release": "node electron/scripts/clean-release.cjs",
+    "electron-build": "npm run clean:release && npm run build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
@@ -79,6 +80,7 @@
   "build": {
     "appId": "com.kimicode.texteditor",
     "productName": "Text Editor V2",
+    "disableAsarIntegrity": true,
     "files": [
       "dist/**/*",
       "electron/**/*",
