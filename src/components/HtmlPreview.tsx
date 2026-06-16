@@ -213,7 +213,7 @@ const HtmlPreview: React.FC<HtmlPreviewProps> = React.memo(({
           <iframe
             ref={iframeRef}
             title="HTML Preview"
-            sandbox="allow-scripts"
+            sandbox="allow-scripts allow-same-origin"
             srcDoc={srcDoc}
             className="w-full flex-1 border-none"
             style={{ backgroundColor: 'var(--te-bg-primary)' }}

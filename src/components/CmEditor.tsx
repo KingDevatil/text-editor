@@ -154,6 +154,10 @@ const CmEditor: React.FC<CmEditorProps> = ({
       });
     }
 
+    // Notify content subscribers so previews/readers receive the initial content
+    // even if they subscribed before this effect ran (race during session restore).
+    notifyContentChange(tabId);
+
     // Create new view
     view = new EditorView({
       state,

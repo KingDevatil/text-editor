@@ -182,7 +182,7 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
           <iframe
             ref={iframeRef}
             title="HTML Reader"
-            sandbox="allow-scripts"
+            sandbox="allow-scripts allow-same-origin"
             srcDoc={srcDoc}
             className="w-full h-full border-none"
             style={{

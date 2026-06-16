@@ -1400,7 +1400,8 @@ body[data-ve-drag-active] *{cursor:grabbing!important}\
   function getEditorSrc() {
     var script = document.querySelector('script[data-ve][src]') || document.querySelector('script[src*="editor.js"]')
     if (script && script.src) return script.src
-    return new URL('editor.js', window.location.href).href
+    try { return new URL('editor.js', window.location.href).href }
+    catch (e) { return '' }
   }
 
   function withEditorScript(html) {
