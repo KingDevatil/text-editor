@@ -1000,7 +1000,7 @@ function App() {
         type="file"
         className="hidden"
         onChange={handleFileSelected}
-        accept=".txt,.md,.js,.jsx,.mjs,.cjs,.ts,.tsx,.mts,.cts,.html,.htm,.xhtml,.css,.scss,.sass,.less,.json,.jsonc,.json5,.py,.pyw,.java,.cpp,.cc,.cxx,.c,.h,.hpp,.cs,.rs,.go,.mdx,.yml,.yaml,.xml,.svg,.wsdl,.xsd,.xsl,.xslt,.sql,.mysql,.pgsql,.sqlite,.ini,.cfg,.inf,.csv,.tsv,.env,.properties,.log,.sh,.bash,.zsh"
+        accept=".txt,.md,.js,.jsx,.mjs,.cjs,.ts,.tsx,.mts,.cts,.html,.htm,.xhtml,.css,.scss,.sass,.less,.json,.jsonc,.json5,.jsonl,.py,.pyw,.java,.cpp,.cc,.cxx,.c,.h,.hpp,.cs,.rs,.go,.mdx,.yml,.yaml,.xml,.svg,.wsdl,.xsd,.xsl,.xslt,.sql,.mysql,.pgsql,.sqlite,.ini,.cfg,.inf,.csv,.tsv,.env,.properties,.log,.sh,.bash,.zsh"
       />
 
       <TitleBar title={activeTab ? activeTab.title : 'Text Editor'} isDark={isDark} onClose={handleWindowClose} />

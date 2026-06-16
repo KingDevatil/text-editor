@@ -320,7 +320,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
                         <div>
                           <div className="text-sm font-medium" style={{ color: 'var(--te-text-primary)' }}>系统打开方式</div>
                           <div className="text-xs mt-0.5" style={{ color: 'var(--te-text-secondary)' }}>
-                            添加右键菜单，并注册 .txt、.md、.js 等默认打开方式
+                            添加右键菜单，并注册 .txt、.md、.jsonc、.yaml、.xml 等默认打开方式
                           </div>
                         </div>
                         <button
