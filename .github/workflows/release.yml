@@ -73,7 +73,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release_tag.outputs.tag }}
           ARTIFACT_PATH: ${{ matrix.artifact-path }}
         run: |
@@ -81,4 +82,5 @@ jobs:
             echo "No release tag found" >&2
             exit 1
           fi
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes ""
           gh release upload "$TAG" $ARTIFACT_PATH --clobber
