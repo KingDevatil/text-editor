@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { X, Pencil, Palette, Star, Sun, Moon, Sparkles, HelpCircle, Puzzle } from 'lucide-react';
-import { useSettingsStore } from '../hooks/useSettingsStore';
+import { X, Pencil, Palette, Star, Sun, Moon, Sparkles, HelpCircle, Puzzle, Plus, Trash2, Edit2, Check } from 'lucide-react';
+import { useSettingsStore, type CustomColorFormat } from '../hooks/useSettingsStore';
 import ThemeEditor from './ThemeEditor';
 import EditorHelp from './EditorHelp';
 import type { ThemeMode } from '../types';
@@ -66,6 +66,14 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
   const setScrollPastEnd = useSettingsStore((s) => s.setScrollPastEnd);
   const columnAlignSupported = useSettingsStore((s) => s.columnAlignSupported);
   const setColumnAlignSupported = useSettingsStore((s) => s.setColumnAlignSupported);
+  const customColorFormats = useSettingsStore((s) => s.customColorFormats);
+  const addCustomColorFormat = useSettingsStore((s) => s.addCustomColorFormat);
+  const updateCustomColorFormat = useSettingsStore((s) => s.updateCustomColorFormat);
+  const removeCustomColorFormat = useSettingsStore((s) => s.removeCustomColorFormat);
+  const toggleCustomColorFormat = useSettingsStore((s) => s.toggleCustomColorFormat);
+
+  const [editingFormat, setEditingFormat] = useState<CustomColorFormat | null>(null);
+  const [isAddingNew, setIsAddingNew] = useState(false);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -76,6 +84,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
       queueMicrotask(() => {
         setShowThemeEditor(false);
         setShowHelp(false);
+        setEditingFormat(null);
+        setIsAddingNew(false);
       });
     }
   }, [visible]);
@@ -305,6 +315,72 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
                     />
                   </div>
                 </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: 'var(--te-text-secondary)' }}>
+                    自定义颜色格式
+                  </label>
+                  <div className="rounded-lg p-4 border" style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)' }}>
+                    <div className="text-xs mb-3" style={{ color: 'var(--te-text-secondary)' }}>
+                      配置自定义的颜色格式模式，编辑器会在悬停时识别并显示颜色预览
+                    </div>
+                    
+                    {/* Format list */}
+                    <div className="space-y-2 mb-3">
+                      {customColorFormats.map((format) => (
+                        <div key={format.id} className="flex items-center gap-2 p-2 rounded border" style={{ backgroundColor: 'var(--te-bg-secondary)', borderColor: 'var(--te-border)' }}>
+                          <input
+                            type="checkbox"
+                            checked={format.enabled}
+                            onChange={() => toggleCustomColorFormat(format.id)}
+                            className="rounded cursor-pointer"
+                            style={{ accentColor: 'var(--te-primary)', width: '14px', height: '14px' }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium truncate" style={{ color: 'var(--te-text-primary)' }}>{format.name}</div>
+                            <div className="text-[10px] font-mono truncate" style={{ color: 'var(--te-text-secondary)' }}>{format.pattern}</div>
+                          </div>
+                          <button
+                            onClick={() => setEditingFormat(format)}
+                            className="p-1 rounded hover:opacity-70 transition-opacity"
+                            style={{ color: 'var(--te-text-secondary)' }}
+                            title="编辑"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          <button
+                            onClick={() => removeCustomColorFormat(format.id)}
+                            className="p-1 rounded hover:opacity-70 transition-opacity"
+                            style={{ color: 'var(--te-text-secondary)' }}
+                            title="删除"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Add new button */}
+                    <button
+                      onClick={() => setIsAddingNew(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors font-medium w-full"
+                      style={{
+                        borderColor: 'var(--te-border)',
+                        color: 'var(--te-primary)',
+                        backgroundColor: 'color-mix(in srgb, var(--te-primary) 10%, transparent)',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--te-primary) 15%, transparent)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--te-primary) 10%, transparent)';
+                      }}
+                    >
+                      <Plus size={14} />
+                      添加格式
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -382,9 +458,184 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
 
       {showThemeEditor && <ThemeEditor onClose={() => setShowThemeEditor(false)} />}
       {showHelp && <EditorHelp onClose={() => setShowHelp(false)} />}
+      {(editingFormat || isAddingNew) && (
+        <ColorFormatEditorDialog
+          format={editingFormat}
+          isNew={isAddingNew}
+          onSave={(format) => {
+            if (isAddingNew) {
+              addCustomColorFormat(format);
+            } else if (editingFormat) {
+              updateCustomColorFormat(editingFormat.id, format);
+            }
+            setEditingFormat(null);
+            setIsAddingNew(false);
+          }}
+          onCancel={() => {
+            setEditingFormat(null);
+            setIsAddingNew(false);
+          }}
+        />
+      )}
     </div>
   );
 });
+
+const ColorFormatEditorDialog: React.FC<{
+  format: CustomColorFormat | null;
+  isNew: boolean;
+  onSave: (format: CustomColorFormat) => void;
+  onCancel: () => void;
+}> = ({ format, isNew, onSave, onCancel }) => {
+  const [name, setName] = useState(format?.name ?? '');
+  const [pattern, setPattern] = useState(format?.pattern ?? '');
+  const [extractGroup, setExtractGroup] = useState(format?.extractGroup?.toString() ?? '1');
+  const [error, setError] = useState('');
+
+  const handleSave = useCallback(() => {
+    if (!name.trim()) {
+      setError('请输入格式名称');
+      return;
+    }
+    if (!pattern.trim()) {
+      setError('请输入正则表达式');
+      return;
+    }
+    try {
+      new RegExp(pattern);
+    } catch {
+      setError('无效的正则表达式');
+      return;
+    }
+    const group = parseInt(extractGroup, 10);
+    if (isNaN(group) || group < 1) {
+      setError('捕获组索引必须是大于 0 的整数');
+      return;
+    }
+
+    onSave({
+      id: format?.id ?? crypto.randomUUID(),
+      name: name.trim(),
+      pattern: pattern.trim(),
+      extractGroup: group,
+      enabled: format?.enabled ?? true,
+    });
+  }, [name, pattern, extractGroup, format, onSave]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[300] flex items-center justify-center"
+      style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+      onClick={onCancel}
+    >
+      <div
+        className="w-[480px] max-w-[92vw] flex flex-col rounded-xl shadow-2xl border overflow-hidden"
+        style={{ backgroundColor: 'var(--te-bg-secondary)', borderColor: 'var(--te-border)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-3.5 border-b" style={{ borderColor: 'var(--te-border)' }}>
+          <h2 className="text-base font-semibold" style={{ color: 'var(--te-text-primary)' }}>
+            {isNew ? '添加颜色格式' : '编辑颜色格式'}
+          </h2>
+          <button
+            onClick={onCancel}
+            className="p-1.5 rounded-md hover:opacity-70 transition-opacity"
+            style={{ color: 'var(--te-text-secondary)' }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-sm mb-1.5" style={{ color: 'var(--te-text-primary)' }}>格式名称</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => { setName(e.target.value); setError(''); }}
+              placeholder="例如: 方括号十六进制"
+              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2"
+              style={{
+                backgroundColor: 'var(--te-bg-tertiary)',
+                borderColor: 'var(--te-border)',
+                color: 'var(--te-text-primary)',
+                '--tw-ring-color': 'var(--te-primary)',
+              } as React.CSSProperties}
+            />
+          </div>
+          <div>
+            <label className="block text-sm mb-1.5" style={{ color: 'var(--te-text-primary)' }}>正则表达式</label>
+            <input
+              type="text"
+              value={pattern}
+              onChange={(e) => { setPattern(e.target.value); setError(''); }}
+              placeholder="例如: \[([0-9a-fA-F]{6})\]"
+              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 font-mono"
+              style={{
+                backgroundColor: 'var(--te-bg-tertiary)',
+                borderColor: 'var(--te-border)',
+                color: 'var(--te-text-primary)',
+                '--tw-ring-color': 'var(--te-primary)',
+              } as React.CSSProperties}
+            />
+            <div className="text-[10px] mt-1" style={{ color: 'var(--te-text-secondary)' }}>
+              使用正则表达式匹配颜色值，用捕获组提取十六进制颜色部分
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm mb-1.5" style={{ color: 'var(--te-text-primary)' }}>捕获组索引</label>
+            <input
+              type="number"
+              value={extractGroup}
+              onChange={(e) => { setExtractGroup(e.target.value); setError(''); }}
+              min="1"
+              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2"
+              style={{
+                backgroundColor: 'var(--te-bg-tertiary)',
+                borderColor: 'var(--te-border)',
+                color: 'var(--te-text-primary)',
+                '--tw-ring-color': 'var(--te-primary)',
+              } as React.CSSProperties}
+            />
+            <div className="text-[10px] mt-1" style={{ color: 'var(--te-text-secondary)' }}>
+              从正则匹配结果中提取颜色值的捕获组索引（通常为 1）
+            </div>
+          </div>
+          {error && (
+            <div className="text-xs" style={{ color: '#ef4444' }}>{error}</div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-3.5 border-t" style={{ borderColor: 'var(--te-border)' }}>
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-sm rounded-lg border transition-colors"
+            style={{
+              borderColor: 'var(--te-border)',
+              color: 'var(--te-text-primary)',
+              backgroundColor: 'var(--te-bg-secondary)',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--te-bg-tertiary)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--te-bg-secondary)'; }}
+          >
+            取消
+          </button>
+          <button
+            onClick={handleSave}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg transition-colors font-medium"
+            style={{
+              color: 'var(--te-bg-primary)',
+              backgroundColor: 'var(--te-primary)',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
+          >
+            <Check size={14} />
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 SettingsPanel.displayName = 'SettingsPanel';
 export default SettingsPanel;

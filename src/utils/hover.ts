@@ -1,5 +1,6 @@
 import { hoverTooltip, type Tooltip } from '@codemirror/view';
 import type { EditorView } from '@codemirror/view';
+import { useSettingsStore, type CustomColorFormat } from '../hooks/useSettingsStore';
 
 /**
  * Lightweight hover tooltip showing the word/token under cursor.
@@ -21,7 +22,94 @@ function detectHexColor(token: string): string | null {
   return token.toLowerCase();
 }
 
+/** Check if token matches a custom color format and return normalized hex if valid. */
+function detectCustomColor(token: string, format: CustomColorFormat): string | null {
+  try {
+    const regex = new RegExp(format.pattern);
+    const match = token.match(regex);
+    if (!match) return null;
+
+    const extractGroup = format.extractGroup ?? 1;
+    const hexValue = match[extractGroup];
+    if (!hexValue) return null;
+
+    // Normalize the hex value to 6-digit format
+    const hex = hexValue.replace(/^#/, '');
+    if (/^[0-9a-fA-F]{3}$/.test(hex)) {
+      return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`;
+    }
+    if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+      return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+    }
+    if (/^[0-9a-fA-F]{6}$/.test(hex) || /^[0-9a-fA-F]{8}$/.test(hex)) {
+      return `#${hex.toLowerCase()}`;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Scan the line for custom color format matches around the cursor position. */
+function findCustomColorMatch(view: EditorView, pos: number): { color: string; from: number; to: number; token: string } | null {
+  const settings = useSettingsStore.getState();
+  const formats = settings.customColorFormats.filter((f) => f.enabled);
+  if (formats.length === 0) return null;
+
+  const line = view.state.doc.lineAt(pos);
+  const lineText = line.text;
+
+  for (const format of formats) {
+    try {
+      const regex = new RegExp(format.pattern, 'g');
+      let match;
+      while ((match = regex.exec(lineText)) !== null) {
+        const matchStart = line.from + match.index;
+        const matchEnd = matchStart + match[0].length;
+        if (pos >= matchStart && pos <= matchEnd) {
+          const color = detectCustomColor(match[0], format);
+          if (color) {
+            return {
+              color,
+              from: matchStart,
+              to: matchEnd,
+              token: match[0],
+            };
+          }
+        }
+      }
+    } catch {
+      // Skip invalid regex patterns
+    }
+  }
+  return null;
+}
+
 function buildTooltip(view: EditorView, pos: number): Tooltip | null {
+  // First check for custom color formats
+  const customColorMatch = findCustomColorMatch(view, pos);
+  if (customColorMatch) {
+    return {
+      pos: customColorMatch.from,
+      end: customColorMatch.to,
+      above: true,
+      create() {
+        const dom = document.createElement('div');
+        dom.className = 'cm-hover-tooltip';
+        dom.innerHTML = `
+          <div class="flex items-center gap-2">
+            <div style="width: 24px; height: 24px; border-radius: 4px; background-color: ${customColorMatch.color}; border: 1px solid rgba(128,128,128,0.3);"></div>
+            <div>
+              <div class="font-mono text-xs">${escapeHtml(customColorMatch.token)}</div>
+              <div class="text-[10px] opacity-60">color</div>
+            </div>
+          </div>
+        `;
+        return { dom };
+      },
+    };
+  }
+
   const word = view.state.wordAt(pos);
   if (!word || word.from === word.to) return null;
 
@@ -53,7 +141,7 @@ function buildTooltip(view: EditorView, pos: number): Tooltip | null {
     }
   }
 
-  // Check for hex color values first
+  // Check for hex color values
   const hexColor = detectHexColor(token);
   if (hexColor) {
     return {

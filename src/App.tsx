@@ -228,15 +228,8 @@ function App() {
     };
   }, [tabs]);
 
-  // Show window after paint completes to avoid blank screen
-  useEffect(() => {
-    if (!desktopApi.isDesktop()) return;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        desktopApi.windowShow().catch(() => {});
-      });
-    });
-  }, []);
+  // Note: window show is handled by Electron's ready-to-show event in main.cjs
+  // No need to call windowShow() here to avoid race conditions
 
   // Preload common language packs on startup
   useEffect(() => {

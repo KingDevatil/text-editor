@@ -2,6 +2,20 @@ import { create } from 'zustand';
 import type { ThemeMode, PartialThemeColors, ThemeColors } from '../types';
 import { debounce } from '../utils/debounce';
 
+/** Custom color format definition */
+export interface CustomColorFormat {
+  /** Unique identifier for the format */
+  id: string;
+  /** Display name for the format */
+  name: string;
+  /** Regular expression pattern to match the color value */
+  pattern: string;
+  /** Index of the capture group that contains the hex color value (default: 1) */
+  extractGroup?: number;
+  /** Whether this format is enabled */
+  enabled: boolean;
+}
+
 const SETTINGS_KEY = 'te2-prefs';
 const LEGACY_SETTINGS_KEY = 'te2-settings';
 
@@ -20,6 +34,7 @@ interface SettingsState {
   columnAlignSupported: boolean;
   readerTocVisible: boolean;
   customKeybindings: Record<string, string>;
+  customColorFormats: CustomColorFormat[];
 }
 
 interface SettingsActions {
@@ -41,6 +56,10 @@ interface SettingsActions {
   setReaderTocVisible: (visible: boolean) => void;
   setCustomKeybinding: (command: string, key: string) => void;
   resetKeybindings: () => void;
+  addCustomColorFormat: (format: CustomColorFormat) => void;
+  updateCustomColorFormat: (id: string, updates: Partial<CustomColorFormat>) => void;
+  removeCustomColorFormat: (id: string) => void;
+  toggleCustomColorFormat: (id: string) => void;
 }
 
 function migrateThemeMode(theme: string | undefined): ThemeMode {
@@ -85,6 +104,7 @@ const useSettingsStore = create<SettingsState & SettingsActions>((set) => ({
   columnAlignSupported: loaded.columnAlignSupported ?? false,
   readerTocVisible: loaded.readerTocVisible ?? true,
   customKeybindings: loaded.customKeybindings ?? {},
+  customColorFormats: loaded.customColorFormats ?? [],
 
   setTheme: (theme) => {
     if (typeof theme === 'function') {
@@ -114,6 +134,24 @@ const useSettingsStore = create<SettingsState & SettingsActions>((set) => ({
   setCustomKeybinding: (command, key) =>
     set((state) => ({ customKeybindings: { ...state.customKeybindings, [command]: key } })),
   resetKeybindings: () => set({ customKeybindings: {} }),
+  addCustomColorFormat: (format) =>
+    set((state) => ({ customColorFormats: [...state.customColorFormats, format] })),
+  updateCustomColorFormat: (id, updates) =>
+    set((state) => ({
+      customColorFormats: state.customColorFormats.map((f) =>
+        f.id === id ? { ...f, ...updates } : f
+      ),
+    })),
+  removeCustomColorFormat: (id) =>
+    set((state) => ({
+      customColorFormats: state.customColorFormats.filter((f) => f.id !== id),
+    })),
+  toggleCustomColorFormat: (id) =>
+    set((state) => ({
+      customColorFormats: state.customColorFormats.map((f) =>
+        f.id === id ? { ...f, enabled: !f.enabled } : f
+      ),
+    })),
 }));
 
 function saveSettings(state: SettingsState) {
@@ -135,6 +173,7 @@ function saveSettings(state: SettingsState) {
         columnAlignSupported: state.columnAlignSupported,
         readerTocVisible: state.readerTocVisible,
         customKeybindings: state.customKeybindings,
+        customColorFormats: state.customColorFormats,
       })
     );
   } catch {
