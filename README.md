@@ -1,4 +1,4 @@
-# Text Editor V2
+# Text Editor
 
 基于 **Electron + React 19 + CodeMirror 6** 的桌面文本编辑器，面向日常文本编辑、代码阅读、Markdown/HTML 预览、文件对比和多编码文件处理。
 
@@ -71,11 +71,11 @@ npm run electron-build
 
 `.html` 不会作为默认关联类型声明，避免 Windows 将应用识别为要接管浏览器相关默认应用。HTML 文件仍可通过打开文件、拖拽或命令行参数正常编辑和预览。
 
-在应用设置中点击“默认文本编辑器”会打开或提示系统默认应用设置：
+在应用设置中点击“默认文本编辑器”会注册或提示系统默认应用设置：
 
-- Windows：打开“默认应用”系统设置，由用户手动选择 Text Editor V2。
-- macOS：在 Finder 中对具体文件类型执行“显示简介”，通过“打开方式”选择 Text Editor V2 并应用到全部。
-- Linux：在系统默认应用或文件属性中选择 Text Editor V2。
+- Windows：尝试为当前用户注册 Text Editor 的文本文件关联；如果某些后缀已经被 Windows 默认应用保护，仍可能需要在系统设置中手动确认。
+- macOS：在 Finder 中对具体文件类型执行“显示简介”，通过“打开方式”选择 Text Editor 并应用到全部。
+- Linux：在系统默认应用或文件属性中选择 Text Editor。
 
 ## 常用命令
 
@@ -106,7 +106,7 @@ npm run electron-build
 ## 项目结构
 
 ```text
-text-editor-v2/
+text-editor/
 ├── electron/                # Electron main/preload/IPC services
 ├── build/icons/             # Electron build resources
 ├── src/                     # React renderer source

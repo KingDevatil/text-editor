@@ -1,5 +1,5 @@
 {
-  "name": "text-editor-v2",
+  "name": "text-editor",
   "private": true,
   "version": "1.1.0",
   "description": "Electron desktop text editor built with React and CodeMirror 6.",
@@ -79,7 +79,7 @@
   },
   "build": {
     "appId": "com.kimicode.texteditor",
-    "productName": "Text Editor V2",
+    "productName": "Text Editor",
     "disableAsarIntegrity": true,
     "files": [
       "dist/**/*",

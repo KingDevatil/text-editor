@@ -106,7 +106,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
       await desktopApi.message(result, { title: '默认编辑器' });
     } catch (err) {
       console.error('[RegisterDefault]', err);
-      await desktopApi.message('无法打开系统默认应用设置，请手动在系统设置中选择 Text Editor V2。', {
+      await desktopApi.message('无法打开系统默认应用设置，请手动在系统设置中选择 Text Editor。', {
         title: '默认编辑器',
         kind: 'error',
       });
@@ -320,7 +320,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
                         <div>
                           <div className="text-sm font-medium" style={{ color: 'var(--te-text-primary)' }}>默认文本编辑器</div>
                           <div className="text-xs mt-0.5" style={{ color: 'var(--te-text-secondary)' }}>
-                            打开系统设置，将 .txt、.md、.js 等文本文件交给 Text Editor V2
+                            注册 .txt、.md、.js 等文本文件的默认打开方式
                           </div>
                         </div>
                         <button
@@ -339,7 +339,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
                           }}
                         >
                           <Star size={14} />
-                          打开设置
+                          注册
                         </button>
                       </div>
                     )}

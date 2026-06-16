@@ -1,6 +1,7 @@
 const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const { execFile } = require('node:child_process');
 const fileService = require('./services/file.cjs');
 const { listDirectory } = require('./services/directory.cjs');
 const { searchDirectory } = require('./services/search.cjs');
@@ -20,6 +21,55 @@ function collectFileArgs(argv) {
     .filter((arg) => !arg.startsWith('-'))
     .filter((arg) => fs.existsSync(arg))
     .map((arg) => path.resolve(arg));
+}
+
+function regAdd(key, name, value) {
+  return new Promise((resolve, reject) => {
+    const args = ['add', key, '/f'];
+    if (name) args.push('/v', name);
+    else args.push('/ve');
+    args.push('/d', value);
+    execFile('reg.exe', args, { windowsHide: true }, (error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+}
+
+function regQuery(key) {
+  return new Promise((resolve) => {
+    execFile('reg.exe', ['query', key], { windowsHide: true }, (error) => {
+      resolve(!error);
+    });
+  });
+}
+
+async function registerWindowsFileAssociations() {
+  if (process.platform !== 'win32') return { protectedExts: [] };
+
+  const exePath = process.execPath;
+  const extensions = ['txt', 'md', 'js', 'ts', 'json', 'css', 'log'];
+  const protectedExts = [];
+
+  for (const ext of extensions) {
+    const dotExt = `.${ext}`;
+    const progId = `TextEditor.${ext}`;
+    const appKey = `HKCU\\Software\\Classes\\${progId}`;
+    const extKey = `HKCU\\Software\\Classes\\${dotExt}`;
+    const userChoiceKey = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\${dotExt}\\UserChoice`;
+
+    await regAdd(appKey, null, 'Text Editor');
+    await regAdd(`${appKey}\\DefaultIcon`, null, `"${exePath}",0`);
+    await regAdd(`${appKey}\\shell\\open\\command`, null, `"${exePath}" "%1"`);
+    await regAdd(extKey, null, progId);
+
+    if (await regQuery(userChoiceKey)) {
+      protectedExts.push(dotExt);
+    }
+  }
+
+  execFile('ie4uinit.exe', ['-show'], { windowsHide: true }, () => {});
+  return { protectedExts };
 }
 
 function sendOpenFile(filePath) {
@@ -163,13 +213,16 @@ function registerIpc() {
   ipcMain.handle('window:forceClose', () => mainWindow?.destroy());
   ipcMain.handle('app:registerDefaultApp', async () => {
     if (process.platform === 'win32') {
-      await shell.openExternal('ms-settings:defaultapps');
-      return '已打开 Windows 默认应用设置，请在系统设置中选择 Text Editor V2。';
+      const { protectedExts } = await registerWindowsFileAssociations();
+      if (protectedExts.length > 0) {
+        return `已注册 Text Editor 的文件关联。以下后缀已有 Windows 默认应用保护，可能还需要在系统设置中手动确认：${protectedExts.join('、')}。`;
+      }
+      return '已注册 Text Editor 为常见文本文件的打开方式。';
     }
     if (process.platform === 'darwin') {
-      return 'macOS 需要在 Finder 中对具体文件类型执行“显示简介”，再通过“打开方式”选择 Text Editor V2 并应用到全部。';
+      return 'macOS 需要在 Finder 中对具体文件类型执行“显示简介”，再通过“打开方式”选择 Text Editor 并应用到全部。';
     }
-    return 'Linux 桌面环境的默认应用设置方式不统一，请在系统的默认应用或文件属性中选择 Text Editor V2。';
+    return 'Linux 桌面环境的默认应用设置方式不统一，请在系统的默认应用或文件属性中选择 Text Editor。';
   });
 }
 
