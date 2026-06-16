@@ -24,6 +24,7 @@ describe('HtmlReader', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('subscribes to content changes when visible', () => {
@@ -61,5 +62,35 @@ describe('HtmlReader', () => {
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not throw when sandboxed iframe access is blocked during exit', () => {
+    const blockedWindow = {
+      addEventListener: () => {
+        throw new DOMException('Blocked a frame from accessing a cross-origin frame.', 'SecurityError');
+      },
+      removeEventListener: () => {
+        throw new DOMException('Blocked a frame from accessing a cross-origin frame.', 'SecurityError');
+      },
+      scrollTo: () => {
+        throw new DOMException('Blocked a frame from accessing a cross-origin frame.', 'SecurityError');
+      },
+      get scrollY() {
+        throw new DOMException('Blocked a frame from accessing a cross-origin frame.', 'SecurityError');
+      },
+    } as unknown as Window;
+
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockReturnValue(blockedWindow);
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentDocument', 'get').mockImplementation(() => {
+      throw new DOMException('Blocked a frame from accessing a cross-origin frame.', 'SecurityError');
+    });
+
+    const { rerender } = render(
+      <HtmlReader tabId="tab1" theme="light" onExit={vi.fn()} onToggleTheme={vi.fn()} visible={true} />
+    );
+
+    expect(() => {
+      rerender(<HtmlReader tabId="tab1" theme="light" onExit={vi.fn()} onToggleTheme={vi.fn()} visible={false} />);
+    }).not.toThrow();
   });
 });

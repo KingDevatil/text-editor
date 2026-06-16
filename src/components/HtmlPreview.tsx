@@ -88,7 +88,6 @@ const HtmlPreview: React.FC<HtmlPreviewProps> = React.memo(({
   useEffect(() => {
     if (!visible || !onApplyHtml) return;
     const handleMessage = (event: MessageEvent) => {
-      if (event.source !== iframeRef.current?.contentWindow) return;
       const data = event.data as { type?: string; token?: string; html?: string };
       if (data?.type !== EXPORTED_MESSAGE || data.token !== exportTokenRef.current || typeof data.html !== 'string') return;
       onApplyHtml(data.html);
@@ -101,9 +100,10 @@ const HtmlPreview: React.FC<HtmlPreviewProps> = React.memo(({
   }, [visible, onApplyHtml]);
 
   const handleApplyVisualEdits = useCallback(() => {
-    if (!iframeRef.current?.contentWindow) return;
+    const win = getFrameWindow(iframeRef.current);
+    if (!win) return;
     setApplyState('pending');
-    iframeRef.current.contentWindow.postMessage({
+    win.postMessage({
       type: EXPORT_MESSAGE,
       token: exportTokenRef.current,
     }, '*');
@@ -335,4 +335,12 @@ function createBridgeScript(token: string): string {
     setTimeout(enterEditMode, 120);
   }
 })();`;
+}
+
+function getFrameWindow(iframe: HTMLIFrameElement | null): Window | null {
+  try {
+    return iframe?.contentWindow ?? null;
+  } catch {
+    return null;
+  }
 }

@@ -31,12 +31,10 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
 
   // Scroll to top only when newly opened; otherwise restore previous position
   useEffect(() => {
-    const win = iframeRef.current?.contentWindow;
-    if (!win) return;
     if (shouldScrollToTop) {
-      win.scrollTo({ top: 0 });
+      scrollFrameTo(iframeRef.current, { top: 0 });
     } else if (savedScrollYRef.current > 0) {
-      win.scrollTo({ top: savedScrollYRef.current });
+      scrollFrameTo(iframeRef.current, { top: savedScrollYRef.current });
     }
   }, [tabId, shouldScrollToTop]);
 
@@ -65,7 +63,7 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
         debounceRef.current = null;
       }
       // Save iframe scroll position before unmount/tab switch
-      savedScrollYRef.current = iframeForCleanup?.contentWindow?.scrollY || 0;
+      savedScrollYRef.current = readFrameScrollY(iframeForCleanup);
     };
   }, [tabId, visible]);
 
@@ -80,15 +78,15 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
     let cleanup: (() => void) | undefined;
 
     const setup = () => {
-      const win = iframe.contentWindow;
+      const win = getFrameWindow(iframe);
       if (!win) return;
 
-      const onScroll = () => setShowScrollTop(win.scrollY > 300);
-      win.addEventListener('scroll', onScroll);
-      cleanup = () => win.removeEventListener('scroll', onScroll);
+      const onScroll = () => setShowScrollTop(readWindowScrollY(win) > 300);
+      if (!tryAddFrameScrollListener(win, onScroll)) return;
+      cleanup = () => tryRemoveFrameScrollListener(win, onScroll);
     };
 
-    if (iframe.contentDocument?.readyState === 'complete') {
+    if (isFrameDocumentComplete(iframe)) {
       setup();
     } else {
       iframe.addEventListener('load', setup, { once: true });
@@ -101,7 +99,7 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
   }, [srcDoc]);
 
   const scrollToTop = useCallback(() => {
-    iframeRef.current?.contentWindow?.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollFrameTo(iframeRef.current, { top: 0, behavior: 'smooth' });
   }, []);
 
   // Keyboard: ESC to exit (only when this instance is visible)
@@ -217,3 +215,60 @@ const HtmlReader: React.FC<HtmlReaderProps> = React.memo(({
 HtmlReader.displayName = 'HtmlReader';
 
 export default HtmlReader;
+
+function getFrameWindow(iframe: HTMLIFrameElement | null): Window | null {
+  try {
+    return iframe?.contentWindow ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function isFrameDocumentComplete(iframe: HTMLIFrameElement): boolean {
+  try {
+    return iframe.contentDocument?.readyState === 'complete';
+  } catch {
+    return false;
+  }
+}
+
+function readFrameScrollY(iframe: HTMLIFrameElement | null): number {
+  const win = getFrameWindow(iframe);
+  if (!win) return 0;
+  return readWindowScrollY(win);
+}
+
+function readWindowScrollY(win: Window): number {
+  try {
+    return win.scrollY || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function scrollFrameTo(iframe: HTMLIFrameElement | null, options: ScrollToOptions): void {
+  const win = getFrameWindow(iframe);
+  if (!win) return;
+  try {
+    win.scrollTo(options);
+  } catch {
+    // Sandboxed HTML readers are intentionally isolated from the parent page.
+  }
+}
+
+function tryAddFrameScrollListener(win: Window, listener: () => void): boolean {
+  try {
+    win.addEventListener('scroll', listener);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function tryRemoveFrameScrollListener(win: Window, listener: () => void): void {
+  try {
+    win.removeEventListener('scroll', listener);
+  } catch {
+    // See tryAddFrameScrollListener.
+  }
+}
