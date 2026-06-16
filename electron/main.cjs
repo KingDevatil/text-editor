@@ -6,6 +6,7 @@ const fileService = require('./services/file.cjs');
 const { listDirectory } = require('./services/directory.cjs');
 const { cancelSearch, searchDirectory } = require('./services/search.cjs');
 const { createWatcherManager } = require('./services/watcher.cjs');
+const { collectFileArgs } = require('./services/launchArgs.cjs');
 
 const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 const pendingFiles = [];
@@ -14,13 +15,6 @@ let watcherManager = null;
 
 function isString(value) {
   return typeof value === 'string' && value.length > 0;
-}
-
-function collectFileArgs(argv) {
-  return argv
-    .filter((arg) => !arg.startsWith('-'))
-    .filter((arg) => fs.existsSync(arg))
-    .map((arg) => path.resolve(arg));
 }
 
 function regAdd(key, name, value) {
