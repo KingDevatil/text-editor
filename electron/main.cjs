@@ -77,6 +77,18 @@ async function registerWindowsFileAssociations() {
   return { protectedExts };
 }
 
+async function registerWindowsContextMenu() {
+  if (process.platform !== 'win32') return;
+
+  const exePath = process.execPath;
+  const menuKey = 'HKCU\\Software\\Classes\\*\\shell\\TextEditorOpen';
+  await regAdd(menuKey, null, '使用 Text Editor 打开');
+  await regAdd(menuKey, 'Icon', `"${exePath}",0`);
+  await regAdd(menuKey, 'MUIVerb', '使用 Text Editor 打开');
+  await regAdd(menuKey, 'Position', 'Top');
+  await regAdd(`${menuKey}\\command`, null, `"${exePath}" "%1"`);
+}
+
 function sendOpenFile(filePath) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('open-file', filePath);
@@ -221,11 +233,12 @@ function registerIpc() {
   ipcMain.handle('window:forceClose', () => mainWindow?.destroy());
   ipcMain.handle('app:registerDefaultApp', async () => {
     if (process.platform === 'win32') {
+      await registerWindowsContextMenu();
       const { protectedExts } = await registerWindowsFileAssociations();
       if (protectedExts.length > 0) {
-        return `已注册 Text Editor 的文件关联。以下后缀已有 Windows 默认应用保护，可能还需要在系统设置中手动确认：${protectedExts.join('、')}。`;
+        return `已注册 Text Editor 的右键菜单和文件关联。以下后缀已有 Windows 默认应用保护，可能还需要在系统设置中手动确认：${protectedExts.join('、')}。`;
       }
-      return '已注册 Text Editor 为常见文本文件的打开方式。';
+      return '已注册 Text Editor 右键菜单，并注册为常见文本文件的打开方式。';
     }
     if (process.platform === 'darwin') {
       return 'macOS 需要在 Finder 中对具体文件类型执行“显示简介”，再通过“打开方式”选择 Text Editor 并应用到全部。';
@@ -257,6 +270,9 @@ if (!gotLock) {
   registerIpc();
 
   app.whenReady().then(() => {
+    registerWindowsContextMenu().catch((err) => {
+      console.error('[ContextMenu] register failed:', err);
+    });
     createWindow();
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

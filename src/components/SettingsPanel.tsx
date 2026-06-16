@@ -318,9 +318,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
                     {desktopApi.isDesktop() && (
                       <div className="flex items-center justify-between">
                         <div>
-                          <div className="text-sm font-medium" style={{ color: 'var(--te-text-primary)' }}>默认文本编辑器</div>
+                          <div className="text-sm font-medium" style={{ color: 'var(--te-text-primary)' }}>系统打开方式</div>
                           <div className="text-xs mt-0.5" style={{ color: 'var(--te-text-secondary)' }}>
-                            注册 .txt、.md、.js 等文本文件的默认打开方式
+                            添加右键菜单，并注册 .txt、.md、.js 等默认打开方式
                           </div>
                         </div>
                         <button

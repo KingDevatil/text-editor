@@ -20,12 +20,12 @@ jobs:
             os: windows-latest
             artifact-name: windows-nsis
             artifact-path: release/*.exe
-            build-command: npm run clean:release && npm run build && npx electron-builder --win nsis --publish never
+            build-command: npm run clean:release && npm run build && node electron/scripts/electron-builder-run.cjs --win nsis --publish never
           - name: macos
             os: macos-latest
             artifact-name: macos-dmg
             artifact-path: release/*.dmg
-            build-command: npm run clean:release && npm run build && npx electron-builder --mac dmg --publish never
+            build-command: npm run clean:release && npm run build && node electron/scripts/electron-builder-run.cjs --mac dmg --publish never
 
     steps:
       - name: Checkout
