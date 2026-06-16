@@ -161,13 +161,29 @@ function registerIpc() {
   });
   ipcMain.handle('window:close', () => mainWindow?.close());
   ipcMain.handle('window:forceClose', () => mainWindow?.destroy());
-  ipcMain.handle('app:registerDefaultApp', () => 'Electron installer file associations handle default app registration.');
+  ipcMain.handle('app:registerDefaultApp', async () => {
+    if (process.platform === 'win32') {
+      await shell.openExternal('ms-settings:defaultapps');
+      return '已打开 Windows 默认应用设置，请在系统设置中选择 Text Editor V2。';
+    }
+    if (process.platform === 'darwin') {
+      return 'macOS 需要在 Finder 中对具体文件类型执行“显示简介”，再通过“打开方式”选择 Text Editor V2 并应用到全部。';
+    }
+    return 'Linux 桌面环境的默认应用设置方式不统一，请在系统的默认应用或文件属性中选择 Text Editor V2。';
+  });
 }
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
+  app.on('open-file', (event, filePath) => {
+    event.preventDefault();
+    if (isString(filePath) && fs.existsSync(filePath)) {
+      sendOpenFile(path.resolve(filePath));
+    }
+  });
+
   app.on('second-instance', (_event, argv) => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();

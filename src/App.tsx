@@ -346,7 +346,7 @@ function App() {
         e.preventDefault();
         useUIStore.getState().setJsonFormFullScreen(false);
       }
-      // Go to definition shortcut (only intercept in Tauri; let F12 open DevTools in browser)
+      // Go to definition shortcut in the desktop shell; leave F12 to DevTools in the browser.
       if (e.key === 'F12' && desktopApi.isDesktop()) {
         e.preventDefault();
         const currentTab = activeTabRef.current;
@@ -489,7 +489,7 @@ function App() {
       const msg = typeof err === 'string' ? err : (err instanceof Error ? err.message : String(err));
       console.error('Save failed:', err);
 
-      // Resume file watch if it was paused for a Tauri save attempt
+      // Resume file watch if it was paused for a desktop save attempt.
       if (desktopApi.isDesktop() && activeTab?.filePath) {
         await resumeWatch(activeTab.filePath).catch(() => {});
       }
@@ -691,7 +691,7 @@ function App() {
           console.error('[EncodingChange] failed to re-read file with encoding:', enc, err);
         }
       } else {
-        console.log('[EncodingChange] skipped re-read (not Tauri or no filePath)');
+        console.log('[EncodingChange] skipped re-read (not desktop or no filePath)');
       }
     },
     [activeTab, setTabEncoding]
@@ -699,7 +699,7 @@ function App() {
 
   const isDark = theme === 'dark';
 
-  // Handle file drop using Tauri native drag-drop events
+  // Handle file drop using native desktop drag-drop events.
   useEffect(() => {
     if (!desktopApi.isDesktop()) return;
 
@@ -724,7 +724,7 @@ function App() {
     };
   }, [openFile]);
 
-  // Window close confirmation (Tauri + browser)
+  // Window close confirmation in desktop and browser environments.
   useEffect(() => {
     const getStore = useEditorStore.getState;
 

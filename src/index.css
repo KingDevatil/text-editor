@@ -103,7 +103,7 @@ input, textarea, select {
   overflow-wrap: anywhere !important;
 }
 
-/* Ensure draggable tabs work in Tauri WebView */
+/* Ensure draggable tabs work in the desktop WebView */
 [draggable="true"] {
   -webkit-user-drag: element;
   cursor: grab;

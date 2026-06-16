@@ -23,7 +23,7 @@
 npm install
 ```
 
-## 开发
+## 开发与验证
 
 启动 Vite 前端开发服务：
 
@@ -37,13 +37,20 @@ npm run dev
 npm run electron-dev
 ```
 
-## 构建
-
 构建前端资源：
 
 ```bash
 npm run build
 ```
+
+运行测试和 lint：
+
+```bash
+npm run test
+npm run lint
+```
+
+## 打包
 
 构建 Electron 安装包：
 
@@ -57,6 +64,18 @@ npm run electron-build
 | --- | --- |
 | Windows | `release/*.exe` |
 | macOS | `release/*.dmg` |
+
+## 文件关联与默认应用
+
+安装包会声明常见文本和代码文件类型关联，例如 `.txt`、`.md`、`.js`、`.ts`、`.json`、`.css`、`.log`。
+
+`.html` 不会作为默认关联类型声明，避免 Windows 将应用识别为要接管浏览器相关默认应用。HTML 文件仍可通过打开文件、拖拽或命令行参数正常编辑和预览。
+
+在应用设置中点击“默认文本编辑器”会打开或提示系统默认应用设置：
+
+- Windows：打开“默认应用”系统设置，由用户手动选择 Text Editor V2。
+- macOS：在 Finder 中对具体文件类型执行“显示简介”，通过“打开方式”选择 Text Editor V2 并应用到全部。
+- Linux：在系统默认应用或文件属性中选择 Text Editor V2。
 
 ## 常用命令
 
@@ -98,7 +117,6 @@ text-editor-v2/
 │   ├── utils/               # editor, theme and parser utilities
 │   ├── App.tsx
 │   └── types.ts
-├── docs/
 ├── .github/workflows/
 └── package.json
 ```
@@ -111,7 +129,3 @@ text-editor-v2/
 git tag v1.1.0
 git push origin v1.1.0
 ```
-
-## 迁移记录
-
-Electron 迁移计划和完成状态见 [docs/electron-migration-plan.md](./docs/electron-migration-plan.md) 与 [plan.md](./plan.md)。

@@ -58,7 +58,7 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  // Mouse-based drag state (HTML5 drag/drop doesn't work reliably in Tauri WebView)
+  // Mouse-based drag state; native HTML5 drag/drop is inconsistent in desktop WebViews.
   const dragStateRef = useRef<{
     tabId: string;
     group: 1 | 2;
