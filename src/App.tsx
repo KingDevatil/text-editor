@@ -35,7 +35,7 @@ import QuickOpen from './components/QuickOpen';
 import ExternalChangeDialog from './components/ExternalChangeDialog';
 import SearchResultsView from './components/SearchResultsView';
 import type { SearchMatch, SearchOptions } from './services/searchService';
-import { searchDirectory } from './services/searchService';
+import { cancelSearch, searchDirectory } from './services/searchService';
 import { desktopApi, dirname, joinPath } from './platform/desktop';
 
 const SEARCH_RESULTS_PATH = '__search_results__';
@@ -109,6 +109,7 @@ function App() {
     matches: SearchMatch[];
   }>>({});
   const [searchLoadingMap, setSearchLoadingMap] = useState<Record<string, boolean>>({});
+  const activeSearchIdRef = useRef<string | null>(null);
   const findReplaceRef = useRef<{ setFolderMode: (v: boolean) => void } | null>(null);
   const [externalChangeNotice, setExternalChangeNotice] = useState<string | null>(null);
   const [externalDiff, setExternalDiff] = useState<{
@@ -142,6 +143,16 @@ function App() {
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [readerScrollToTop, setReaderScrollToTop] = useState(false);
   const SIDEBAR_WIDTH = 220;
+
+  useEffect(() => {
+    return () => {
+      if (activeSearchIdRef.current) {
+        cancelSearch(activeSearchIdRef.current).catch(() => {});
+        activeSearchIdRef.current = null;
+      }
+    };
+  }, []);
+
   const handleFileChanged = useCallback(async (changedPath: string) => {
     const tab = useEditorStore.getState().tabs.find((t) => t.filePath === changedPath);
     if (!tab) return;
@@ -875,14 +886,23 @@ function App() {
       targetTab = createTab(`查找结果: "${query}"`, 'plaintext', SEARCH_RESULTS_PATH);
     }
 
+    const searchId = `folder-search-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const previousSearchId = activeSearchIdRef.current;
+    activeSearchIdRef.current = searchId;
+    if (previousSearchId) {
+      cancelSearch(previousSearchId).catch(() => {});
+    }
+
     setSearchLoadingMap((prev) => ({ ...prev, [targetTab.id]: true }));
     try {
-      const matches = await searchDirectory(directory, options);
+      const matches = await searchDirectory(directory, options, undefined, searchId);
+      if (activeSearchIdRef.current !== searchId) return;
       setSearchResultsMap((prev) => ({
         ...prev,
         [targetTab.id]: { query, directory, matches },
       }));
     } catch (err) {
+      if (activeSearchIdRef.current !== searchId) return;
       console.error('[App] 文件夹搜索失败:', err);
       const errMsg = String(err);
       if (desktopApi.isDesktop()) {
@@ -891,7 +911,10 @@ function App() {
         alert(`搜索失败: ${errMsg}`);
       }
     } finally {
-      setSearchLoadingMap((prev) => ({ ...prev, [targetTab.id]: false }));
+      if (activeSearchIdRef.current === searchId) {
+        activeSearchIdRef.current = null;
+        setSearchLoadingMap((prev) => ({ ...prev, [targetTab.id]: false }));
+      }
     }
   }, [tabs, createTab, setActiveTabId]);
 

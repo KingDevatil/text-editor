@@ -17,9 +17,14 @@ export interface SearchMatch {
 export async function searchDirectory(
   dir: string,
   options: SearchOptions,
-  maxResults?: number
+  maxResults?: number,
+  searchId?: string
 ): Promise<SearchMatch[]> {
-  return desktopApi.searchDirectory(dir, options, maxResults);
+  return desktopApi.searchDirectory(dir, options, maxResults, searchId);
+}
+
+export async function cancelSearch(searchId?: string): Promise<void> {
+  await desktopApi.cancelSearch(searchId);
 }
 
 export interface MatchPreview {

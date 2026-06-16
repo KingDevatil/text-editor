@@ -22,7 +22,8 @@ interface ElectronDesktopBridge {
   writeFile(path: string, content: string, encoding: string): Promise<void>;
   renameFile(oldPath: string, newPath: string): Promise<void>;
   listDirectory(path: string): Promise<DirEntry[]>;
-  searchDirectory(dir: string, options: SearchOptions, maxResults?: number): Promise<SearchMatch[]>;
+  searchDirectory(dir: string, options: SearchOptions, maxResults?: number, searchId?: string): Promise<SearchMatch[]>;
+  cancelSearch(searchId?: string): Promise<void>;
   watchFile(path: string): Promise<void>;
   unwatchFile(path: string): Promise<void>;
   getPendingFiles(): Promise<string[]>;
@@ -91,8 +92,13 @@ export const desktopApi = {
     return requireDesktop(electronBridge()).listDirectory(path);
   },
 
-  async searchDirectory(dir: string, options: SearchOptions, maxResults?: number): Promise<SearchMatch[]> {
-    return requireDesktop(electronBridge()).searchDirectory(dir, options, maxResults);
+  async searchDirectory(dir: string, options: SearchOptions, maxResults?: number, searchId?: string): Promise<SearchMatch[]> {
+    return requireDesktop(electronBridge()).searchDirectory(dir, options, maxResults, searchId);
+  },
+
+  async cancelSearch(searchId?: string): Promise<void> {
+    const electron = electronBridge();
+    if (electron) await electron.cancelSearch(searchId);
   },
 
   async watchFile(path: string): Promise<void> {

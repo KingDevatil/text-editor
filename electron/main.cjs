@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const { execFile } = require('node:child_process');
 const fileService = require('./services/file.cjs');
 const { listDirectory } = require('./services/directory.cjs');
-const { searchDirectory } = require('./services/search.cjs');
+const { cancelSearch, searchDirectory } = require('./services/search.cjs');
 const { createWatcherManager } = require('./services/watcher.cjs');
 
 const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
@@ -44,6 +44,14 @@ function regQuery(key) {
   });
 }
 
+function regDelete(key) {
+  return new Promise((resolve) => {
+    execFile('reg.exe', ['delete', key, '/f'], { windowsHide: true }, () => {
+      resolve();
+    });
+  });
+}
+
 async function registerWindowsFileAssociations() {
   if (process.platform !== 'win32') return { protectedExts: [] };
 
@@ -54,7 +62,9 @@ async function registerWindowsFileAssociations() {
   for (const ext of extensions) {
     const dotExt = `.${ext}`;
     const progId = `TextEditor.${ext}`;
+    const legacyProgId = `TextEditorV2.${ext}`;
     const appKey = `HKCU\\Software\\Classes\\${progId}`;
+    const legacyAppKey = `HKCU\\Software\\Classes\\${legacyProgId}`;
     const extKey = `HKCU\\Software\\Classes\\${dotExt}`;
     const userChoiceKey = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\${dotExt}\\UserChoice`;
 
@@ -62,6 +72,7 @@ async function registerWindowsFileAssociations() {
     await regAdd(`${appKey}\\DefaultIcon`, null, `"${exePath}",0`);
     await regAdd(`${appKey}\\shell\\open\\command`, null, `"${exePath}" "%1"`);
     await regAdd(extKey, null, progId);
+    await regDelete(legacyAppKey);
 
     if (await regQuery(userChoiceKey)) {
       protectedExts.push(dotExt);
@@ -143,9 +154,12 @@ function registerIpc() {
     if (!isString(dirPath)) throw new Error('Invalid path');
     return listDirectory(dirPath);
   });
-  ipcMain.handle('search:directory', (_event, dir, options, maxResults) => {
+  ipcMain.handle('search:directory', (_event, dir, options, maxResults, searchId) => {
     if (!isString(dir) || !options || typeof options.query !== 'string') throw new Error('Invalid search arguments');
-    return searchDirectory(dir, options, maxResults);
+    return searchDirectory(dir, options, maxResults, isString(searchId) ? searchId : undefined);
+  });
+  ipcMain.handle('search:cancel', (_event, searchId) => {
+    cancelSearch(isString(searchId) ? searchId : undefined);
   });
   ipcMain.handle('watch:file', (_event, filePath) => {
     if (!isString(filePath)) throw new Error('Invalid path');

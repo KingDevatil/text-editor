@@ -6,6 +6,8 @@ import { generateHeadingSlugs, slugify } from '../utils/slugify';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 import { desktopApi } from '../platform/desktop';
 
+const LARGE_PREVIEW_THRESHOLD = 1024 * 1024;
+
 interface MarkdownPreviewProps {
   tabId: string;
   theme: string;
@@ -14,6 +16,7 @@ interface MarkdownPreviewProps {
 
 const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ tabId, theme, visible = true }) => {
   const [content, setContent] = useState('');
+  const [allowLargeRender, setAllowLargeRender] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRef = useRef(true);
 
@@ -43,14 +46,22 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ tabId, the
     };
   }, [tabId, visible]);
 
+  useEffect(() => {
+    if (content.length > LARGE_PREVIEW_THRESHOLD) {
+      setAllowLargeRender(false);
+    }
+  }, [content]);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const deferredContent = React.useDeferredValue(content);
+  const previewTooLarge = deferredContent.length > LARGE_PREVIEW_THRESHOLD && !allowLargeRender;
   const html = useMemo(() => {
+    if (previewTooLarge) return '';
     const raw = marked.parse(deferredContent, { async: false }) as string;
     const { htmlWithIds } = generateHeadingSlugs(raw);
     return htmlWithIds;
-  }, [deferredContent]);
+  }, [deferredContent, previewTooLarge]);
 
   const isDark = theme === 'dark';
 
@@ -119,11 +130,25 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ tabId, the
         onClick={handleClick}
         onContextMenu={handleContextMenu}
       >
-        <div
-          className={`prose max-w-none ${isDark ? 'prose-invert' : ''}`}
-          style={{ color: 'var(--te-text-primary)' }}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
+        {previewTooLarge ? (
+          <div className="h-full flex flex-col items-center justify-center gap-3 text-center">
+            <div className="text-sm font-medium" style={{ color: 'var(--te-text-primary)' }}>文档较大，已暂停自动预览</div>
+            <button
+              type="button"
+              className="px-3 py-1.5 text-xs rounded border"
+              style={{ borderColor: 'var(--te-border)', color: 'var(--te-primary)' }}
+              onClick={() => setAllowLargeRender(true)}
+            >
+              刷新预览
+            </button>
+          </div>
+        ) : (
+          <div
+            className={`prose max-w-none ${isDark ? 'prose-invert' : ''}`}
+            style={{ color: 'var(--te-text-primary)' }}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        )}
       </div>
       {contextMenu && (
         <ContextMenu

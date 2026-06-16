@@ -40,6 +40,7 @@ export function useFileOpener() {
   const setActiveTabId = useEditorStore((s) => s.setActiveTabId);
   const setTabEncoding = useEditorStore((s) => s.setTabEncoding);
   const setTabLanguage = useEditorStore((s) => s.setTabLanguage);
+  const setTabInitialContent = useEditorStore((s) => s.setTabInitialContent);
   const setTabLineEnding = useEditorStore((s) => s.setTabLineEnding);
   const markTabSaved = useEditorStore((s) => s.markTabSaved);
 
@@ -105,8 +106,9 @@ export function useFileOpener() {
           runBackground(() => {
             readFileAuto(filePath)
               .then((result) => {
-                const isStillActive = useEditorStore.getState().activeTabId === tab.id;
-                if (!isStillActive) return;
+                const isStillOpen = useEditorStore.getState().tabs.some((t) => t.id === tab.id);
+                if (!isStillOpen) return;
+                setTabInitialContent(tab.id, result.text);
                 updateEditorContent(tab.id, result.text);
                 setTabLineEnding(tab.id, detectLineEnding(result.text));
                 setTabLanguage(tab.id, getLanguageFromFileName(fileName));
@@ -142,7 +144,7 @@ export function useFileOpener() {
         console.error('Failed to open file:', filePath, err);
       }
     },
-    [createTab, setActiveTabId, setTabEncoding, setTabLanguage, setTabLineEnding, markTabSaved]
+    [createTab, setActiveTabId, setTabEncoding, setTabLanguage, setTabInitialContent, setTabLineEnding, markTabSaved]
   );
 
   return openFile;

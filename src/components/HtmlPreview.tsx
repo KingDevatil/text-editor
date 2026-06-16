@@ -4,6 +4,8 @@ import { subscribeContentChange } from '../hooks/useEditorStatePool';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 import { prepareHtmlSrcDoc } from '../utils/htmlPreview';
 
+const LARGE_PREVIEW_THRESHOLD = 1024 * 1024;
+
 interface HtmlPreviewProps {
   tabId: string;
   theme: string;
@@ -12,6 +14,7 @@ interface HtmlPreviewProps {
 
 const HtmlPreview: React.FC<HtmlPreviewProps> = React.memo(({ tabId, theme, visible = true }) => {
   const [content, setContent] = useState('');
+  const [allowLargeRender, setAllowLargeRender] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
@@ -43,8 +46,15 @@ const HtmlPreview: React.FC<HtmlPreviewProps> = React.memo(({ tabId, theme, visi
     };
   }, [tabId, visible]);
 
+  useEffect(() => {
+    if (content.length > LARGE_PREVIEW_THRESHOLD) {
+      setAllowLargeRender(false);
+    }
+  }, [content]);
+
   const isDark = theme === 'dark';
-  const srcDoc = useMemo(() => prepareHtmlSrcDoc(content, isDark), [content, isDark]);
+  const previewTooLarge = content.length > LARGE_PREVIEW_THRESHOLD && !allowLargeRender;
+  const srcDoc = useMemo(() => previewTooLarge ? '' : prepareHtmlSrcDoc(content, isDark), [content, isDark, previewTooLarge]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -70,14 +80,28 @@ const HtmlPreview: React.FC<HtmlPreviewProps> = React.memo(({ tabId, theme, visi
         style={{ backgroundColor: 'var(--te-bg-primary)' }}
         onContextMenu={handleContextMenu}
       >
-        <iframe
-          ref={iframeRef}
-          title="HTML Preview"
-          sandbox="allow-scripts"
-          srcDoc={srcDoc}
-          className="w-full h-full border-none"
-          style={{ backgroundColor: 'var(--te-bg-primary)' }}
-        />
+        {previewTooLarge ? (
+          <div className="h-full flex flex-col items-center justify-center gap-3 text-center">
+            <div className="text-sm font-medium" style={{ color: 'var(--te-text-primary)' }}>文档较大，已暂停自动预览</div>
+            <button
+              type="button"
+              className="px-3 py-1.5 text-xs rounded border"
+              style={{ borderColor: 'var(--te-border)', color: 'var(--te-primary)' }}
+              onClick={() => setAllowLargeRender(true)}
+            >
+              刷新预览
+            </button>
+          </div>
+        ) : (
+          <iframe
+            ref={iframeRef}
+            title="HTML Preview"
+            sandbox="allow-scripts"
+            srcDoc={srcDoc}
+            className="w-full h-full border-none"
+            style={{ backgroundColor: 'var(--te-bg-primary)' }}
+          />
+        )}
       </div>
       {contextMenu && (
         <ContextMenu

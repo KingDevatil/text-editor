@@ -18,6 +18,13 @@ function createWatcherManager(sendChanged) {
         lastEvents.set(filePath, now);
         sendChanged(filePath);
       });
+      watcher.on('unlink', () => {
+        lastEvents.set(filePath, Date.now());
+        sendChanged(filePath);
+      });
+      watcher.on('error', (error) => {
+        console.error('[Watcher] failed:', filePath, error);
+      });
       watchers.set(filePath, watcher);
     },
     async unwatch(filePath) {

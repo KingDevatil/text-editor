@@ -5,6 +5,7 @@ import {
   getEditorScrollTop,
   setPendingScrollTop,
   setPendingSelection,
+  updateEditorContent,
 } from './useEditorStatePool';
 import type { Encoding } from '../types';
 import { normalizeLineEnding } from '../utils/lineEnding';
@@ -12,6 +13,7 @@ import { desktopApi } from '../platform/desktop';
 
 const SESSION_KEY = 'te2-session';
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
+const PROGRESSIVE_RESTORE_THRESHOLD = 2 * 1024 * 1024;
 
 interface SessionTab {
   title: string;
@@ -127,6 +129,10 @@ export function useSessionRestore() {
       setActiveGroup2TabId,
       setSplitMode,
       setTabColumnAlign,
+      setTabEncoding,
+      setTabInitialContent,
+      setTabLineEnding,
+      markTabSaved,
       tabs: currentTabs,
     } = useEditorStore.getState();
 
@@ -144,23 +150,58 @@ export function useSessionRestore() {
         let newTab;
         if (st.filePath && desktopApi.isDesktop()) {
           try {
-            const result = await desktopApi.readFileAuto(st.filePath);
-            // Normalize file content to the session's line ending so CodeMirror's
-            // lineSeparator matches the document (prevents \n from being treated as
-            // plain text when lineSeparator is \r\n).
-            const normalizedText = normalizeLineEnding(
-              result.text,
-              st.lineEnding as import('../types').LineEnding
-            );
-            newTab = createTab(
-              st.title,
-              st.language as import('../types').Language,
-              st.filePath,
-              st.group,
-              result.encoding as Encoding,
-              normalizedText,
-              st.lineEnding as import('../types').LineEnding
-            );
+            const meta = await desktopApi.readFileMeta(st.filePath);
+            if (meta.file_size > PROGRESSIVE_RESTORE_THRESHOLD) {
+              const firstChunk = normalizeLineEnding(
+                meta.first_chunk,
+                st.lineEnding as import('../types').LineEnding
+              );
+              newTab = createTab(
+                st.title,
+                st.language as import('../types').Language,
+                st.filePath,
+                st.group,
+                meta.encoding as Encoding,
+                firstChunk,
+                st.lineEnding as import('../types').LineEnding
+              );
+              const restoredTabId = newTab.id;
+              desktopApi.readFileAuto(st.filePath)
+                .then((result) => {
+                  const isStillOpen = useEditorStore.getState().tabs.some((tab) => tab.id === restoredTabId);
+                  if (!isStillOpen) return;
+                  const normalizedText = normalizeLineEnding(
+                    result.text,
+                    st.lineEnding as import('../types').LineEnding
+                  );
+                  setTabInitialContent(restoredTabId, normalizedText);
+                  updateEditorContent(restoredTabId, normalizedText);
+                  setTabEncoding(restoredTabId, result.encoding as Encoding);
+                  if (st.lineEnding) setTabLineEnding(restoredTabId, st.lineEnding as import('../types').LineEnding);
+                  markTabSaved(restoredTabId);
+                })
+                .catch((err) => {
+                  console.error('[SessionRestore] failed to load full content:', st.filePath, err);
+                });
+            } else {
+              const result = await desktopApi.readFileAuto(st.filePath);
+              // Normalize file content to the session's line ending so CodeMirror's
+              // lineSeparator matches the document (prevents \n from being treated as
+              // plain text when lineSeparator is \r\n).
+              const normalizedText = normalizeLineEnding(
+                result.text,
+                st.lineEnding as import('../types').LineEnding
+              );
+              newTab = createTab(
+                st.title,
+                st.language as import('../types').Language,
+                st.filePath,
+                st.group,
+                result.encoding as Encoding,
+                normalizedText,
+                st.lineEnding as import('../types').LineEnding
+              );
+            }
           } catch {
             // File no longer exists; open as untitled with empty content
             newTab = createTab(st.title, st.language as import('../types').Language, undefined, st.group);
