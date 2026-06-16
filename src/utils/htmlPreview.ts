@@ -21,7 +21,7 @@ export function prepareHtmlSrcDoc(content: string, isDark: boolean): string {
   `;
 
   const linkInterceptor = `
-    <script>
+    <script data-te-preview-artifact="1">
       (function(){
         document.addEventListener('click', function(e){
           var a = e.target.closest('a');
@@ -38,15 +38,15 @@ export function prepareHtmlSrcDoc(content: string, isDark: boolean): string {
   // If content already looks like a full HTML document, inject theme style into <head>
   if (/<html[\s\S]*?>|<!DOCTYPE[\s\S]*?>/i.test(content)) {
     if (/<\/head>/i.test(content)) {
-      return content.replace(/<\/head>/i, `<style>${themeCss}</style>${linkInterceptor}</head>`);
+      return content.replace(/<\/head>/i, `<style data-te-preview-artifact="1">${themeCss}</style>${linkInterceptor}</head>`);
     }
     if (/<body/i.test(content)) {
-      return content.replace(/<body/i, `<head><style>${themeCss}</style>${linkInterceptor}</head><body`);
+      return content.replace(/<body/i, `<head><style data-te-preview-artifact="1">${themeCss}</style>${linkInterceptor}</head><body`);
     }
     if (/<html/i.test(content)) {
-      return content.replace(/<html[^>]*>/i, `<html><head><style>${themeCss}</style>${linkInterceptor}</head>`);
+      return content.replace(/<html[^>]*>/i, `<html><head><style data-te-preview-artifact="1">${themeCss}</style>${linkInterceptor}</head>`);
     }
-    return `<!DOCTYPE html><html><head><style>${themeCss}</style>${linkInterceptor}</head>${content}</html>`;
+    return `<!DOCTYPE html><html><head><style data-te-preview-artifact="1">${themeCss}</style>${linkInterceptor}</head>${content}</html>`;
   }
 
   // Fragment: wrap into a full document
@@ -55,7 +55,7 @@ export function prepareHtmlSrcDoc(content: string, isDark: boolean): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>${themeCss}</style>
+<style data-te-preview-artifact="1">${themeCss}</style>
 ${linkInterceptor}
 </head>
 <body>

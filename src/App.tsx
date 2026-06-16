@@ -133,6 +133,8 @@ function App() {
   const moveTabToGroup = useEditorStore((s) => s.moveTabToGroup);
   const reorderTab = useEditorStore((s) => s.reorderTab);
   const setReadMode = useUIStore((s) => s.setReadMode);
+  const previewFullScreen = useUIStore((s) => s.previewFullScreen);
+  const setPreviewFullScreen = useUIStore((s) => s.setPreviewFullScreen);
   const jsonFormVisible = useUIStore((s) => s.jsonFormVisible);
   const setJsonFormVisible = useUIStore((s) => s.setJsonFormVisible);
   const jsonFormFullScreen = useUIStore((s) => s.jsonFormFullScreen);
@@ -353,7 +355,10 @@ function App() {
         }
       }
       // Esc: exit JSON form full screen
-      if (e.key === 'Escape' && useUIStore.getState().jsonFormFullScreen) {
+      if (e.key === 'Escape' && useUIStore.getState().previewFullScreen) {
+        e.preventDefault();
+        useUIStore.getState().setPreviewFullScreen(false);
+      } else if (e.key === 'Escape' && useUIStore.getState().jsonFormFullScreen) {
         e.preventDefault();
         useUIStore.getState().setJsonFormFullScreen(false);
       }
@@ -874,6 +879,11 @@ function App() {
     }
   }, [setReadMode, activeTab]);
 
+  const handleApplyHtmlPreview = useCallback((tabId: string, html: string) => {
+    updateEditorContent(tabId, html);
+    markTabDirty(tabId, true);
+  }, [markTabDirty]);
+
   const handleReaderExit = useCallback(() => setReadMode(false), [setReadMode]);
   const handleReaderToggleTheme = useCallback(() => handleCycleTheme(), [handleCycleTheme]);
 
@@ -952,6 +962,15 @@ function App() {
     { id: 'wordwrap', label: wordWrap ? '关闭自动换行' : '开启自动换行', icon: <WrapText size={16} />, action: () => useSettingsStore.getState().setWordWrap(!wordWrap) },
     { id: 'whitespace', label: showWhitespace ? '隐藏空白字符' : '显示空白字符', icon: <Space size={16} />, action: () => useSettingsStore.getState().setShowWhitespace(!showWhitespace) },
     { id: 'preview', label: previewVisible ? '关闭预览' : '开启预览', icon: <BookOpen size={16} />, action: () => setPreviewVisible(!previewVisible) },
+    ...(activeTab?.language === 'html' ? [{
+      id: 'previewFullScreen',
+      label: previewFullScreen ? '退出预览全屏' : '预览全屏',
+      icon: <Maximize2 size={16} />,
+      action: () => {
+        if (!previewVisible) setPreviewVisible(true);
+        setPreviewFullScreen(!previewFullScreen);
+      },
+    }] : []),
     { id: 'readmode', label: readMode ? '退出阅读模式' : '阅读模式', shortcut: 'Ctrl+Shift+V', icon: <Eye size={16} />, action: handleToggleReadMode },
     { id: 'split', label: splitMode ? '关闭分屏' : '开启分屏', icon: <Columns2 size={16} />, action: handleToggleSplit },
     { id: 'diff', label: diffMode ? '退出对比' : '对比文件', icon: diffMode ? <X size={16} /> : <GitCompare size={16} />, action: handleToggleDiff },
@@ -991,7 +1010,7 @@ function App() {
         }
       },
     }] : []),
-  ], [handleNewFile, handleOpenFile, handleSaveFile, handleFormat, handleCycleTheme, handleToggleSplit, handleToggleDiff, handleToggleReadMode, findReplaceVisible, setFindReplaceVisible, sidebarVisible, setSidebarVisible, isDark, wordWrap, showWhitespace, previewVisible, setPreviewVisible, splitMode, diffMode, readMode, activeTab, theme, columnAlignSupported, setTabColumnAlign, jsonFormVisible, setJsonFormVisible, jsonFormFullScreen, setJsonFormFullScreen]);
+  ], [handleNewFile, handleOpenFile, handleSaveFile, handleFormat, handleCycleTheme, handleToggleSplit, handleToggleDiff, handleToggleReadMode, findReplaceVisible, setFindReplaceVisible, sidebarVisible, setSidebarVisible, isDark, wordWrap, showWhitespace, previewVisible, setPreviewVisible, previewFullScreen, setPreviewFullScreen, splitMode, diffMode, readMode, activeTab, theme, columnAlignSupported, setTabColumnAlign, jsonFormVisible, setJsonFormVisible, jsonFormFullScreen, setJsonFormFullScreen]);
 
   return (
     <div className={`flex flex-col h-screen ${theme !== 'light' ? 'dark' : ''}`}>
@@ -1177,7 +1196,7 @@ function App() {
                     </div>
                   </>
                 )}
-                {previewVisible &&
+                {previewVisible && !previewFullScreen &&
                   previewTabs.map((tab) => (
                     <React.Fragment key={tab.id}>
                       <div
@@ -1191,7 +1210,13 @@ function App() {
                         {tab.language === 'markdown' ? (
                           <MarkdownPreview tabId={tab.id} theme={theme} visible={tab.id === activeGroup1TabId} />
                         ) : (
-                          <HtmlPreview tabId={tab.id} theme={theme} visible={tab.id === activeGroup1TabId} />
+                          <HtmlPreview
+                            tabId={tab.id}
+                            theme={theme}
+                            visible={tab.id === activeGroup1TabId}
+                            onToggleFullScreen={() => setPreviewFullScreen(true)}
+                            onApplyHtml={(html) => handleApplyHtmlPreview(tab.id, html)}
+                          />
                         )}
                       </div>
                     </React.Fragment>
@@ -1256,6 +1281,31 @@ function App() {
                 onToggleFullScreen={() => setJsonFormFullScreen(false)}
                 onExitFullScreen={() => { setJsonFormFullScreen(false); setJsonFormVisible(false); }}
               />
+            )}
+            {previewVisible && previewFullScreen && activeTab && (activeTab.language === 'markdown' || activeTab.language === 'html') && (
+              <div className="absolute inset-0 z-30 flex flex-col" style={{ backgroundColor: 'var(--te-bg-primary)' }}>
+                <button
+                  type="button"
+                  className="absolute top-2 right-2 z-40 h-8 w-8 rounded-md inline-flex items-center justify-center shadow-lg"
+                  style={{ backgroundColor: 'var(--te-bg-secondary)', color: 'var(--te-text-primary)', border: '1px solid var(--te-border)' }}
+                  onClick={() => setPreviewFullScreen(false)}
+                  title="关闭全屏预览"
+                >
+                  <X size={16} />
+                </button>
+                {activeTab.language === 'markdown' ? (
+                  <MarkdownPreview tabId={activeTab.id} theme={theme} visible={true} />
+                ) : (
+                  <HtmlPreview
+                    tabId={activeTab.id}
+                    theme={theme}
+                    visible={true}
+                    fullScreen={true}
+                    onToggleFullScreen={() => setPreviewFullScreen(false)}
+                    onApplyHtml={(html) => handleApplyHtmlPreview(activeTab.id, html)}
+                  />
+                )}
+              </div>
             )}
           </div>
 

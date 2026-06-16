@@ -19,6 +19,7 @@ function saveUI(state: UIState & UIActions) {
         sidebarVisible: state.sidebarVisible,
         findReplaceVisible: state.findReplaceVisible,
         previewVisible: state.previewVisible,
+        previewFullScreen: state.previewFullScreen,
         diagnosticsPanelVisible: state.diagnosticsPanelVisible,
         jsonFormVisible: state.jsonFormVisible,
       })
@@ -32,6 +33,7 @@ interface UIState {
   sidebarVisible: boolean;
   findReplaceVisible: boolean;
   previewVisible: boolean;
+  previewFullScreen: boolean;
   diagnosticsPanelVisible: boolean;
   readMode: boolean;
   jsonFormVisible: boolean;
@@ -42,6 +44,7 @@ interface UIActions {
   setSidebarVisible: (visible: boolean) => void;
   setFindReplaceVisible: (visible: boolean) => void;
   setPreviewVisible: (visible: boolean) => void;
+  setPreviewFullScreen: (full: boolean) => void;
   setDiagnosticsPanelVisible: (visible: boolean) => void;
   setReadMode: (mode: boolean) => void;
   setJsonFormVisible: (visible: boolean) => void;
@@ -60,6 +63,7 @@ const useUIStore = create<UIState & UIActions>((set) => ({
   sidebarVisible: loadedUI.sidebarVisible ?? true,
   findReplaceVisible: loadedUI.findReplaceVisible ?? false,
   previewVisible: loadedUI.previewVisible ?? false,
+  previewFullScreen: loadedUI.previewFullScreen ?? false,
   diagnosticsPanelVisible: false,
   readMode: false,
   jsonFormVisible: false,
@@ -67,14 +71,18 @@ const useUIStore = create<UIState & UIActions>((set) => ({
 
   setSidebarVisible: (visible) => set({ sidebarVisible: visible }),
   setFindReplaceVisible: (visible) => set({ findReplaceVisible: visible }),
-  setPreviewVisible: (visible) => set({ previewVisible: visible }),
+  setPreviewVisible: (visible) => set((state) => ({
+    previewVisible: visible,
+    previewFullScreen: visible ? state.previewFullScreen : false,
+  })),
+  setPreviewFullScreen: (full) => set({ previewFullScreen: full }),
   setDiagnosticsPanelVisible: (visible) => set({ diagnosticsPanelVisible: visible }),
   setReadMode: (mode) => set({ readMode: mode }),
   setJsonFormVisible: (visible) => set({ jsonFormVisible: visible, jsonFormFullScreen: false }),
   setJsonFormFullScreen: (full) => set({ jsonFormFullScreen: full }),
   toggleSidebar: () => set((state) => ({ sidebarVisible: !state.sidebarVisible })),
   toggleFindReplace: () => set((state) => ({ findReplaceVisible: !state.findReplaceVisible })),
-  togglePreview: () => set((state) => ({ previewVisible: !state.previewVisible })),
+  togglePreview: () => set((state) => ({ previewVisible: !state.previewVisible, previewFullScreen: state.previewVisible ? false : state.previewFullScreen })),
   toggleDiagnosticsPanel: () => set((state) => ({ diagnosticsPanelVisible: !state.diagnosticsPanelVisible })),
   toggleReadMode: () => set((state) => ({ readMode: !state.readMode })),
   toggleJsonForm: () => set((state) => ({ jsonFormVisible: !state.jsonFormVisible, jsonFormFullScreen: false })),
