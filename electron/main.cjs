@@ -12,6 +12,7 @@ const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 const pendingFiles = [];
 let mainWindow = null;
 let watcherManager = null;
+let rendererReadyForOpenFiles = false;
 
 function isString(value) {
   return typeof value === 'string' && value.length > 0;
@@ -148,7 +149,7 @@ async function registerWindowsContextMenu() {
 }
 
 function sendOpenFile(filePath) {
-  if (mainWindow && !mainWindow.isDestroyed()) {
+  if (rendererReadyForOpenFiles && mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('open-file', filePath);
   } else {
     pendingFiles.push(filePath);
@@ -156,6 +157,7 @@ function sendOpenFile(filePath) {
 }
 
 function createWindow() {
+  rendererReadyForOpenFiles = false;
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -177,15 +179,39 @@ function createWindow() {
     mainWindow.webContents.send('file:changed', filePath);
   });
 
+  const showWindow = () => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+  };
+  const showFallbackTimer = setTimeout(showWindow, 5000);
+
   if (isDev) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL || 'http://localhost:1420');
   } else {
     mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
 
-  mainWindow.once('ready-to-show', () => mainWindow?.show());
+  mainWindow.once('ready-to-show', () => {
+    clearTimeout(showFallbackTimer);
+    showWindow();
+  });
+  mainWindow.webContents.once('did-finish-load', () => {
+    clearTimeout(showFallbackTimer);
+    showWindow();
+  });
+  mainWindow.webContents.on('did-start-loading', () => {
+    rendererReadyForOpenFiles = false;
+  });
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error('[Window] failed to load:', errorCode, errorDescription, validatedURL);
+    clearTimeout(showFallbackTimer);
+    showWindow();
+  });
   mainWindow.on('closed', () => {
     mainWindow = null;
+    rendererReadyForOpenFiles = false;
+    clearTimeout(showFallbackTimer);
     watcherManager?.closeAll();
     watcherManager = null;
   });
@@ -233,7 +259,10 @@ function registerIpc() {
     if (!isString(filePath)) throw new Error('Invalid path');
     return watcherManager?.unwatch(filePath);
   });
-  ipcMain.handle('app:getPendingFiles', () => pendingFiles.splice(0));
+  ipcMain.handle('app:getPendingFiles', () => {
+    rendererReadyForOpenFiles = true;
+    return pendingFiles.splice(0);
+  });
   ipcMain.handle('dialog:openFile', async (_event, options = {}) => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: options.multiple === false ? ['openFile'] : ['openFile', 'multiSelections'],

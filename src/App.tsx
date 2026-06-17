@@ -198,6 +198,8 @@ function App() {
 
   const { pauseWatch, resumeWatch } = useFileWatcher(tabs, handleFileChanged);
 
+  useSessionRestore();
+
   // Auto-disable split when less than 2 tabs
   useEffect(() => {
     if (splitMode && tabs.length < 2) {
@@ -373,8 +375,6 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [setFindReplaceVisible, setReadMode, setTabColumnAlign]);
-
-  useSessionRestore();
 
   const handleNewFile = useCallback(() => {
     const group = activeTab?.group || 1;
