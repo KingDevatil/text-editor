@@ -10,6 +10,7 @@ describe('prepareHtmlSrcDoc', () => {
     expect(doc.querySelector('h1')?.textContent).toBe('HTML LOAD OK');
     expect(doc.querySelector('style[data-te-preview-artifact]')).not.toBeNull();
     expect(doc.querySelector('script[data-te-preview-artifact]')).not.toBeNull();
+    expect(srcDoc).toContain('scrollbar-width: none');
   });
 
   it('injects preview artifacts into an existing head', () => {
@@ -20,6 +21,15 @@ describe('prepareHtmlSrcDoc', () => {
     expect(doc.querySelector('head title')?.textContent).toBe('T');
     expect(doc.querySelector('head style[data-te-preview-artifact]')).not.toBeNull();
     expect(doc.querySelector('body h1')?.textContent).toBe('OK');
+  });
+
+  it('does not inject editor theme colors or typography into HTML pages', () => {
+    const srcDoc = prepareHtmlSrcDoc('<!DOCTYPE html><html><head></head><body><h1>Original</h1></body></html>', true);
+
+    expect(srcDoc).not.toContain('background-color:');
+    expect(srcDoc).not.toContain('color:');
+    expect(srcDoc).not.toContain('font-family:');
+    expect(srcDoc).not.toContain('line-height:');
   });
 
   it('adds a head without dropping html attributes', () => {

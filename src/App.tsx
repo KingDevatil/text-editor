@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
-import { FilePlus, FolderOpen, Save, Search, Braces, PanelLeft, Sun, Moon, WrapText, Space, BookOpen, Columns2, GitCompare, X, Eye, Table, ListTree, Maximize2 } from 'lucide-react';
+import { FilePlus, FolderOpen, Save, Search, Braces, PanelLeft, Sun, Moon, WrapText, Space, BookOpen, Columns2, GitCompare, X, Eye, Table, ListTree, Maximize2, Minimize2 } from 'lucide-react';
 import { useEditorStore } from './hooks/useEditorStore';
 import { useSettingsStore } from './hooks/useSettingsStore';
 import { useUIStore } from './hooks/useUIStore';
@@ -1277,15 +1277,17 @@ function App() {
             )}
             {previewVisible && previewFullScreen && activeTab && (activeTab.language === 'markdown' || activeTab.language === 'html') && (
               <div className="absolute inset-0 z-30 flex flex-col" style={{ backgroundColor: 'var(--te-bg-primary)' }}>
-                <button
-                  type="button"
-                  className="absolute top-2 right-2 z-40 h-8 w-8 rounded-md inline-flex items-center justify-center shadow-lg"
-                  style={{ backgroundColor: 'var(--te-bg-secondary)', color: 'var(--te-text-primary)', border: '1px solid var(--te-border)' }}
-                  onClick={() => setPreviewFullScreen(false)}
-                  title="关闭全屏预览"
-                >
-                  <X size={16} />
-                </button>
+                {activeTab.language === 'markdown' && (
+                  <button
+                    type="button"
+                    className="absolute top-1.5 right-2 z-40 h-7 w-7 rounded-md inline-flex items-center justify-center transition-colors hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)]"
+                    style={{ color: 'var(--te-text-primary)' }}
+                    onClick={() => setPreviewFullScreen(false)}
+                    title="退出全屏预览"
+                  >
+                    <Minimize2 size={14} />
+                  </button>
+                )}
                 {activeTab.language === 'markdown' ? (
                   <MarkdownPreview tabId={activeTab.id} theme={theme} visible={true} />
                 ) : (

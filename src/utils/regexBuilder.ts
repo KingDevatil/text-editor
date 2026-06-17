@@ -7,6 +7,7 @@ export interface ConditionConfig {
   hasValue: boolean;
   defaultQuantifier: RegexQuantifier;
   category: 'text' | 'char' | 'position' | 'logic';
+  defaultValue?: string;
 }
 
 export const CONDITION_CONFIGS: Record<RegexConditionType, ConditionConfig> = {
@@ -30,6 +31,38 @@ export const CONDITION_CONFIGS: Record<RegexConditionType, ConditionConfig> = {
     label: '字母',
     icon: 'CaseSensitive',
     description: '匹配任意字母 (a-z, A-Z)',
+    hasValue: false,
+    defaultQuantifier: 'exactly-one',
+    category: 'char',
+  },
+  lowerLetter: {
+    label: '小写字母',
+    icon: 'CaseSensitive',
+    description: '匹配小写英文字母 (a-z)',
+    hasValue: false,
+    defaultQuantifier: 'exactly-one',
+    category: 'char',
+  },
+  upperLetter: {
+    label: '大写字母',
+    icon: 'CaseSensitive',
+    description: '匹配大写英文字母 (A-Z)',
+    hasValue: false,
+    defaultQuantifier: 'exactly-one',
+    category: 'char',
+  },
+  alphaNumeric: {
+    label: '字母数字',
+    icon: 'WholeWord',
+    description: '匹配英文字母或数字 (a-z, A-Z, 0-9)',
+    hasValue: false,
+    defaultQuantifier: 'exactly-one',
+    category: 'char',
+  },
+  hexDigit: {
+    label: '16进制字符',
+    icon: 'Hash',
+    description: '匹配 0-9、a-f、A-F',
     hasValue: false,
     defaultQuantifier: 'exactly-one',
     category: 'char',
@@ -90,6 +123,15 @@ export const CONDITION_CONFIGS: Record<RegexConditionType, ConditionConfig> = {
     defaultQuantifier: 'exactly-one',
     category: 'char',
   },
+  charRange: {
+    label: '字符范围',
+    icon: 'Brackets',
+    description: '输入字符类内容，例如 0-9a-fA-F、A-Z_ 或 \\u4e00-\\u9fa5',
+    hasValue: true,
+    defaultValue: '0-9',
+    defaultQuantifier: 'exactly-one',
+    category: 'char',
+  },
   group: {
     label: '分组',
     icon: 'Parentheses',
@@ -122,6 +164,10 @@ const TYPE_TO_REGEX: Record<RegexConditionType, (value?: string) => string> = {
   literal: (value) => escapeRegex(value || ''),
   digit: () => '\\d',
   letter: () => '[a-zA-Z]',
+  lowerLetter: () => '[a-z]',
+  upperLetter: () => '[A-Z]',
+  alphaNumeric: () => '[a-zA-Z0-9]',
+  hexDigit: () => '[0-9a-fA-F]',
   word: () => '\\w',
   space: () => '\\s',
   any: () => '.',
@@ -129,6 +175,7 @@ const TYPE_TO_REGEX: Record<RegexConditionType, (value?: string) => string> = {
   lineEnd: () => '$',
   wordBoundary: () => '\\b',
   customSet: (value) => `[${escapeRegexSet(value || '')}]`,
+  charRange: (value) => `[${sanitizeCharacterClass(value || '')}]`,
   group: () => '',
   or: () => '|',
 };
@@ -139,6 +186,10 @@ function escapeRegex(str: string): string {
 
 function escapeRegexSet(str: string): string {
   return str.replace(/[\]^\\]/g, '\\$&');
+}
+
+function sanitizeCharacterClass(str: string): string {
+  return str.replace(/[\]\n\r]/g, '');
 }
 
 function buildQuantifier(condition: RegexCondition): string {
@@ -180,13 +231,13 @@ export function buildRegex(conditions: RegexCondition[]): { regex: string; isVal
         continue;
       }
 
-      if (cond.type === 'literal' && (!cond.value || cond.value === '')) {
+      if ((cond.type === 'literal' || cond.type === 'charRange') && (!cond.value || cond.value === '')) {
         continue;
       }
 
       const base = TYPE_TO_REGEX[cond.type](cond.value);
       if (base) {
-        const needsGroup = cond.quantifier !== 'exactly-one' && base.length > 2;
+        const needsGroup = cond.quantifier !== 'exactly-one' && base.length > 2 && !isSingleRegexAtom(base);
         const part = needsGroup ? `(?:${base})${buildQuantifier(cond)}` : base + buildQuantifier(cond);
         parts.push(part);
       }
@@ -198,6 +249,10 @@ export function buildRegex(conditions: RegexCondition[]): { regex: string; isVal
   } catch (e) {
     return { regex: '', isValid: false, error: e instanceof Error ? e.message : '无效的正则表达式' };
   }
+}
+
+function isSingleRegexAtom(regex: string): boolean {
+  return regex.startsWith('[') && regex.endsWith(']');
 }
 
 export function explainRegex(conditions: RegexCondition[]): string {
@@ -242,7 +297,7 @@ export function createCondition(type: RegexConditionType): RegexCondition {
   return {
     id: generateConditionId(),
     type,
-    value: config.hasValue ? '' : undefined,
+    value: config.hasValue ? (config.defaultValue ?? '') : undefined,
     quantifier: config.defaultQuantifier,
     capture: type === 'group' ? true : undefined,
   };
@@ -323,7 +378,7 @@ export const REGEX_TEMPLATES: RegexTemplate[] = [
     description: '匹配 #RRGGBB 或 #RGB 格式',
     conditions: [
       { id: 't7_1', type: 'literal', value: '#', quantifier: 'exactly-one' },
-      { id: 't7_2', type: 'customSet', value: '0-9a-fA-F', quantifier: 'exactly-n', quantifierValue: { n: 6 } },
+      { id: 't7_2', type: 'hexDigit', quantifier: 'exactly-n', quantifierValue: { n: 6 } },
     ],
   },
 ];

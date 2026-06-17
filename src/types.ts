@@ -153,6 +153,10 @@ export type RegexConditionType =
   | 'literal'
   | 'digit'
   | 'letter'
+  | 'lowerLetter'
+  | 'upperLetter'
+  | 'alphaNumeric'
+  | 'hexDigit'
   | 'word'
   | 'space'
   | 'any'
@@ -160,6 +164,7 @@ export type RegexConditionType =
   | 'lineEnd'
   | 'wordBoundary'
   | 'customSet'
+  | 'charRange'
   | 'group'
   | 'or';
 

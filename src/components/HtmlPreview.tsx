@@ -15,7 +15,6 @@ interface HtmlPreviewProps {
   visible?: boolean;
   fullScreen?: boolean;
   onToggleFullScreen?: () => void;
-  onExitFullScreen?: () => void;
   onApplyHtml?: (html: string) => void;
 }
 
@@ -25,7 +24,6 @@ const HtmlPreview: React.FC<HtmlPreviewProps> = React.memo(({
   visible = true,
   fullScreen = false,
   onToggleFullScreen,
-  onExitFullScreen,
   onApplyHtml,
 }) => {
   const [content, setContent] = useState('');
@@ -220,17 +218,6 @@ const HtmlPreview: React.FC<HtmlPreviewProps> = React.memo(({
           />
         )}
       </div>
-      {fullScreen && onExitFullScreen && (
-        <button
-          type="button"
-          className="absolute top-2 right-2 z-40 h-8 w-8 rounded-md inline-flex items-center justify-center shadow-lg"
-          style={{ backgroundColor: 'var(--te-bg-secondary)', color: 'var(--te-text-primary)', border: '1px solid var(--te-border)' }}
-          onClick={onExitFullScreen}
-          title="关闭全屏预览"
-        >
-          <X size={16} />
-        </button>
-      )}
       {contextMenu && (
         <ContextMenu
           x={contextMenu.x}

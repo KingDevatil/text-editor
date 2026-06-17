@@ -1,23 +1,16 @@
-import { defaultLightColors, defaultDarkColors } from './themeDefaults';
-
-export function prepareHtmlSrcDoc(content: string, isDark: boolean): string {
-  const colors = isDark ? defaultDarkColors : defaultLightColors;
-  const themeCss = `
+export function prepareHtmlSrcDoc(content: string, _isDark: boolean): string {
+  const scrollbarCss = `
     html, body {
-      margin: 0;
-      padding: 0;
-      background-color: ${colors.bgPrimary};
-      color: ${colors.textPrimary};
+      scrollbar-width: none;
+      -ms-overflow-style: none;
     }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      line-height: 1.6;
-      user-select: text;
-      -webkit-user-select: text;
+    html::-webkit-scrollbar,
+    body::-webkit-scrollbar,
+    *::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+      display: none;
     }
-    a { color: ${colors.primary}; }
-    a:visited { color: ${colors.primaryText}; }
-    ::selection { background-color: ${colors.editorSelection}; }
   `;
 
   const linkInterceptor = `
@@ -34,9 +27,9 @@ export function prepareHtmlSrcDoc(content: string, isDark: boolean): string {
       })();
     </script>
   `;
-  const artifacts = `<style data-te-preview-artifact="1">${themeCss}</style>${linkInterceptor}`;
+  const artifacts = `<style data-te-preview-artifact="1">${scrollbarCss}</style>${linkInterceptor}`;
 
-  // If content already looks like a full HTML document, inject theme style into <head>
+  // If content already looks like a full HTML document, inject non-visual helpers into <head>.
   if (/<html[\s\S]*?>|<!DOCTYPE[\s\S]*?>/i.test(content)) {
     if (/<\/head>/i.test(content)) {
       return content.replace(/<\/head>/i, `${artifacts}</head>`);
