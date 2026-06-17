@@ -8,14 +8,29 @@ const { cancelSearch, searchDirectory } = require('./services/search.cjs');
 const { createWatcherManager } = require('./services/watcher.cjs');
 const { collectFileArgs } = require('./services/launchArgs.cjs');
 
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+
 const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 const pendingFiles = [];
 let mainWindow = null;
+let mainWindowState = null;
 let watcherManager = null;
 let rendererReadyForOpenFiles = false;
 
 function isString(value) {
   return typeof value === 'string' && value.length > 0;
+}
+
+function logStartup(message, meta) {
+  const line = `[${new Date().toISOString()}] ${message}${meta ? ` ${JSON.stringify(meta)}` : ''}\n`;
+  console.log(line.trimEnd());
+  try {
+    fs.appendFileSync(path.join(app.getPath('userData'), 'startup.log'), line);
+  } catch {
+    // Startup logging must never block app launch.
+  }
 }
 
 function regAdd(key, name, value) {
@@ -165,15 +180,20 @@ function createWindow() {
     minHeight: 600,
     frame: false,
     show: false,
+    paintWhenInitiallyHidden: true,
     backgroundColor: '#ffffff',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      backgroundThrottling: false,
     },
   });
 
+  logStartup('window-created', { isDev, isPackaged: app.isPackaged, argv: process.argv.slice(1) });
+
+  let rendererReadyToShow = false;
   watcherManager = createWatcherManager((filePath) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send('file:changed', filePath);
@@ -182,39 +202,85 @@ function createWindow() {
   const showWindow = () => {
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
       mainWindow.show();
+      mainWindow.focus();
+      forceRepaint(mainWindow);
+      logStartup('window-shown');
     }
   };
-  const showFallbackTimer = setTimeout(showWindow, 5000);
+  const showWhenRendererReady = () => {
+    if (rendererReadyToShow) showWindow();
+  };
+  const showFallbackTimer = setTimeout(showWindow, 12000);
 
   if (isDev) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL || 'http://localhost:1420');
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
+    logStartup('window-load-file', { indexPath });
+    mainWindow.loadFile(indexPath);
   }
 
   mainWindow.once('ready-to-show', () => {
-    clearTimeout(showFallbackTimer);
-    showWindow();
+    logStartup('ready-to-show', { rendererReadyToShow });
+    showWhenRendererReady();
   });
   mainWindow.webContents.once('did-finish-load', () => {
-    clearTimeout(showFallbackTimer);
-    showWindow();
+    logStartup('did-finish-load', { rendererReadyToShow });
+    showWhenRendererReady();
   });
   mainWindow.webContents.on('did-start-loading', () => {
     rendererReadyForOpenFiles = false;
+    rendererReadyToShow = false;
+    logStartup('did-start-loading');
+  });
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (level >= 2) logStartup('renderer-console', { level, message, line, sourceId });
+  });
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[Window] render process gone:', details);
+    logStartup('render-process-gone', details);
+    clearTimeout(showFallbackTimer);
+    showWindow();
+  });
+  mainWindow.webContents.on('unresponsive', () => {
+    console.error('[Window] renderer became unresponsive');
+    logStartup('renderer-unresponsive');
   });
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
     console.error('[Window] failed to load:', errorCode, errorDescription, validatedURL);
+    logStartup('did-fail-load', { errorCode, errorDescription, validatedURL });
     clearTimeout(showFallbackTimer);
     showWindow();
   });
   mainWindow.on('closed', () => {
     mainWindow = null;
+    mainWindowState = null;
     rendererReadyForOpenFiles = false;
     clearTimeout(showFallbackTimer);
     watcherManager?.closeAll();
     watcherManager = null;
   });
+
+  return {
+    markRendererReadyToShow() {
+      rendererReadyToShow = true;
+      logStartup('renderer-ready-to-show');
+      clearTimeout(showFallbackTimer);
+      showWindow();
+    },
+  };
+}
+
+function forceRepaint(window) {
+  setTimeout(() => {
+    if (!window || window.isDestroyed()) return;
+    if (typeof window.webContents.invalidate === 'function') {
+      window.webContents.invalidate();
+    }
+    const bounds = window.getBounds();
+    window.setBounds({ ...bounds, width: bounds.width + 1 }, false);
+    window.setBounds(bounds, false);
+  }, 100);
 }
 
 function registerIpc() {
@@ -308,6 +374,9 @@ function registerIpc() {
   ipcMain.handle('clipboard:writeText', (_event, text) => clipboard.writeText(String(text)));
   ipcMain.handle('clipboard:readText', () => clipboard.readText());
   ipcMain.handle('window:show', () => mainWindow?.show());
+  ipcMain.handle('app:rendererReady', () => {
+    mainWindowState?.markRendererReadyToShow();
+  });
   ipcMain.handle('window:isMaximized', () => Boolean(mainWindow?.isMaximized()));
   ipcMain.handle('window:minimize', () => mainWindow?.minimize());
   ipcMain.handle('window:toggleMaximize', () => {
@@ -360,9 +429,9 @@ if (!gotLock) {
     registerWindowsContextMenu().catch((err) => {
       console.error('[ContextMenu] register failed:', err);
     });
-    createWindow();
+    mainWindowState = createWindow();
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      if (BrowserWindow.getAllWindows().length === 0) mainWindowState = createWindow();
     });
   });
 

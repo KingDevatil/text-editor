@@ -27,6 +27,7 @@ interface ElectronDesktopBridge {
   watchFile(path: string): Promise<void>;
   unwatchFile(path: string): Promise<void>;
   getPendingFiles(): Promise<string[]>;
+  rendererReady(): Promise<void>;
   openFileDialog(options?: { multiple?: boolean; filters?: Array<{ name: string; extensions: string[] }> }): Promise<string[]>;
   openFolderDialog(): Promise<string | null>;
   saveFileDialog(options?: { suggestedName?: string }): Promise<string | null>;
@@ -111,6 +112,11 @@ export const desktopApi = {
 
   async getPendingFiles(): Promise<string[]> {
     return requireDesktop(electronBridge()).getPendingFiles();
+  },
+
+  async rendererReady(): Promise<void> {
+    const electron = electronBridge();
+    if (electron) await electron.rendererReady();
   },
 
   async openFileDialog(options?: { multiple?: boolean; filters?: Array<{ name: string; extensions: string[] }> }): Promise<string[]> {

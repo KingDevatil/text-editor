@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('electronDesktop', {
   watchFile: (path) => ipcRenderer.invoke('watch:file', path),
   unwatchFile: (path) => ipcRenderer.invoke('watch:unfile', path),
   getPendingFiles: () => ipcRenderer.invoke('app:getPendingFiles'),
+  rendererReady: () => ipcRenderer.invoke('app:rendererReady'),
   openFileDialog: (options) => ipcRenderer.invoke('dialog:openFile', options),
   openFolderDialog: () => ipcRenderer.invoke('dialog:openFolder'),
   saveFileDialog: (options) => ipcRenderer.invoke('dialog:saveFile', options),

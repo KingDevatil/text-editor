@@ -230,8 +230,22 @@ function App() {
     };
   }, [tabs]);
 
-  // Note: window show is handled by Electron's ready-to-show event in main.cjs
-  // No need to call windowShow() here to avoid race conditions
+  // Tell Electron to show the window after React has committed an initial frame.
+  useEffect(() => {
+    if (!desktopApi.isDesktop()) return;
+    let secondFrame: number | null = null;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        desktopApi.rendererReady().catch((err) => {
+          console.error('Failed to notify renderer readiness:', err);
+        });
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame !== null) window.cancelAnimationFrame(secondFrame);
+    };
+  }, []);
 
   // Preload common language packs on startup
   useEffect(() => {
