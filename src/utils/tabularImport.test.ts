@@ -134,4 +134,128 @@ describe('parseTabDelimitedObjects', () => {
       ExchangeItem: [{ itemid: 6, count: 100 }],
     });
   });
+
+  it('fills object fields from delimited values using the existing object template', () => {
+    const result = parseTabDelimitedObjects('ItemId\tRequirement\n1\t1,0', {
+      fieldTypeHints: {
+        ItemId: 0,
+        Requirement: { StoreLevel: 0, SeasonLevel: 0 },
+      },
+    });
+
+    expect(result.rows[0]).toEqual({
+      ItemId: 1,
+      Requirement: {
+        StoreLevel: 1,
+        SeasonLevel: 0,
+      },
+    });
+  });
+
+  it('imports store rows with object arrays and nested object fields from compact cells', () => {
+    const result = parseTabDelimitedObjects([
+      'ItemId\tDesc\tItemCount\tMaxBuyCount\tCostItems\tDiscount\tRequirement',
+      '1\tRefine stone\t500\t100\t262,200\t0\t1,0',
+    ].join('\n'), {
+      fieldTypeHints: {
+        ItemId: 0,
+        Desc: '',
+        ItemCount: 0,
+        MaxBuyCount: 0,
+        CostItems: [{ ItemId: 0, Count: 0 }],
+        Discount: 0,
+        Requirement: { StoreLevel: 0, SeasonLevel: 0 },
+      },
+    });
+
+    expect(result.rows[0]).toEqual({
+      ItemId: 1,
+      Desc: 'Refine stone',
+      ItemCount: 500,
+      MaxBuyCount: 100,
+      CostItems: [{ ItemId: 262, Count: 200 }],
+      Discount: 0,
+      Requirement: {
+        StoreLevel: 1,
+        SeasonLevel: 0,
+      },
+    });
+  });
+
+  it('accepts alternate delimiters for object template fields', () => {
+    const result = parseTabDelimitedObjects([
+      'ID\tComma\tAmpersand\tSemicolon\tPipe',
+      '1\t1,0\t2&0\t3;0\t4|0',
+    ].join('\n'), {
+      fieldTypeHints: {
+        ID: 0,
+        Comma: { StoreLevel: 0, SeasonLevel: 0 },
+        Ampersand: { StoreLevel: 0, SeasonLevel: 0 },
+        Semicolon: { StoreLevel: 0, SeasonLevel: 0 },
+        Pipe: { StoreLevel: 0, SeasonLevel: 0 },
+      },
+    });
+
+    expect(result.rows[0]).toEqual({
+      ID: 1,
+      Comma: { StoreLevel: 1, SeasonLevel: 0 },
+      Ampersand: { StoreLevel: 2, SeasonLevel: 0 },
+      Semicolon: { StoreLevel: 3, SeasonLevel: 0 },
+      Pipe: { StoreLevel: 4, SeasonLevel: 0 },
+    });
+  });
+
+  it('uses delimiter hierarchy for nested array templates', () => {
+    const result = parseTabDelimitedObjects('ID\tRewards\n1\t1,2;1,3|1,2;1,3|1,2;1,3', {
+      fieldTypeHints: {
+        ID: 0,
+        Rewards: [[{ ItemId: 0, Count: 0 }]],
+      },
+    });
+
+    expect(result.rows[0]).toEqual({
+      ID: 1,
+      Rewards: [
+        [
+          { ItemId: 1, Count: 2 },
+          { ItemId: 1, Count: 3 },
+        ],
+        [
+          { ItemId: 1, Count: 2 },
+          { ItemId: 1, Count: 3 },
+        ],
+        [
+          { ItemId: 1, Count: 2 },
+          { ItemId: 1, Count: 3 },
+        ],
+      ],
+    });
+  });
+
+  it('infers delimiter hierarchy from the template shape instead of fixed characters', () => {
+    const result = parseTabDelimitedObjects('ID\tRewards\n1\t1&2|1&3;1&2|1&3;1&2|1&3', {
+      fieldTypeHints: {
+        ID: 0,
+        Rewards: [[{ ItemId: 0, Count: 0 }]],
+      },
+    });
+
+    expect(result.rows[0]).toEqual({
+      ID: 1,
+      Rewards: [
+        [
+          { ItemId: 1, Count: 2 },
+          { ItemId: 1, Count: 3 },
+        ],
+        [
+          { ItemId: 1, Count: 2 },
+          { ItemId: 1, Count: 3 },
+        ],
+        [
+          { ItemId: 1, Count: 2 },
+          { ItemId: 1, Count: 3 },
+        ],
+      ],
+    });
+  });
 });
