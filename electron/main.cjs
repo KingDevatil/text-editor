@@ -228,9 +228,13 @@ function createWindow() {
     logStartup('did-finish-load', { rendererReadyToShow });
     showWhenRendererReady();
   });
-  mainWindow.webContents.on('did-start-loading', () => {
+  mainWindow.webContents.on('did-start-navigation', (_event, _url, _isInPlace, isMainFrame) => {
+    if (!isMainFrame) return;
     rendererReadyForOpenFiles = false;
     rendererReadyToShow = false;
+    logStartup('did-start-navigation', { isMainFrame });
+  });
+  mainWindow.webContents.on('did-start-loading', () => {
     logStartup('did-start-loading');
   });
   mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
