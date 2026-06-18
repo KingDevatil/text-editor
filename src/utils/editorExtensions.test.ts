@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EditorState } from '@codemirror/state';
+import { EditorState, StateField } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import {
   createCompartments,
@@ -14,6 +14,7 @@ import { getLinterExtension } from './lint';
 import { getAutocompleteExtension } from './autocomplete';
 import { foldGutter, foldKeymap } from '@codemirror/language';
 import { keymap } from '@codemirror/view';
+import { forceLinting, forEachDiagnostic } from '@codemirror/lint';
 import { highlightSelectionMatches } from '@codemirror/search';
 import { indentGuides } from './indentGuides';
 import { hoverInfo } from './hover';
@@ -157,6 +158,86 @@ describe('buildBaseExtensions', () => {
       ],
     });
     expect(view.state.doc.toString()).toBe('const x = 1;\nconst y = 2;');
+
+    view.destroy();
+  });
+
+  it('mounts lint and autocomplete compartments so live reconfigure can enable diagnostics', () => {
+    const compartments = createCompartments();
+    const state = EditorState.create({
+      doc: '{\n  "a": 1\n}',
+      extensions: buildBaseExtensions(
+        compartments,
+        'json',
+        defaultDarkColors,
+        14,
+        false,
+        false,
+        false,
+        false,
+        false,
+        'tab-diagnostics',
+        false,
+        true,
+      ),
+    });
+    const view = new EditorView({ state });
+    const lintProbe = StateField.define<string>({
+      create: () => 'lint-mounted',
+      update: (value) => value,
+    });
+    const autocompleteProbe = StateField.define<string>({
+      create: () => 'autocomplete-mounted',
+      update: (value) => value,
+    });
+
+    view.dispatch({
+      effects: [
+        compartments.lint.reconfigure(lintProbe),
+        compartments.autocomplete.reconfigure(autocompleteProbe),
+      ],
+    });
+
+    expect(view.state.field(lintProbe, false)).toBe('lint-mounted');
+    expect(view.state.field(autocompleteProbe, false)).toBe('autocomplete-mounted');
+
+    view.destroy();
+  });
+
+  it('reports JSON syntax errors after the lint compartment is enabled dynamically', async () => {
+    const compartments = createCompartments();
+    const state = EditorState.create({
+      doc: '{\n  "a": 1,\n  "b": 2\n',
+      extensions: buildBaseExtensions(
+        compartments,
+        'json',
+        defaultDarkColors,
+        14,
+        false,
+        false,
+        false,
+        false,
+        false,
+        'tab-json-lint',
+        false,
+        true,
+      ),
+    });
+    const view = new EditorView({ state });
+
+    view.dispatch({
+      effects: compartments.lint.reconfigure(getLinterExtension('json') || []),
+    });
+    forceLinting(view);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const diagnostics: string[] = [];
+    forEachDiagnostic(view.state, (diagnostic) => {
+      diagnostics.push(diagnostic.message);
+    });
+
+    expect(diagnostics.some((message) => message.includes('JSON 语法错误'))).toBe(true);
 
     view.destroy();
   });

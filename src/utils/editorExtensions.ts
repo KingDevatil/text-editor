@@ -414,6 +414,8 @@ export function buildBaseExtensions(
       })
     ),
     compartments.readOnly.of(EditorView.editable.of(!readOnly)),
+    compartments.lint.of([]),
+    compartments.autocomplete.of([]),
     compartments.wordWrap.of(wordWrap ? EditorView.lineWrapping : []),
     compartments.unicodeHighlight.of(enableUnicodeHighlight ? [...unicodeHighlightExt] : []),
     compartments.markdownKeymap.of(lang === 'markdown' ? createMarkdownKeymap() : []),
