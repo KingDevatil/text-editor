@@ -203,8 +203,12 @@ const CmEditor: React.FC<CmEditorProps> = ({
     // Restore pending selection from session restore
     const pendingSel = takePendingSelection(tabId);
     if (pendingSel) {
+      const clampPos = (pos: number) => Math.max(0, Math.min(pos, view.state.doc.length));
       view.dispatch({
-        selection: { anchor: pendingSel.anchor, head: pendingSel.head },
+        selection: {
+          anchor: clampPos(pendingSel.anchor),
+          head: clampPos(pendingSel.head),
+        },
       });
     }
 

@@ -203,8 +203,8 @@ export function useSessionRestore() {
               );
             }
           } catch {
-            // File no longer exists; open as untitled with empty content
-            newTab = createTab(st.title, st.language as import('../types').Language, undefined, st.group);
+            // File no longer exists or cannot be read; drop the stale session tab.
+            continue;
           }
         } else {
           newTab = createTab(st.title, st.language as import('../types').Language, undefined, st.group);
