@@ -276,46 +276,33 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
     const sourceNode = findNode(parsedTree, editingDelimitedImport.path);
     if (!sourceNode || sourceNode.path.length === 0) return;
 
-    const parentPath = sourceNode.path.slice(0, -1);
-    const parentNode = findNode(parsedTree, parentPath);
-    if (!parentNode || (parentNode.type !== 'object' && parentNode.type !== 'array')) {
-      return;
-    }
+    const targetInfo = getDelimitedImportTarget(parsedTree, sourceNode);
+    if (!targetInfo) return;
 
-    const values = parseDelimitedChildValues(delimitedImportDraft, sourceNode.value);
+    const values = parseDelimitedChildValues(delimitedImportDraft, targetInfo.templateValue);
     if (values.length === 0) {
       setEditingDelimitedImport(null);
       return;
     }
 
     let nextText = text;
-    let insertAfterKey = sourceNode.path[sourceNode.path.length - 1];
-    if (parentNode.type === 'array') {
-      for (const value of values) {
-        const result = addField(
-          nextText,
-          parentPath,
-          false,
-          undefined,
-          value,
-          typeof insertAfterKey === 'number' ? insertAfterKey : undefined
-        );
-        nextText = result.newText;
-        insertAfterKey = result.newPath[result.newPath.length - 1];
-      }
+    if (targetInfo.targetNode.type === 'array') {
+      nextText = appendFields(
+        text,
+        targetInfo.targetNode.path,
+        false,
+        values.map((value) => ({ value }))
+      );
     } else {
-      const baseKey = typeof sourceNode.key === 'string' ? sourceNode.key : 'imported';
+      const usedKeys = new Set(
+        targetInfo.targetNode.children
+          .map((child) => child.key)
+          .filter((key): key is string => typeof key === 'string')
+      );
       for (const value of values) {
-        const result = addField(
-          nextText,
-          parentPath,
-          true,
-          baseKey,
-          value,
-          typeof insertAfterKey === 'string' ? insertAfterKey : undefined
-        );
-        nextText = result.newText;
-        insertAfterKey = result.newPath[result.newPath.length - 1];
+        const key = uniqueObjectKey(targetInfo.objectBaseKey, usedKeys);
+        usedKeys.add(key);
+        nextText = appendFields(nextText, targetInfo.targetNode.path, true, [{ key, value }]);
       }
     }
 
@@ -764,6 +751,33 @@ function findNode(root: JsonNodeInfo | null, path: JSONPath): JsonNodeInfo | nul
     if (!current) return null;
   }
   return current;
+}
+
+function getDelimitedImportTarget(
+  root: JsonNodeInfo | null,
+  sourceNode: JsonNodeInfo
+): { targetNode: JsonNodeInfo; templateValue: unknown; objectBaseKey: string } | null {
+  if (sourceNode.type === 'array') {
+    const templateChild = sourceNode.children.find((child) => child.value !== undefined)
+      ?? sourceNode.children[0];
+    return {
+      targetNode: sourceNode,
+      templateValue: templateChild?.value ?? '',
+      objectBaseKey: 'imported',
+    };
+  }
+
+  const parentPath = sourceNode.path.slice(0, -1);
+  const parentNode = findNode(root, parentPath);
+  if (!parentNode || (parentNode.type !== 'object' && parentNode.type !== 'array')) {
+    return null;
+  }
+
+  return {
+    targetNode: parentNode,
+    templateValue: sourceNode.value,
+    objectBaseKey: typeof sourceNode.key === 'string' ? sourceNode.key : 'imported',
+  };
 }
 
 function uniqueObjectKey(baseKey: string, usedKeys: Set<string>): string {

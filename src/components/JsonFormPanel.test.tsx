@@ -5,6 +5,9 @@ import JsonFormPanel from './JsonFormPanel';
 import { getActiveView } from '../hooks/useEditorStatePool';
 import { undo, redo } from '@codemirror/commands';
 
+let mockEditorContent = '{"name":"demo"}';
+let mockDispatch = vi.fn();
+
 vi.mock('@codemirror/commands', () => ({
   undo: vi.fn(() => true),
   redo: vi.fn(() => true),
@@ -12,16 +15,18 @@ vi.mock('@codemirror/commands', () => ({
 
 vi.mock('../hooks/useEditorStatePool', () => ({
   subscribeContentChange: vi.fn((_tabId: string, listener: (content: string) => void) => {
-    listener('{"name":"demo"}');
+    listener(mockEditorContent);
     return vi.fn();
   }),
-  getActiveView: vi.fn(() => ({ state: {}, dispatch: vi.fn() })),
+  getActiveView: vi.fn(() => ({ state: { facet: vi.fn(() => '\n') }, dispatch: mockDispatch })),
 }));
 
 describe('JsonFormPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getActiveView).mockReturnValue({ state: {}, dispatch: vi.fn() } as never);
+    mockEditorContent = '{"name":"demo"}';
+    mockDispatch = vi.fn();
+    vi.mocked(getActiveView).mockReturnValue({ state: { facet: vi.fn(() => '\n') }, dispatch: mockDispatch } as never);
     vi.mocked(undo).mockReturnValue(true);
     vi.mocked(redo).mockReturnValue(true);
   });
@@ -45,4 +50,42 @@ describe('JsonFormPanel', () => {
 
     expect(undo).not.toHaveBeenCalled();
   });
+
+  it('imports delimited text into an array without replacing the template element', async () => {
+    mockEditorContent = `{
+  "items": [
+    {
+      "itemid": 1,
+      "count": 10
+    }
+  ]
+}`;
+    render(<JsonFormPanel tabId="tab-form" visible />);
+
+    fireEvent.click((await screen.findAllByTitle('导入分隔符文本'))[0]);
+    const modalTextareas = screen.getAllByRole('textbox');
+    fireEvent.change(modalTextareas[modalTextareas.length - 1], { target: { value: '6,100;7,200' } });
+    fireEvent.click(screen.getByText('导入'));
+
+    const dispatched = mockDispatch.mock.calls[0]?.[0];
+    expect(dispatched).toBeTruthy();
+    const nextText = applyDispatchedChanges(mockEditorContent, dispatched.changes);
+    expect(JSON.parse(nextText).items).toEqual([
+      { itemid: 1, count: 10 },
+      { itemid: 6, count: 100 },
+      { itemid: 7, count: 200 },
+    ]);
+  });
 });
+
+function applyDispatchedChanges(
+  text: string,
+  changes: Array<{ from: number; to: number; insert: string }>
+): string {
+  return changes
+    .slice()
+    .sort((a, b) => b.from - a.from)
+    .reduce((current, change) => (
+      current.slice(0, change.from) + change.insert + current.slice(change.to)
+    ), text);
+}
