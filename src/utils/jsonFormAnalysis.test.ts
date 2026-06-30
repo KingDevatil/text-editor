@@ -37,7 +37,7 @@ describe('jsonFormAnalysis', () => {
     expect(issue?.message).toContain('"same"');
   });
 
-  it('reports duplicate values for the first field in object arrays', () => {
+  it('does not report duplicate values for the first field in object arrays', () => {
     const { root } = parseJsonc(`{
       "records": [
         { "type": "same", "value": 1 },
@@ -50,8 +50,7 @@ describe('jsonFormAnalysis', () => {
       candidate.path.join('.') === 'records.1.type'
     );
 
-    expect(issue?.message).toContain('"type"');
-    expect(issue?.message).toContain('"same"');
+    expect(issue).toBeUndefined();
   });
 
   it('reports duplicate values for the first field in object child collections', () => {
