@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseTabDelimitedObjects } from './tabularImport';
+import { parseDelimitedChildValues, parseTabDelimitedObjects } from './tabularImport';
 
 describe('parseTabDelimitedObjects', () => {
   it('parses tab-delimited rows with a header line', () => {
@@ -257,5 +257,27 @@ describe('parseTabDelimitedObjects', () => {
         ],
       ],
     });
+  });
+});
+
+describe('parseDelimitedChildValues', () => {
+  it('parses delimited text into sibling values using the selected child as template', () => {
+    expect(parseDelimitedChildValues('6,100;7,200', { itemid: 0, count: 0 })).toEqual([
+      { itemid: 6, count: 100 },
+      { itemid: 7, count: 200 },
+    ]);
+  });
+
+  it('keeps nested array structure when the selected child is an array template', () => {
+    expect(parseDelimitedChildValues('1&2|1&3;4&5|4&6', [{ ItemId: 0, Count: 0 }])).toEqual([
+      [
+        { ItemId: 1, Count: 2 },
+        { ItemId: 1, Count: 3 },
+      ],
+      [
+        { ItemId: 4, Count: 5 },
+        { ItemId: 4, Count: 6 },
+      ],
+    ]);
   });
 });

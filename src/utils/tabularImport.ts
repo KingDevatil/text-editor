@@ -52,6 +52,12 @@ export function parseTabDelimitedObjects(
   return { headers, rows };
 }
 
+export function parseDelimitedChildValues(input: string, childTemplate: unknown): unknown[] {
+  if (input.trim() === '') return [];
+  const parsed = parseArrayCellValue(input, [childTemplate]);
+  return Array.isArray(parsed) ? parsed : [parsed];
+}
+
 function parseCellValue(value: string, typeHint?: unknown): unknown {
   if (typeHint !== undefined) {
     return parseCellValueLike(value, typeHint);

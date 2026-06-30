@@ -23,7 +23,7 @@ import JsonFormField from './JsonFormField';
 import { FormSearchContext } from './FormSearchContext';
 import { analyzeJsonForm } from '../utils/jsonFormAnalysis';
 import type { JsonFormIssue } from '../utils/jsonFormAnalysis';
-import { parseTabDelimitedObjects } from '../utils/tabularImport';
+import { parseDelimitedChildValues, parseTabDelimitedObjects } from '../utils/tabularImport';
 import { desktopApi } from '../platform/desktop';
 
 interface JsonFormPanelProps {
@@ -43,6 +43,8 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
   const [issues, setIssues] = useState<JsonFormIssue[]>([]);
   const [editingLongText, setEditingLongText] = useState<{ path: JSONPath; value: string } | null>(null);
   const [longTextDraft, setLongTextDraft] = useState('');
+  const [editingDelimitedImport, setEditingDelimitedImport] = useState<{ path: JSONPath } | null>(null);
+  const [delimitedImportDraft, setDelimitedImportDraft] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const applyingEditRef = useRef(false);
   const pendingBrowserImportPathRef = useRef<JSONPath | null>(null);
@@ -262,6 +264,64 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
     applyToEditor(newText);
     setEditingLongText(null);
   }, [text, editingLongText, longTextDraft, applyToEditor]);
+
+  const handleOpenDelimitedImport = useCallback((path: JSONPath) => {
+    setEditingDelimitedImport({ path });
+    setDelimitedImportDraft('');
+  }, []);
+
+  const handleSaveDelimitedImport = useCallback(() => {
+    if (!editingDelimitedImport) return;
+
+    const sourceNode = findNode(parsedTree, editingDelimitedImport.path);
+    if (!sourceNode || sourceNode.path.length === 0) return;
+
+    const parentPath = sourceNode.path.slice(0, -1);
+    const parentNode = findNode(parsedTree, parentPath);
+    if (!parentNode || (parentNode.type !== 'object' && parentNode.type !== 'array')) {
+      return;
+    }
+
+    const values = parseDelimitedChildValues(delimitedImportDraft, sourceNode.value);
+    if (values.length === 0) {
+      setEditingDelimitedImport(null);
+      return;
+    }
+
+    let nextText = text;
+    let insertAfterKey = sourceNode.path[sourceNode.path.length - 1];
+    if (parentNode.type === 'array') {
+      for (const value of values) {
+        const result = addField(
+          nextText,
+          parentPath,
+          false,
+          undefined,
+          value,
+          typeof insertAfterKey === 'number' ? insertAfterKey : undefined
+        );
+        nextText = result.newText;
+        insertAfterKey = result.newPath[result.newPath.length - 1];
+      }
+    } else {
+      const baseKey = typeof sourceNode.key === 'string' ? sourceNode.key : 'imported';
+      for (const value of values) {
+        const result = addField(
+          nextText,
+          parentPath,
+          true,
+          baseKey,
+          value,
+          typeof insertAfterKey === 'string' ? insertAfterKey : undefined
+        );
+        nextText = result.newText;
+        insertAfterKey = result.newPath[result.newPath.length - 1];
+      }
+    }
+
+    applyToEditor(nextText);
+    setEditingDelimitedImport(null);
+  }, [text, parsedTree, editingDelimitedImport, delimitedImportDraft, applyToEditor]);
 
   const appendImportedRows = useCallback((targetPath: JSONPath, fileText: string) => {
     const targetNode = findNode(parsedTree, targetPath);
@@ -497,6 +557,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
                 onEditComment={handleEditComment}
                 onEditText={handleEditText}
                 onBatchImport={handleBatchImport}
+                onDelimitedImport={handleOpenDelimitedImport}
                 depth={0}
                 isRoot
               />
@@ -562,6 +623,63 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
                 onClick={handleSaveLongText}
               >
                 保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingDelimitedImport && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div
+            className="flex flex-col w-[600px] max-w-[90vw] max-h-[80vh] rounded-lg border shadow-lg"
+            style={{ backgroundColor: 'var(--te-bg-primary)', borderColor: 'var(--te-border)' }}
+          >
+            <div className="flex items-center justify-between px-4 py-2 border-b" style={{ borderColor: 'var(--te-border)' }}>
+              <span className="text-sm font-medium" style={{ color: 'var(--te-text-primary)' }}>导入分隔符文本</span>
+              <button
+                onClick={() => setEditingDelimitedImport(null)}
+                className="flex items-center justify-center w-7 h-7 rounded hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)]"
+                style={{ color: 'var(--te-text-primary)' }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <textarea
+              className="flex-1 min-h-[180px] p-4 text-sm font-mono resize-y rounded border"
+              style={{
+                color: 'var(--te-text-primary)',
+                backgroundColor: 'var(--te-bg-primary)',
+                borderColor: 'var(--te-border)',
+              }}
+              value={delimitedImportDraft}
+              onChange={(e) => setDelimitedImportDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  handleSaveDelimitedImport();
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setEditingDelimitedImport(null);
+                }
+              }}
+              autoFocus
+            />
+            <div className="flex justify-end gap-2 px-4 py-2 border-t" style={{ borderColor: 'var(--te-border)' }}>
+              <button
+                className="px-3 py-1 text-sm rounded"
+                style={{ color: 'var(--te-text-secondary)' }}
+                onClick={() => setEditingDelimitedImport(null)}
+              >
+                取消
+              </button>
+              <button
+                className="px-3 py-1 text-sm rounded"
+                style={{ backgroundColor: 'var(--te-primary)', color: '#ffffff' }}
+                onClick={handleSaveDelimitedImport}
+              >
+                导入
               </button>
             </div>
           </div>

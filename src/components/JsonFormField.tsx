@@ -8,6 +8,7 @@ import {
   Maximize2,
   MessageSquare,
   Plus,
+  TextCursorInput,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -32,6 +33,7 @@ interface JsonFormFieldProps {
   onEditComment: (path: JSONPath, content: string, position: 'leading' | 'trailing') => void;
   onEditText: (path: JSONPath, value: string) => void;
   onBatchImport: (path: JSONPath) => void;
+  onDelimitedImport: (path: JSONPath) => void;
   depth: number;
   isRoot?: boolean;
 }
@@ -50,6 +52,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
   onEditComment,
   onEditText,
   onBatchImport,
+  onDelimitedImport,
   depth,
   isRoot = false,
 }) => {
@@ -199,6 +202,11 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
     e.stopPropagation();
     onBatchImport(node.path);
   }, [node.path, onBatchImport]);
+
+  const handleDelimitedImport = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (node.path.length > 0) onDelimitedImport(node.path);
+  }, [node.path, onDelimitedImport]);
 
   const commitNewField = useCallback(() => {
     const key = newFieldKey.trim();
@@ -406,6 +414,9 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
       </IconButton>
       {!isRoot && (
         <>
+          <IconButton title="导入分隔符文本" onClick={handleDelimitedImport}>
+            <TextCursorInput size={12} />
+          </IconButton>
           <IconButton title="复制到后方" onClick={handleCopy}>
             <Copy size={12} />
           </IconButton>
@@ -622,6 +633,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
                 onEditComment={onEditComment}
                 onEditText={onEditText}
                 onBatchImport={onBatchImport}
+                onDelimitedImport={onDelimitedImport}
                 depth={depth + 1}
               />
             ))}
@@ -777,6 +789,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
                 onEditComment={onEditComment}
                 onEditText={onEditText}
                 onBatchImport={onBatchImport}
+                onDelimitedImport={onDelimitedImport}
                 depth={depth + 1}
               />
             ))}
