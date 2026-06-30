@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import JsonFormField from './JsonFormField';
 import { parseJsonc } from '../utils/jsoncParser';
@@ -24,6 +24,7 @@ function renderArrayField(source: string) {
       onEditComment={vi.fn()}
       onEditText={vi.fn()}
       onBatchImport={vi.fn()}
+      onDelimitedImport={vi.fn()}
       depth={0}
     />
   );
@@ -49,6 +50,7 @@ function renderObjectChild(source: string, key: string) {
       onEditComment={vi.fn()}
       onEditText={vi.fn()}
       onBatchImport={vi.fn()}
+      onDelimitedImport={vi.fn()}
       depth={0}
     />
   );
@@ -109,5 +111,25 @@ describe('JsonFormField', () => {
       expect(input.selectionStart).toBe('他说“'.length);
       expect(input.selectionEnd).toBe('他说“你好'.length);
     });
+  });
+
+  it('prevents number inputs from changing via mouse wheel', () => {
+    renderObjectChild('{"count":10}', 'count');
+
+    const input = screen.getByDisplayValue('10');
+    const preventDefault = vi.spyOn(Event.prototype, 'preventDefault');
+
+    fireEvent(input, createEvent.wheel(input, { deltaY: -100 }));
+
+    expect(preventDefault).toHaveBeenCalled();
+    preventDefault.mockRestore();
+  });
+
+  it('keeps form action buttons out of the tab order', () => {
+    renderObjectChild('{"count":10}', 'count');
+
+    for (const button of screen.getAllByRole('button')) {
+      expect(button).toHaveAttribute('tabindex', '-1');
+    }
   });
 });

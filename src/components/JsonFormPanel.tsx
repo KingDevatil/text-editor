@@ -397,6 +397,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
             title="查找"
             className="flex items-center justify-center w-7 h-7 rounded hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)]"
             style={{ color: searchOpen ? 'var(--te-primary)' : 'var(--te-text-primary)' }}
+            tabIndex={-1}
           >
             <Search size={14} />
           </button>
@@ -406,6 +407,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
               title={fullScreen ? '退出全屏' : '全屏'}
               className="flex items-center justify-center w-7 h-7 rounded hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)]"
               style={{ color: 'var(--te-text-primary)' }}
+              tabIndex={-1}
             >
               {fullScreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             </button>
@@ -416,6 +418,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
               title="关闭表单"
               className="flex items-center justify-center w-7 h-7 rounded hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)]"
               style={{ color: 'var(--te-text-primary)' }}
+              tabIndex={-1}
             >
               <X size={14} />
             </button>
@@ -460,6 +463,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
             className="flex items-center justify-center w-6 h-6 rounded hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)] disabled:opacity-30"
             style={{ color: 'var(--te-text-primary)' }}
             title="上一个 (Shift+Enter)"
+            tabIndex={-1}
           >
             <ChevronUp size={14} />
           </button>
@@ -469,6 +473,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
             className="flex items-center justify-center w-6 h-6 rounded hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)] disabled:opacity-30"
             style={{ color: 'var(--te-text-primary)' }}
             title="下一个 (Enter)"
+            tabIndex={-1}
           >
             <ChevronDown size={14} />
           </button>
@@ -477,6 +482,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
             className="flex items-center justify-center w-6 h-6 rounded hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)]"
             style={{ color: 'var(--te-text-secondary)' }}
             title="关闭 (Esc)"
+            tabIndex={-1}
           >
             <X size={13} />
           </button>
@@ -571,6 +577,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
                 onClick={() => setEditingLongText(null)}
                 className="flex items-center justify-center w-7 h-7 rounded hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)]"
                 style={{ color: 'var(--te-text-primary)' }}
+                tabIndex={-1}
               >
                 <X size={14} />
               </button>
@@ -601,6 +608,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
                 className="px-3 py-1 text-sm rounded"
                 style={{ color: 'var(--te-text-secondary)' }}
                 onClick={() => setEditingLongText(null)}
+                tabIndex={-1}
               >
                 取消
               </button>
@@ -608,6 +616,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
                 className="px-3 py-1 text-sm rounded"
                 style={{ backgroundColor: 'var(--te-primary)', color: '#ffffff' }}
                 onClick={handleSaveLongText}
+                tabIndex={-1}
               >
                 保存
               </button>
@@ -628,6 +637,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
                 onClick={() => setEditingDelimitedImport(null)}
                 className="flex items-center justify-center w-7 h-7 rounded hover:bg-[color-mix(in_srgb,var(--te-text-primary)_8%,transparent)]"
                 style={{ color: 'var(--te-text-primary)' }}
+                tabIndex={-1}
               >
                 <X size={14} />
               </button>
@@ -658,6 +668,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
                 className="px-3 py-1 text-sm rounded"
                 style={{ color: 'var(--te-text-secondary)' }}
                 onClick={() => setEditingDelimitedImport(null)}
+                tabIndex={-1}
               >
                 取消
               </button>
@@ -665,6 +676,7 @@ const JsonFormPanel: React.FC<JsonFormPanelProps> = React.memo(({
                 className="px-3 py-1 text-sm rounded"
                 style={{ backgroundColor: 'var(--te-primary)', color: '#ffffff' }}
                 onClick={handleSaveDelimitedImport}
+                tabIndex={-1}
               >
                 导入
               </button>
@@ -704,6 +716,7 @@ class JsonFormErrorBoundary extends React.Component<
             className="px-2 py-1 rounded text-xs"
             style={{ color: 'var(--te-text-secondary)', border: '1px solid var(--te-border)' }}
             onClick={() => this.setState({ hasError: false })}
+            tabIndex={-1}
           >
             重试
           </button>

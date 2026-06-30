@@ -277,6 +277,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
                 backgroundColor: 'var(--te-bg-primary)',
               }}
               onClick={() => onEditText(node.path, strVal)}
+              tabIndex={-1}
               title="编辑长文本"
             >
               {strVal.substring(0, 60)}...
@@ -327,6 +328,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
               backgroundColor: 'var(--te-bg-primary)',
             }}
             value={valueDraft}
+            onWheel={preventNumberWheelChange}
             onFocus={() => setFocused(true)}
             onBlur={() => {
               setFocused(false);
@@ -381,6 +383,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
               backgroundColor: 'var(--te-bg-primary)',
             }}
             value={String(value)}
+            onWheel={preventNumberWheelChange}
             onDoubleClick={selectTextSegment}
             onChange={(e) => {
               const raw = e.target.value;
@@ -433,6 +436,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
             className="flex items-center justify-center w-5 h-5 rounded hover:bg-red-500/10"
             style={{ color: 'var(--te-error, #ef4444)' }}
             onClick={handleDelete}
+            tabIndex={-1}
             title="删除"
           >
             <Trash2 size={12} />
@@ -486,6 +490,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
                 setCommentPosition('leading');
                 setCommentDraft(leadingText);
               }}
+              tabIndex={-1}
             >
               行前
             </button>
@@ -496,6 +501,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
                 setCommentPosition('trailing');
                 setCommentDraft(trailingText);
               }}
+              tabIndex={-1}
             >
               行尾
             </button>
@@ -537,6 +543,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
                 onEditComment(node.path, '', commentPosition);
                 setEditingComment(false);
               }}
+              tabIndex={-1}
             >
               清空
             </button>
@@ -547,6 +554,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
                 setEditingComment(false);
                 setCommentDraft(leadingText);
               }}
+              tabIndex={-1}
             >
               取消
             </button>
@@ -554,6 +562,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
               className="px-2 py-0.5 rounded text-xs"
               style={primaryActionStyle}
               onClick={commitComment}
+              tabIndex={-1}
             >
               保存
             </button>
@@ -641,6 +650,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
               className="flex items-center gap-1 py-1 px-1 text-xs rounded hover:bg-[color-mix(in_srgb,var(--te-text-primary)_4%,transparent)]"
               style={{ color: 'var(--te-text-secondary)' }}
               onClick={handleAddChild}
+              tabIndex={-1}
             >
               <Plus size={12} />
               添加字段
@@ -673,6 +683,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
                   className="px-2 py-0.5 rounded text-xs"
                   style={primaryActionStyle}
                   onClick={commitNewField}
+                  tabIndex={-1}
                 >
                   确定
                 </button>
@@ -683,6 +694,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
                     setAddingField(false);
                     setNewFieldKey('');
                   }}
+                  tabIndex={-1}
                 >
                   取消
                 </button>
@@ -797,6 +809,7 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
               className="flex items-center gap-1 py-1 px-1 text-xs rounded hover:bg-[color-mix(in_srgb,var(--te-text-primary)_4%,transparent)]"
               style={{ color: 'var(--te-text-secondary)' }}
               onClick={handleAddChild}
+              tabIndex={-1}
             >
               <Plus size={12} />
               添加元素
@@ -836,6 +849,7 @@ const IconButton: React.FC<{
     style={{ color: 'var(--te-text-secondary)' }}
     onClick={onClick}
     title={title}
+    tabIndex={-1}
   >
     {children}
   </button>
@@ -873,6 +887,10 @@ function selectTextSegment(e: React.MouseEvent<HTMLInputElement | HTMLTextAreaEl
     const word = wordRangeAt(value, anchor) ?? wordRangeAt(value, selectedStart) ?? wordRangeAt(value, selectedEnd);
     if (word) target.setSelectionRange(word.from, word.to);
   });
+}
+
+function preventNumberWheelChange(e: React.WheelEvent<HTMLInputElement>) {
+  e.preventDefault();
 }
 
 function wordRangeAt(value: string, offset: number): { from: number; to: number } | null {
