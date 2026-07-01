@@ -8,11 +8,12 @@ import {
   largeFileLineHighlightTheme,
   jsoncCommentHighlighter,
   isImePunctuationCommit,
+  insertNewlineAndIndentWithFallback,
 } from './editorExtensions';
 import { defaultDarkColors } from './themeDefaults';
 import { getLinterExtension } from './lint';
 import { getAutocompleteExtension } from './autocomplete';
-import { foldGutter, foldKeymap } from '@codemirror/language';
+import { foldGutter, foldKeymap, indentUnit } from '@codemirror/language';
 import { keymap } from '@codemirror/view';
 import { forceLinting, forEachDiagnostic } from '@codemirror/lint';
 import { highlightSelectionMatches } from '@codemirror/search';
@@ -258,6 +259,24 @@ describe('buildBaseExtensions', () => {
     // extension list length is stable and the state builds cleanly.
     const state = EditorState.create({ doc: 'const x = 1;', extensions: exts });
     expect(state).toBeDefined();
+  });
+
+  it('keeps the previous line indent when Enter after a JSON array item cannot infer indentation', () => {
+    const doc = '{\n\t"realm_names": [\n\t\t"dongxu",\n\t]\n}';
+    const cursor = doc.indexOf('"dongxu",') + '"dongxu",'.length;
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: cursor },
+      extensions: [indentUnit.of('\t')],
+    });
+    const view = new EditorView({ state });
+
+    insertNewlineAndIndentWithFallback(view);
+
+    expect(view.state.doc.toString()).toBe('{\n\t"realm_names": [\n\t\t"dongxu",\n\t\t\n\t]\n}');
+    expect(view.state.selection.main.head).toBe(doc.indexOf('"dongxu",') + '"dongxu",'.length + 1 + 2);
+
+    view.destroy();
   });
 
   it('removes CodeMirror autocorrect=off from contentDOM for Chromium Chinese IME punctuation', async () => {

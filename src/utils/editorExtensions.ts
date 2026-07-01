@@ -1,6 +1,6 @@
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightActiveLine, highlightWhitespace, highlightTrailingWhitespace, highlightSpecialChars, scrollPastEnd as scrollPastEndExt, rectangularSelection, crosshairCursor, drawSelection, dropCursor, ViewPlugin, ViewUpdate, Decoration } from '@codemirror/view';
 import { EditorState, Compartment, EditorSelection, Prec, type Extension, RangeSetBuilder } from '@codemirror/state';
-import { defaultKeymap, history, historyKeymap, indentMore, indentLess } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap, indentMore, indentLess, insertNewlineAndIndent } from '@codemirror/commands';
 import { selectNextOccurrence, selectSelectionMatches, highlightSelectionMatches } from '@codemirror/search';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { foldGutter, foldKeymap, indentOnInput, indentUnit } from '@codemirror/language';
@@ -233,6 +233,41 @@ function smartTab(view: EditorView): boolean {
   return true;
 }
 
+export function insertNewlineAndIndentWithFallback(view: EditorView): boolean {
+  const beforeState = view.state;
+  const beforeSelection = beforeState.selection.main;
+
+  if (!beforeSelection.empty || beforeState.selection.ranges.length !== 1) {
+    return insertNewlineAndIndent(view);
+  }
+
+  const beforeLine = beforeState.doc.lineAt(beforeSelection.head);
+  const inheritedIndent = beforeLine.text.match(/^[\t ]*/)?.[0] ?? '';
+  const handled = insertNewlineAndIndent(view);
+
+  if (!handled || inheritedIndent.length === 0) {
+    return handled;
+  }
+
+  const afterSelection = view.state.selection.main;
+  if (!afterSelection.empty) {
+    return handled;
+  }
+
+  const afterLine = view.state.doc.lineAt(afterSelection.head);
+  const prefixBeforeCursor = afterLine.text.slice(0, afterSelection.head - afterLine.from);
+  if (prefixBeforeCursor.length !== 0) {
+    return handled;
+  }
+
+  view.dispatch({
+    changes: { from: afterSelection.head, insert: inheritedIndent },
+    selection: { anchor: afterSelection.head + inheritedIndent.length },
+    userEvent: 'input',
+  });
+  return true;
+}
+
 /** Notepad++ style: Ctrl + click adds a cursor (multi-selection). */
 const ctrlClickMultiCursor = EditorView.domEventHandlers({
   mousedown(event, view) {
@@ -384,6 +419,7 @@ export function buildBaseExtensions(
     chromiumChineseImeAutocorrectWorkaround,
     imePunctuationCommitFallback,
     indentUnit.of('\t'),
+    Prec.high(keymap.of([{ key: 'Enter', run: insertNewlineAndIndentWithFallback }])),
     keymap.of([...defaultKeymap, ...historyKeymap, ...closeBracketsKeymap]),
     keymap.of([
       { key: 'Mod-d', run: selectNextOccurrence, preventDefault: true },
