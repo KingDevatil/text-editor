@@ -1,5 +1,5 @@
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightActiveLine, highlightWhitespace, highlightTrailingWhitespace, highlightSpecialChars, scrollPastEnd as scrollPastEndExt, rectangularSelection, crosshairCursor, drawSelection, dropCursor, ViewPlugin, ViewUpdate, Decoration } from '@codemirror/view';
-import { EditorState, Compartment, EditorSelection, Prec, type Extension, RangeSetBuilder } from '@codemirror/state';
+import { EditorState, Compartment, EditorSelection, Prec, countColumn, type Extension, RangeSetBuilder } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentMore, indentLess, insertNewlineAndIndent } from '@codemirror/commands';
 import { selectNextOccurrence, selectSelectionMatches, highlightSelectionMatches } from '@codemirror/search';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
@@ -249,20 +249,41 @@ export function insertNewlineAndIndentWithFallback(view: EditorView): boolean {
     return handled;
   }
 
-  const afterSelection = view.state.selection.main;
-  if (!afterSelection.empty) {
+  const cursorOffset = beforeSelection.head - beforeLine.from;
+  if (!shouldInheritPreviousLineIndent(beforeLine.text, cursorOffset)) {
     return handled;
   }
 
-  const afterLine = view.state.doc.lineAt(afterSelection.head);
-  const prefixBeforeCursor = afterLine.text.slice(0, afterSelection.head - afterLine.from);
-  if (prefixBeforeCursor.length !== 0) {
-    return handled;
+  alignNewlineIndentToPreviousLine(view, inheritedIndent);
+  return true;
+}
+
+function shouldInheritPreviousLineIndent(lineText: string, cursorOffset: number): boolean {
+  const beforeCursor = lineText.slice(0, cursorOffset).trimEnd();
+  const lastChar = beforeCursor.at(-1);
+  return lastChar !== '{' && lastChar !== '[' && lastChar !== '(';
+}
+
+export function alignNewlineIndentToPreviousLine(view: EditorView, inheritedIndent: string): boolean {
+  const selection = view.state.selection.main;
+  if (!selection.empty || inheritedIndent.length === 0) {
+    return false;
+  }
+
+  const line = view.state.doc.lineAt(selection.head);
+  const prefixBeforeCursor = line.text.slice(0, selection.head - line.from);
+  if (!/^[\t ]*$/.test(prefixBeforeCursor)) {
+    return false;
+  }
+
+  const tabSize = view.state.tabSize;
+  if (countColumn(prefixBeforeCursor, tabSize) === countColumn(inheritedIndent, tabSize)) {
+    return false;
   }
 
   view.dispatch({
-    changes: { from: afterSelection.head, insert: inheritedIndent },
-    selection: { anchor: afterSelection.head + inheritedIndent.length },
+    changes: { from: line.from, to: selection.head, insert: inheritedIndent },
+    selection: { anchor: line.from + inheritedIndent.length },
     userEvent: 'input',
   });
   return true;

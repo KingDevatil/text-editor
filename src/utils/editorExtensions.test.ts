@@ -9,11 +9,13 @@ import {
   jsoncCommentHighlighter,
   isImePunctuationCommit,
   insertNewlineAndIndentWithFallback,
+  alignNewlineIndentToPreviousLine,
 } from './editorExtensions';
 import { defaultDarkColors } from './themeDefaults';
 import { getLinterExtension } from './lint';
 import { getAutocompleteExtension } from './autocomplete';
 import { foldGutter, foldKeymap, indentUnit } from '@codemirror/language';
+import { json } from '@codemirror/lang-json';
 import { keymap } from '@codemirror/view';
 import { forceLinting, forEachDiagnostic } from '@codemirror/lint';
 import { highlightSelectionMatches } from '@codemirror/search';
@@ -267,7 +269,7 @@ describe('buildBaseExtensions', () => {
     const state = EditorState.create({
       doc,
       selection: { anchor: cursor },
-      extensions: [indentUnit.of('\t')],
+      extensions: [indentUnit.of('\t'), json()],
     });
     const view = new EditorView({ state });
 
@@ -275,6 +277,78 @@ describe('buildBaseExtensions', () => {
 
     expect(view.state.doc.toString()).toBe('{\n\t"realm_names": [\n\t\t"dongxu",\n\t\t\n\t]\n}');
     expect(view.state.selection.main.head).toBe(doc.indexOf('"dongxu",') + '"dongxu",'.length + 1 + 2);
+
+    view.destroy();
+  });
+
+  it('preserves deeper indentation when Enter after an opening array bracket', () => {
+    const doc = '{\n\t"realm_names": [\n\t]\n}';
+    const cursor = doc.indexOf('[') + 1;
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: cursor },
+      extensions: [indentUnit.of('\t'), json()],
+    });
+    const view = new EditorView({ state });
+
+    insertNewlineAndIndentWithFallback(view);
+
+    expect(view.state.doc.toString()).toBe('{\n\t"realm_names": [\n\t\t\n\t]\n}');
+    expect(view.state.selection.main.head).toBe(cursor + 3);
+
+    view.destroy();
+  });
+
+  it('aligns an object field newline that was inserted at column zero', () => {
+    const doc = '{\n\t"choice_count": 3,\n"choice_weight_comment": ""\n}';
+    const lineStart = doc.indexOf('"choice_weight_comment"');
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: lineStart },
+      extensions: [indentUnit.of('\t')],
+    });
+    const view = new EditorView({ state });
+
+    expect(alignNewlineIndentToPreviousLine(view, '\t')).toBe(true);
+
+    expect(view.state.doc.toString()).toBe('{\n\t"choice_count": 3,\n\t"choice_weight_comment": ""\n}');
+    expect(view.state.selection.main.head).toBe(lineStart + 1);
+
+    view.destroy();
+  });
+
+  it('replaces a too-deep object field newline indent with the previous line indent', () => {
+    const doc = '{\n\t"choice_count": 3,\n\t\t"choice_weight_comment": ""\n}';
+    const deepIndentLine = doc.indexOf('"choice_weight_comment"');
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: deepIndentLine },
+      extensions: [indentUnit.of('\t')],
+    });
+    const view = new EditorView({ state });
+
+    expect(alignNewlineIndentToPreviousLine(view, '\t')).toBe(true);
+
+    expect(view.state.doc.toString()).toBe('{\n\t"choice_count": 3,\n\t"choice_weight_comment": ""\n}');
+    expect(view.state.selection.main.head).toBe(deepIndentLine - 1);
+
+    view.destroy();
+  });
+
+  it('replaces a too-shallow array item newline indent with the previous line indent', () => {
+    const doc = '{\n\t"realm_names": [\n\t\t"dongxu",\n\t\n\t]\n}';
+    const shallowIndentLine = doc.indexOf('\n\t\n\t]') + 2;
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: shallowIndentLine },
+      extensions: [indentUnit.of('\t')],
+    });
+    const view = new EditorView({ state });
+
+    expect(alignNewlineIndentToPreviousLine(view, '\t\t')).toBe(true);
+
+    expect(view.state.doc.toString()).toBe('{\n\t"realm_names": [\n\t\t"dongxu",\n\t\t\n\t]\n}');
+    expect(view.state.selection.main.head).toBe(shallowIndentLine + 1);
 
     view.destroy();
   });
