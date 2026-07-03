@@ -36,7 +36,7 @@ import ExternalChangeDialog from './components/ExternalChangeDialog';
 import SearchResultsView from './components/SearchResultsView';
 import type { SearchMatch, SearchOptions } from './services/searchService';
 import { cancelSearch, searchDirectory } from './services/searchService';
-import { desktopApi, dirname, joinPath } from './platform/desktop';
+import { basename, desktopApi, dirname, joinPath } from './platform/desktop';
 
 const SEARCH_RESULTS_PATH = '__search_results__';
 
@@ -473,6 +473,17 @@ function App() {
         await pauseWatch(activeTab.filePath);
         await desktopApi.writeFile(activeTab.filePath, content, activeTab.encoding);
         await resumeWatch(activeTab.filePath);
+        markTabSaved(activeTab.id);
+        return;
+      }
+
+      if (desktopApi.isDesktop()) {
+        const filePath = await desktopApi.saveFileDialog({ suggestedName: activeTab.title });
+        if (!filePath) return;
+
+        const content = normalizeLineEnding(getEditorContent(activeTab.id), activeTab.lineEnding);
+        await desktopApi.writeFile(filePath, content, activeTab.encoding);
+        renameTab(activeTab.id, basename(filePath), filePath);
         markTabSaved(activeTab.id);
         return;
       }

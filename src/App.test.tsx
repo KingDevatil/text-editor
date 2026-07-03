@@ -1,7 +1,10 @@
 import React from 'react';
+import { EditorState } from '@codemirror/state';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from './App';
+import { useEditorStore } from './hooks/useEditorStore';
+import { setEditorState } from './hooks/useEditorStatePool';
 
 // Mock CodeMirror-heavy child components to keep the test lightweight
 vi.mock('./components/CmEditor', () => ({
@@ -29,6 +32,14 @@ vi.mock('./components/Minimap', () => ({
 describe('App', () => {
   beforeEach(() => {
     // localStorage mock in jsdom may not support clear(); reset manually if needed
+    delete window.electronDesktop;
+    useEditorStore.setState({
+      tabs: [],
+      activeTabId: null,
+      activeGroup1TabId: null,
+      activeGroup2TabId: null,
+      splitMode: false,
+    });
   });
 
   it('renders the app shell', () => {
@@ -39,5 +50,35 @@ describe('App', () => {
   it('shows empty state when no tabs are open', () => {
     render(<App />);
     expect(screen.getByText(/没有打开的文件/)).toBeInTheDocument();
+  });
+  it('binds a new desktop tab to the chosen file path after saving', async () => {
+    const savedPath = 'C:\\tmp\\saved-note.txt';
+    const writeFile = vi.fn(async () => {});
+    window.electronDesktop = {
+      saveFileDialog: vi.fn(async () => savedPath),
+      writeFile,
+      getPendingFiles: vi.fn(async () => []),
+      rendererReady: vi.fn(async () => {}),
+      onOpenFile: vi.fn(() => () => {}),
+      onFileChanged: vi.fn(() => () => {}),
+      onDragDropEvent: vi.fn(async () => () => {}),
+      watchFile: vi.fn(async () => {}),
+      unwatchFile: vi.fn(async () => {}),
+    } as unknown as typeof window.electronDesktop;
+
+    const tab = useEditorStore.getState().createTab('Untitled');
+    setEditorState(tab.id, EditorState.create({ doc: 'hello from temp' }));
+
+    render(<App />);
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+
+    await waitFor(() => {
+      expect(writeFile).toHaveBeenCalledWith(savedPath, 'hello from temp', 'UTF-8');
+    });
+
+    const savedTab = useEditorStore.getState().tabs.find((t) => t.id === tab.id);
+    expect(savedTab?.title).toBe('saved-note.txt');
+    expect(savedTab?.filePath).toBe(savedPath);
+    expect(savedTab?.isDirty).toBe(false);
   });
 });

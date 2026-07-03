@@ -221,6 +221,11 @@ export function dirname(path: string): string {
   return idx > 0 ? path.slice(0, idx) : '';
 }
 
+export function basename(path: string): string {
+  const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+  return idx >= 0 ? path.slice(idx + 1) : path;
+}
+
 export function joinPath(base: string, name: string): string {
   if (!base) return name;
   const sep = base.includes('\\') ? '\\' : '/';
