@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { X, RotateCcw, Download, Upload, Check } from 'lucide-react';
 import type { ThemeColors, ThemeMode, PartialThemeColors } from '../types';
 import { defaultLightColors, defaultDarkColors } from '../utils/themeDefaults';
@@ -46,20 +46,32 @@ const COLOR_ITEMS: ColorItemMeta[] = [
   { key: 'scrollbarThumbHover', title: '滚动条滑块悬停', area: '全局滚动条悬停态' },
 ];
 
+let colorContext: CanvasRenderingContext2D | null | undefined;
+
+function getColorContext(): CanvasRenderingContext2D | null {
+  if (colorContext !== undefined) return colorContext;
+  colorContext = document.createElement('canvas').getContext('2d');
+  return colorContext;
+}
+
+function isHexColor(color: string): boolean {
+  return /^#[0-9a-fA-F]{6}$/.test(color);
+}
+
 function toHex(color: string): string {
-  const ctx = document.createElement('canvas').getContext('2d');
-  if (!ctx) return color;
-  ctx.fillStyle = color;
-  const computed = ctx.fillStyle;
-  if (computed.startsWith('#')) return computed;
-  // Parse rgb/rgba
-  const m = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+  if (isHexColor(color)) return color.toLowerCase();
+  const m = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
   if (m) {
     const r = parseInt(m[1]).toString(16).padStart(2, '0');
     const g = parseInt(m[2]).toString(16).padStart(2, '0');
     const b = parseInt(m[3]).toString(16).padStart(2, '0');
     return `#${r}${g}${b}`;
   }
+  const ctx = getColorContext();
+  if (!ctx) return color;
+  ctx.fillStyle = color;
+  const computed = ctx.fillStyle;
+  if (computed.startsWith('#')) return computed.toLowerCase();
   return color;
 }
 
@@ -70,21 +82,63 @@ const ColorInput: React.FC<{
   const hexValue = useMemo(() => {
     try { return toHex(value); } catch { return value; }
   }, [value]);
+  const [draftValue, setDraftValue] = useState(hexValue);
+  const editingRef = useRef(false);
+
+  useEffect(() => {
+    if (!editingRef.current) {
+      setDraftValue(hexValue);
+    }
+  }, [hexValue]);
+
+  const commitValue = useCallback((nextValue: string) => {
+    editingRef.current = false;
+    const normalized = nextValue.trim();
+    if (!isHexColor(normalized)) {
+      setDraftValue(hexValue);
+      return;
+    }
+    const nextHex = normalized.toLowerCase();
+    setDraftValue(nextHex);
+    if (nextHex !== hexValue.toLowerCase()) {
+      onChange(nextHex);
+    }
+  }, [hexValue, onChange]);
+
+  const handleDraftChange = useCallback((nextValue: string) => {
+    editingRef.current = true;
+    setDraftValue(nextValue);
+  }, []);
+
+  const pickerValue = isHexColor(draftValue) ? draftValue : hexValue;
 
   return (
     <div className="flex items-center gap-2">
       <div className="relative w-8 h-8 rounded overflow-hidden border flex-shrink-0" style={{ borderColor: 'var(--te-border)' }}>
         <input
           type="color"
-          value={hexValue}
-          onChange={(e) => onChange(e.target.value)}
+          value={pickerValue}
+          onInput={(e) => handleDraftChange(e.currentTarget.value)}
+          onChange={(e) => handleDraftChange(e.target.value)}
+          onBlur={(e) => commitValue(e.currentTarget.value)}
           className="absolute inset-0 w-[150%] h-[150%] -top-1/4 -left-1/4 p-0 border-0 cursor-pointer"
         />
       </div>
       <input
         type="text"
-        value={hexValue}
-        onChange={(e) => onChange(e.target.value)}
+        value={draftValue}
+        onChange={(e) => handleDraftChange(e.target.value)}
+        onBlur={(e) => commitValue(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            commitValue(e.currentTarget.value);
+            e.currentTarget.blur();
+          } else if (e.key === 'Escape') {
+            editingRef.current = false;
+            setDraftValue(hexValue);
+            e.currentTarget.blur();
+          }
+        }}
         className="w-20 px-1.5 py-0.5 text-xs font-mono rounded border bg-transparent focus:outline-none focus:ring-1 focus:ring-[var(--te-primary)]"
         style={{ borderColor: 'var(--te-border)', color: 'var(--te-text-primary)' }}
       />
