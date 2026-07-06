@@ -55,3 +55,7 @@ export const defaultDarkColors: ThemeColors = {
   scrollbarThumb: '#4b5563',
   scrollbarThumbHover: '#6b7280',
 };
+
+export const defaultCustomColors: ThemeColors = {
+  ...defaultDarkColors,
+};

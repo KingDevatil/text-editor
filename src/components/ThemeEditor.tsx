@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { X, RotateCcw, Download, Upload, Check } from 'lucide-react';
 import type { ThemeColors, ThemeMode, PartialThemeColors } from '../types';
-import { defaultLightColors, defaultDarkColors } from '../utils/themeDefaults';
+import { defaultLightColors, defaultDarkColors, defaultCustomColors } from '../utils/themeDefaults';
 import { useSettingsStore } from '../hooks/useSettingsStore';
 
 interface ThemeEditorProps {
@@ -161,7 +161,7 @@ const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
   const resetDark = useSettingsStore((s) => s.resetDarkCustomColors);
   const resetCustom = useSettingsStore((s) => s.resetCustomColors);
 
-  const defaults = tab === 'light' ? defaultLightColors : tab === 'dark' ? defaultDarkColors : defaultLightColors;
+  const defaults = tab === 'light' ? defaultLightColors : tab === 'dark' ? defaultDarkColors : defaultCustomColors;
   const customColors = tab === 'light' ? lightCustom : tab === 'dark' ? darkCustom : custom;
   const setColor = tab === 'light' ? setLightColor : tab === 'dark' ? setDarkColor : setCustomColor;
   const reset = tab === 'light' ? resetLight : tab === 'dark' ? resetDark : resetCustom;

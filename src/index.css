@@ -235,27 +235,27 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 /* ── Syntax Highlighting (classHighlighter) ─────────────────────── */
-/* Light theme — VS Code "Light+" inspired palette */
-.tok-keyword       { color: #0000ff; }
-.tok-string        { color: #a31515; }
-.tok-number        { color: #098658; }
+/* Light theme — high-contrast editor palette for white backgrounds */
+.tok-keyword       { color: #cf222e; }
+.tok-string        { color: #8a4600; }
+.tok-number        { color: #116329; }
 .tok-comment,
 .cm-lineComment,
 .cm-blockComment,
 .cm-docComment,
-.cm-json-comment   { color: #5f6b7a !important; font-style: normal; opacity: 1; }
-.tok-variableName  { color: #001080; }
-.tok-typeName      { color: #267f99; }
-.tok-propertyName  { color: #001080; }
+.cm-json-comment   { color: #57606a !important; font-style: normal; opacity: 1; }
+.tok-variableName  { color: #0550ae; }
+.tok-typeName      { color: #0550ae; }
+.tok-propertyName  { color: #0550ae; }
 .tok-operator      { color: #000000; }
 .tok-punctuation   { color: #000000; }
-.tok-meta          { color: #0000ff; }
-.tok-atom          { color: #0000ff; }
-.tok-bool          { color: #0000ff; }
-.tok-labelName     { color: #001080; }
-.tok-definition    { color: #795e26; }
-.tok-local         { color: #001080; }
-.tok-function      { color: #795e26; }
+.tok-meta          { color: #8250df; }
+.tok-atom          { color: #cf222e; }
+.tok-bool          { color: #cf222e; }
+.tok-labelName     { color: #0550ae; }
+.tok-definition    { color: #6639ba; }
+.tok-local         { color: #0550ae; }
+.tok-function      { color: #6639ba; }
 
 /* Dark theme — VS Code "Dark+" inspired palette */
 .dark .tok-keyword       { color: #569cd6; }

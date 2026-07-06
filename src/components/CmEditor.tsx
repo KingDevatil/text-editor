@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { EditorView, keymap, highlightWhitespace, highlightTrailingWhitespace } from '@codemirror/view';
 import { EditorState, StateEffect } from '@codemirror/state';
 import { eolMarkers } from '../utils/showInvisibles';
-import { resolveThemeColors } from '../utils/themeResolver';
+import { isThemeDark, resolveThemeColors } from '../utils/themeResolver';
 import type { ThemeMode, LineEnding } from '../types';
 import { perf } from '../utils/perf';
 import { setColumnAlign, createColumnDragLayer } from '../utils/columnAlign';
@@ -119,11 +119,14 @@ const CmEditor: React.FC<CmEditorProps> = ({
       const contentLength = getEditorValueLength(tabId) || initialContent.length;
       const effectiveLargeFile = largeFileOptimize && contentLength > LARGE_FILE_THRESHOLD;
 
+      const colors = resolveThemeColors(theme, lightCustomColors, darkCustomColors, customColors);
+      const editorIsDark = isThemeDark(theme, colors);
+
       state = EditorState.create({
         doc: initialContent,
         extensions: [
           compartmentsRef.current!.lineSeparator.of(lineSepExt),
-          ...buildBaseExtensions(compartmentsRef.current!, language, resolveThemeColors(theme, lightCustomColors, darkCustomColors, customColors), fontSize, readOnly, effectiveLargeFile, wordWrap, showWhitespace, enableScrollPastEnd, tabId, enableUnicodeHighlight, theme !== 'light'),
+          ...buildBaseExtensions(compartmentsRef.current!, language, colors, fontSize, readOnly, effectiveLargeFile, wordWrap, showWhitespace, enableScrollPastEnd, tabId, enableUnicodeHighlight, editorIsDark),
           EditorView.updateListener.of((update) => {
             // Always save state to pool so that effects (language/theme changes)
             // are persisted, not just doc changes.
@@ -359,7 +362,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
     if (!view) return;
     const colors = resolveThemeColors(theme, lightCustomColors, darkCustomColors, customColors);
     view.dispatch({
-      effects: compartmentsRef.current!.theme.reconfigure(buildDynamicTheme(colors, theme !== 'light')),
+      effects: compartmentsRef.current!.theme.reconfigure(buildDynamicTheme(colors, isThemeDark(theme, colors))),
     });
     setEditorState(tabId, view.state);
   }, [theme, lightCustomColors, darkCustomColors, customColors, tabId]);

@@ -1,5 +1,5 @@
 import type { ThemeColors } from '../types';
-import { defaultLightColors, defaultDarkColors } from './themeDefaults';
+import { defaultLightColors, defaultDarkColors, defaultCustomColors } from './themeDefaults';
 
 function deriveFocusedSelection(selection: string): string {
   const rgba = selection.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
@@ -66,7 +66,7 @@ export function applySavedTheme(): void {
     if (theme === 'light') {
       injectThemeVars({ ...defaultLightColors, ...saved.lightCustomColors });
     } else if (theme === 'custom') {
-      injectThemeVars({ ...defaultLightColors, ...saved.customColors });
+      injectThemeVars({ ...defaultCustomColors, ...saved.customColors });
     } else {
       injectThemeVars({ ...defaultDarkColors, ...saved.darkCustomColors });
     }

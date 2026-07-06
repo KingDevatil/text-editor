@@ -3,7 +3,7 @@ import { MergeView } from '@codemirror/merge';
 import { history, historyKeymap } from '@codemirror/commands';
 import { lineNumbers, keymap, EditorView } from '@codemirror/view';
 import { buildDynamicTheme, syntaxHighlightExtension } from '../utils/themes';
-import { resolveThemeColors } from '../utils/themeResolver';
+import { isThemeDark, resolveThemeColors } from '../utils/themeResolver';
 import type { ThemeMode } from '../types';
 import { useSettingsStore } from '../hooks/useSettingsStore';
 import { useEditorStore } from '../hooks/useEditorStore';
@@ -41,7 +41,7 @@ const DiffEditor: React.FC<DiffEditorProps> = ({ leftContent, rightContent, them
       keymap.of(historyKeymap),
       lineNumbers(),
       syntaxHighlightExtension,
-      buildDynamicTheme(colors, theme !== 'light'),
+      buildDynamicTheme(colors, isThemeDark(theme, colors)),
       EditorView.editable.of(false),
     ];
 

@@ -13,7 +13,7 @@ import { perf } from './utils/perf';
 import type { Encoding, LineEnding } from './types';
 import { detectLineEnding, normalizeLineEnding } from './utils/lineEnding';
 import { preloadCommonLanguages, loadLanguageExtensions, isLanguageCached } from './utils/languageExtensions';
-import { resolveThemeColors } from './utils/themeResolver';
+import { isThemeDark, resolveThemeColors } from './utils/themeResolver';
 import { injectThemeVars, applySavedTheme } from './utils/themeInjector';
 import Toolbar from './components/Toolbar';
 import TabBar from './components/TabBar';
@@ -683,11 +683,16 @@ function App() {
     }
   }, [tabs, renameTab]);
 
+  const resolvedThemeColors = useMemo(
+    () => resolveThemeColors(theme, lightCustomColors, darkCustomColors, customColors),
+    [theme, lightCustomColors, darkCustomColors, customColors]
+  );
+  const isDark = isThemeDark(theme, resolvedThemeColors);
+
   // Inject CSS theme variables whenever theme or custom colors change
   useEffect(() => {
-    const colors = resolveThemeColors(theme, lightCustomColors, darkCustomColors, customColors);
-    injectThemeVars(colors);
-  }, [theme, lightCustomColors, darkCustomColors, customColors]);
+    injectThemeVars(resolvedThemeColors);
+  }, [resolvedThemeColors]);
 
   const handleCycleTheme = useCallback(() => {
     setTheme((prev) => {
@@ -730,8 +735,6 @@ function App() {
     },
     [activeTab, setTabEncoding]
   );
-
-  const isDark = theme === 'dark';
 
   // Handle file drop using native desktop drag-drop events.
   useEffect(() => {
@@ -1031,7 +1034,7 @@ function App() {
   ], [handleNewFile, handleOpenFile, handleSaveFile, handleFormat, handleCycleTheme, handleToggleSplit, handleToggleDiff, handleToggleReadMode, findReplaceVisible, setFindReplaceVisible, sidebarVisible, setSidebarVisible, isDark, wordWrap, showWhitespace, previewVisible, setPreviewVisible, previewFullScreen, setPreviewFullScreen, splitMode, diffMode, readMode, activeTab, theme, columnAlignSupported, setTabColumnAlign, jsonFormVisible, setJsonFormVisible, jsonFormFullScreen, setJsonFormFullScreen]);
 
   return (
-    <div className={`flex flex-col h-screen ${theme !== 'light' ? 'dark' : ''}`}>
+    <div className={`flex flex-col h-screen ${isDark ? 'dark' : ''}`}>
       <input
         ref={fileInputRef}
         type="file"

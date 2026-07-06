@@ -30,11 +30,11 @@ export const bracketColorization = ViewPlugin.fromClass(
     }
 
     build(view: EditorView): DecorationSet {
-      const builder = new RangeSetBuilder<Decoration>();
       const { from, to } = view.viewport;
       const text = view.state.doc.sliceString(from, to);
 
       const stack: { char: string; pos: number }[] = [];
+      const ranges: { from: number; to: number; decoration: Decoration }[] = [];
       let inString = false;
       let stringChar = '';
       let inComment = false;
@@ -88,12 +88,19 @@ export const bracketColorization = ViewPlugin.fromClass(
           const last = stack.pop();
           if (last && BRACKETS[last.char] === ch) {
             const depth = stack.length % DEPTH_COLORS;
-            const cls = `cm-bracket-depth-${depth}`;
-            builder.add(last.pos, last.pos + 1, Decoration.mark({ class: cls }));
-            builder.add(from + i, from + i + 1, Decoration.mark({ class: cls }));
+            const decoration = Decoration.mark({ class: `cm-bracket-depth-${depth}` });
+            ranges.push(
+              { from: last.pos, to: last.pos + 1, decoration },
+              { from: from + i, to: from + i + 1, decoration }
+            );
           }
         }
       }
+
+      const builder = new RangeSetBuilder<Decoration>();
+      ranges
+        .sort((a, b) => a.from - b.from || a.to - b.to)
+        .forEach((range) => builder.add(range.from, range.to, range.decoration));
 
       return builder.finish();
     }
