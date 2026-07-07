@@ -27,6 +27,7 @@ export function injectThemeVars(colors: ThemeColors): void {
     --te-border: ${colors.border};
     --te-primary: ${colors.primary};
     --te-primary-text: ${colors.primaryText};
+    --te-toolbar-button-text: ${colors.toolbarButtonText};
     --te-success: ${colors.success};
     --te-warning: ${colors.warning};
     --te-error: ${colors.error};
@@ -41,6 +42,7 @@ export function injectThemeVars(colors: ThemeColors): void {
     --te-editor-search-match-active-bg: ${colors.editorSearchMatchActiveBg};
     --te-editor-search-match-active-text: ${colors.editorSearchMatchActiveText};
     --te-tab-active-bg: ${colors.tabActiveBg};
+    --te-tab-inactive-bg: ${colors.tabInactiveBg};
     --te-scrollbar-thumb: ${colors.scrollbarThumb};
     --te-scrollbar-thumb-hover: ${colors.scrollbarThumbHover};
   }

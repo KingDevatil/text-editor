@@ -402,8 +402,8 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
           ${isActive && isGroupActive
             ? 'bg-[var(--te-tab-active-bg)] text-[var(--te-text-primary)] z-10'
             : isGroupActive
-            ? 'bg-[color-mix(in_srgb,var(--te-tab-active-bg)_80%,transparent)] text-[var(--te-text-primary)]'
-            : 'bg-[color-mix(in_srgb,var(--te-tab-active-bg)_40%,transparent)] text-[var(--te-text-secondary)] hover:bg-[color-mix(in_srgb,var(--te-tab-active-bg)_70%,transparent)] hover:text-[var(--te-text-primary)]'
+            ? 'bg-[var(--te-tab-inactive-bg)] text-[var(--te-text-primary)]'
+            : 'bg-[var(--te-tab-inactive-bg)] text-[var(--te-text-secondary)] hover:bg-[color-mix(in_srgb,var(--te-tab-inactive-bg)_75%,var(--te-tab-active-bg))] hover:text-[var(--te-text-primary)]'
           }
         `}
         style={{

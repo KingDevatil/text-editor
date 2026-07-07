@@ -76,7 +76,7 @@ const Toolbar: React.FC<ToolbarProps> = React.memo(({
   const nextThemeIcon = theme === 'light' ? <Moon size={16} /> : theme === 'dark' ? <Palette size={16} /> : <Sun size={16} />;
   const nextThemeLabel = theme === 'light' ? '切换暗色主题' : theme === 'dark' ? '切换自定义主题' : '切换亮色主题';
 
-  const btnStyle: React.CSSProperties = { color: 'var(--te-text-primary)' };
+  const btnStyle: React.CSSProperties = { color: 'var(--te-toolbar-button-text)' };
   const activeStyle: React.CSSProperties = {
     backgroundColor: 'color-mix(in srgb, var(--te-primary) 15%, transparent)',
     color: 'var(--te-primary)',

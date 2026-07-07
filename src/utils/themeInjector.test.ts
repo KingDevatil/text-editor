@@ -20,6 +20,8 @@ describe('themeInjector', () => {
     expect(style).not.toBeNull();
     expect(style!.textContent).toContain('--te-bg-primary: #0d1117');
     expect(style!.textContent).toContain('--te-editor-cursor: #d4d4d4');
+    expect(style!.textContent).toContain('--te-toolbar-button-text: #e5e7eb');
+    expect(style!.textContent).toContain('--te-tab-inactive-bg: #1f2937');
   });
 
   it('updates existing style element on re-inject', () => {

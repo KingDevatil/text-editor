@@ -68,6 +68,7 @@ export interface ThemeColors {
   border: string;
   primary: string;
   primaryText: string;
+  toolbarButtonText: string;
   editorGutterBg: string;
   editorGutterText: string;
   editorBracketMatch: string;
@@ -80,6 +81,7 @@ export interface ThemeColors {
   editorSearchMatchActiveBg: string;
   editorSearchMatchActiveText: string;
   tabActiveBg: string;
+  tabInactiveBg: string;
   success: string;
   warning: string;
   error: string;

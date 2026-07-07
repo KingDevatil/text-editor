@@ -24,6 +24,7 @@ const COLOR_ITEMS: ColorItemMeta[] = [
   { key: 'border', title: '边框色', area: '所有分割线、边框' },
   { key: 'primary', title: '强调色', area: '选中态、按钮激活、标签指示器' },
   { key: 'primaryText', title: '强调文字色', area: '激活态文字' },
+  { key: 'toolbarButtonText', title: '工具栏按钮文字色', area: '顶部工具栏普通按钮、图标、文字' },
   // Editor
   { key: 'editorGutterBg', title: '行号区背景', area: 'CodeMirror 左侧行号栏' },
   { key: 'editorGutterText', title: '行号文字色', area: '行号数字' },
@@ -37,6 +38,7 @@ const COLOR_ITEMS: ColorItemMeta[] = [
   { key: 'editorSearchMatchActiveBg', title: '当前搜索匹配背景', area: '查找时光标所在匹配项背景' },
   { key: 'editorSearchMatchActiveText', title: '当前搜索匹配文字', area: '查找时光标所在匹配项文字' },
   { key: 'tabActiveBg', title: '激活标签背景', area: '当前激活标签页的背景色' },
+  { key: 'tabInactiveBg', title: '非选中标签背景', area: '未激活标签页的背景色' },
   // Status
   { key: 'success', title: '成功色', area: '已保存提示' },
   { key: 'warning', title: '警告色', area: '未保存提示' },
