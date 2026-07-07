@@ -1,4 +1,4 @@
-import type { ThemeMode, ThemeColors, PartialThemeColors } from '../types';
+import type { ThemeMode, ThemeColors, PartialThemeColors, SyntaxHighlightMode } from '../types';
 import { defaultLightColors, defaultDarkColors, defaultCustomColors } from './themeDefaults';
 
 export function resolveThemeColors(
@@ -59,4 +59,16 @@ export function isThemeDark(theme: ThemeMode, colors: ThemeColors): boolean {
     0.0722 * toLinear(rgb.b);
 
   return luminance < 0.45;
+}
+
+export function isSyntaxHighlightDark(
+  theme: ThemeMode,
+  colors: ThemeColors,
+  customSyntaxHighlight: SyntaxHighlightMode = 'auto'
+): boolean {
+  if (theme === 'dark') return true;
+  if (theme === 'light') return false;
+  if (customSyntaxHighlight === 'dark') return true;
+  if (customSyntaxHighlight === 'light') return false;
+  return isThemeDark(theme, colors);
 }

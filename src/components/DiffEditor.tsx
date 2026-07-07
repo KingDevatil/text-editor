@@ -3,7 +3,7 @@ import { MergeView } from '@codemirror/merge';
 import { history, historyKeymap } from '@codemirror/commands';
 import { lineNumbers, keymap, EditorView } from '@codemirror/view';
 import { buildDynamicTheme, syntaxHighlightExtension } from '../utils/themes';
-import { isThemeDark, resolveThemeColors } from '../utils/themeResolver';
+import { isSyntaxHighlightDark, resolveThemeColors } from '../utils/themeResolver';
 import type { ThemeMode } from '../types';
 import { useSettingsStore } from '../hooks/useSettingsStore';
 import { useEditorStore } from '../hooks/useEditorStore';
@@ -23,6 +23,7 @@ const DiffEditor: React.FC<DiffEditorProps> = ({ leftContent, rightContent, them
   const lightCustomColors = useSettingsStore((s) => s.lightCustomColors);
   const darkCustomColors = useSettingsStore((s) => s.darkCustomColors);
   const customColors = useSettingsStore((s) => s.customColors);
+  const customSyntaxHighlight = useSettingsStore((s) => s.customSyntaxHighlight);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -41,7 +42,7 @@ const DiffEditor: React.FC<DiffEditorProps> = ({ leftContent, rightContent, them
       keymap.of(historyKeymap),
       lineNumbers(),
       syntaxHighlightExtension,
-      buildDynamicTheme(colors, isThemeDark(theme, colors)),
+      buildDynamicTheme(colors, isSyntaxHighlightDark(theme, colors, customSyntaxHighlight)),
       EditorView.editable.of(false),
     ];
 
@@ -66,7 +67,7 @@ const DiffEditor: React.FC<DiffEditorProps> = ({ leftContent, rightContent, them
       mergeView.destroy();
       mergeViewRef.current = null;
     };
-  }, [leftContent, rightContent, theme, lightCustomColors, darkCustomColors, customColors]);
+  }, [leftContent, rightContent, theme, lightCustomColors, darkCustomColors, customColors, customSyntaxHighlight]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

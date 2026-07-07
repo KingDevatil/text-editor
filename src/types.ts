@@ -58,6 +58,7 @@ export type Language =
   | 'log';
 
 export type ThemeMode = 'light' | 'dark' | 'custom';
+export type SyntaxHighlightMode = 'auto' | 'light' | 'dark';
 
 export interface ThemeColors {
   bgPrimary: string;

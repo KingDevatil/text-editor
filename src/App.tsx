@@ -13,7 +13,7 @@ import { perf } from './utils/perf';
 import type { Encoding, LineEnding } from './types';
 import { detectLineEnding, normalizeLineEnding } from './utils/lineEnding';
 import { preloadCommonLanguages, loadLanguageExtensions, isLanguageCached } from './utils/languageExtensions';
-import { isThemeDark, resolveThemeColors } from './utils/themeResolver';
+import { isSyntaxHighlightDark, isThemeDark, resolveThemeColors } from './utils/themeResolver';
 import { injectThemeVars, applySavedTheme } from './utils/themeInjector';
 import Toolbar from './components/Toolbar';
 import TabBar from './components/TabBar';
@@ -52,6 +52,7 @@ function App() {
   const lightCustomColors = useSettingsStore((s) => s.lightCustomColors);
   const darkCustomColors = useSettingsStore((s) => s.darkCustomColors);
   const customColors = useSettingsStore((s) => s.customColors);
+  const customSyntaxHighlight = useSettingsStore((s) => s.customSyntaxHighlight);
   const sidebarVisible = useUIStore((s) => s.sidebarVisible);
   const findReplaceVisible = useUIStore((s) => s.findReplaceVisible);
   const unicodeHighlight = useSettingsStore((s) => s.unicodeHighlight);
@@ -688,6 +689,7 @@ function App() {
     [theme, lightCustomColors, darkCustomColors, customColors]
   );
   const isDark = isThemeDark(theme, resolvedThemeColors);
+  const syntaxIsDark = isSyntaxHighlightDark(theme, resolvedThemeColors, customSyntaxHighlight);
 
   // Inject CSS theme variables whenever theme or custom colors change
   useEffect(() => {
@@ -1034,7 +1036,7 @@ function App() {
   ], [handleNewFile, handleOpenFile, handleSaveFile, handleFormat, handleCycleTheme, handleToggleSplit, handleToggleDiff, handleToggleReadMode, findReplaceVisible, setFindReplaceVisible, sidebarVisible, setSidebarVisible, isDark, wordWrap, showWhitespace, previewVisible, setPreviewVisible, previewFullScreen, setPreviewFullScreen, splitMode, diffMode, readMode, activeTab, theme, columnAlignSupported, setTabColumnAlign, jsonFormVisible, setJsonFormVisible, jsonFormFullScreen, setJsonFormFullScreen]);
 
   return (
-    <div className={`flex flex-col h-screen ${isDark ? 'dark' : ''}`}>
+    <div className={`flex flex-col h-screen ${isDark ? 'dark' : ''} ${syntaxIsDark ? 'syntax-dark' : 'syntax-light'}`}>
       <input
         ref={fileInputRef}
         type="file"

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { X, RotateCcw, Download, Upload, Check } from 'lucide-react';
-import type { ThemeColors, ThemeMode, PartialThemeColors } from '../types';
+import type { ThemeColors, ThemeMode, PartialThemeColors, SyntaxHighlightMode } from '../types';
 import { defaultLightColors, defaultDarkColors, defaultCustomColors } from '../utils/themeDefaults';
 import { useSettingsStore } from '../hooks/useSettingsStore';
 
@@ -46,6 +46,12 @@ const COLOR_ITEMS: ColorItemMeta[] = [
   // Scrollbar
   { key: 'scrollbarThumb', title: '滚动条滑块', area: '全局滚动条' },
   { key: 'scrollbarThumbHover', title: '滚动条滑块悬停', area: '全局滚动条悬停态' },
+];
+
+const SYNTAX_HIGHLIGHT_OPTIONS: { value: SyntaxHighlightMode; label: string; description: string }[] = [
+  { value: 'auto', label: '自动', description: '根据主背景色亮度自动选择' },
+  { value: 'light', label: '亮色', description: '使用亮色主题语法高亮' },
+  { value: 'dark', label: '暗色', description: '使用暗色主题语法高亮' },
 ];
 
 let colorContext: CanvasRenderingContext2D | null | undefined;
@@ -162,6 +168,8 @@ const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
   const resetLight = useSettingsStore((s) => s.resetLightCustomColors);
   const resetDark = useSettingsStore((s) => s.resetDarkCustomColors);
   const resetCustom = useSettingsStore((s) => s.resetCustomColors);
+  const customSyntaxHighlight = useSettingsStore((s) => s.customSyntaxHighlight);
+  const setCustomSyntaxHighlight = useSettingsStore((s) => s.setCustomSyntaxHighlight);
 
   const defaults = tab === 'light' ? defaultLightColors : tab === 'dark' ? defaultDarkColors : defaultCustomColors;
   const customColors = tab === 'light' ? lightCustom : tab === 'dark' ? darkCustom : custom;
@@ -178,7 +186,10 @@ const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
 
   const handleResetAll = useCallback(() => {
     reset();
-  }, [reset]);
+    if (tab === 'custom') {
+      setCustomSyntaxHighlight('auto');
+    }
+  }, [reset, setCustomSyntaxHighlight, tab]);
 
   const handleExport = useCallback(() => {
     const exported: Record<string, string> = {};
@@ -231,7 +242,10 @@ const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
 
         {/* Tabs */}
         <div className="flex border-b" style={{ borderColor: 'var(--te-border)' }}>
-          {(['light', 'dark', 'custom'] as ThemeMode[]).map((t) => (
+          {(['light', 'dark', 'custom'] as ThemeMode[]).map((t) => {
+            const hasEdited = Object.keys(t === 'light' ? lightCustom : t === 'dark' ? darkCustom : custom).length > 0
+              || (t === 'custom' && customSyntaxHighlight !== 'auto');
+            return (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -242,18 +256,74 @@ const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
               }}
             >
               {t === 'light' ? '亮色' : t === 'dark' ? '暗色' : '自定义'}
-              {Object.keys(t === 'light' ? lightCustom : t === 'dark' ? darkCustom : custom).length > 0 && (
+              {hasEdited && (
                 <span className="ml-1 text-[10px] opacity-70">(已编辑)</span>
               )}
               {tab === t && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ backgroundColor: 'var(--te-primary)' }} />
               )}
             </button>
-          ))}
+          );})}
         </div>
 
         {/* Color list */}
         <div className="flex-1 overflow-auto p-4 space-y-3">
+          {tab === 'custom' && (
+            <section
+              className="flex flex-col gap-2 p-3 rounded-lg border"
+              style={{ borderColor: 'var(--te-border)', backgroundColor: 'var(--te-bg-tertiary)' }}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium" style={{ color: 'var(--te-text-primary)' }}>语法高亮</div>
+                  <div className="text-xs mt-0.5" style={{ color: 'var(--te-text-secondary)' }}>
+                    自定义外观使用的编辑器语法配色
+                  </div>
+                </div>
+                {customSyntaxHighlight !== 'auto' && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomSyntaxHighlight('auto')}
+                    className="p-1.5 rounded-md hover:opacity-70 transition-opacity flex-shrink-0"
+                    title="恢复自动"
+                    style={{ color: 'var(--te-text-secondary)' }}
+                  >
+                    <RotateCcw size={14} />
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {SYNTAX_HIGHLIGHT_OPTIONS.map((option) => {
+                  const selected = customSyntaxHighlight === option.value;
+                  return (
+                    <label
+                      key={option.value}
+                      className="cursor-pointer rounded-md border px-3 py-2 transition-colors"
+                      style={{
+                        borderColor: selected ? 'var(--te-primary)' : 'var(--te-border)',
+                        backgroundColor: selected ? 'color-mix(in srgb, var(--te-primary) 12%, var(--te-bg-primary))' : 'var(--te-bg-primary)',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="custom-syntax-highlight"
+                        value={option.value}
+                        checked={selected}
+                        onChange={() => setCustomSyntaxHighlight(option.value)}
+                        className="sr-only"
+                      />
+                      <span className="block text-xs font-medium" style={{ color: selected ? 'var(--te-primary)' : 'var(--te-text-primary)' }}>
+                        {option.label}
+                      </span>
+                      <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--te-text-secondary)' }}>
+                        {option.description}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </section>
+          )}
           {COLOR_ITEMS.map((item) => {
             const defaultValue = defaults[item.key];
             const customValue = customColors[item.key];

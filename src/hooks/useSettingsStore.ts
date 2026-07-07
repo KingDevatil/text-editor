@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ThemeMode, PartialThemeColors, ThemeColors } from '../types';
+import type { ThemeMode, PartialThemeColors, ThemeColors, SyntaxHighlightMode } from '../types';
 import { debounce } from '../utils/debounce';
 
 /** Custom color format definition */
@@ -24,6 +24,7 @@ interface SettingsState {
   lightCustomColors: PartialThemeColors;
   darkCustomColors: PartialThemeColors;
   customColors: PartialThemeColors;
+  customSyntaxHighlight: SyntaxHighlightMode;
   fontSize: number;
   wordWrap: boolean;
   showWhitespace: boolean;
@@ -42,6 +43,7 @@ interface SettingsActions {
   setLightCustomColor: (key: keyof ThemeColors, value: string) => void;
   setDarkCustomColor: (key: keyof ThemeColors, value: string) => void;
   setCustomColor: (key: keyof ThemeColors, value: string) => void;
+  setCustomSyntaxHighlight: (mode: SyntaxHighlightMode) => void;
   resetLightCustomColors: () => void;
   resetDarkCustomColors: () => void;
   resetCustomColors: () => void;
@@ -94,6 +96,7 @@ const useSettingsStore = create<SettingsState & SettingsActions>((set) => ({
   lightCustomColors: loaded.lightCustomColors ?? {},
   darkCustomColors: loaded.darkCustomColors ?? {},
   customColors: loaded.customColors ?? {},
+  customSyntaxHighlight: loaded.customSyntaxHighlight ?? 'auto',
   fontSize: loaded.fontSize ?? 14,
   wordWrap: loaded.wordWrap ?? false,
   showWhitespace: loaded.showWhitespace ?? false,
@@ -119,6 +122,7 @@ const useSettingsStore = create<SettingsState & SettingsActions>((set) => ({
     set((state) => ({ darkCustomColors: { ...state.darkCustomColors, [key]: value } })),
   setCustomColor: (key, value) =>
     set((state) => ({ customColors: { ...state.customColors, [key]: value } })),
+  setCustomSyntaxHighlight: (customSyntaxHighlight) => set({ customSyntaxHighlight }),
   resetLightCustomColors: () => set({ lightCustomColors: {} }),
   resetDarkCustomColors: () => set({ darkCustomColors: {} }),
   resetCustomColors: () => set({ customColors: {} }),
@@ -163,6 +167,7 @@ function saveSettings(state: SettingsState) {
         lightCustomColors: state.lightCustomColors,
         darkCustomColors: state.darkCustomColors,
         customColors: state.customColors,
+        customSyntaxHighlight: state.customSyntaxHighlight,
         fontSize: state.fontSize,
         wordWrap: state.wordWrap,
         showWhitespace: state.showWhitespace,

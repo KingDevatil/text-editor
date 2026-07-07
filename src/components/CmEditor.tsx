@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { EditorView, keymap, highlightWhitespace, highlightTrailingWhitespace } from '@codemirror/view';
 import { EditorState, StateEffect } from '@codemirror/state';
 import { eolMarkers } from '../utils/showInvisibles';
-import { isThemeDark, resolveThemeColors } from '../utils/themeResolver';
+import { isSyntaxHighlightDark, resolveThemeColors } from '../utils/themeResolver';
 import type { ThemeMode, LineEnding } from '../types';
 import { perf } from '../utils/perf';
 import { setColumnAlign, createColumnDragLayer } from '../utils/columnAlign';
@@ -90,6 +90,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
   const lightCustomColors = useSettingsStore((s) => s.lightCustomColors);
   const darkCustomColors = useSettingsStore((s) => s.darkCustomColors);
   const customColors = useSettingsStore((s) => s.customColors);
+  const customSyntaxHighlight = useSettingsStore((s) => s.customSyntaxHighlight);
 
   // Initialize or switch editor state when tabId changes
   useEffect(() => {
@@ -120,7 +121,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
       const effectiveLargeFile = largeFileOptimize && contentLength > LARGE_FILE_THRESHOLD;
 
       const colors = resolveThemeColors(theme, lightCustomColors, darkCustomColors, customColors);
-      const editorIsDark = isThemeDark(theme, colors);
+      const editorIsDark = isSyntaxHighlightDark(theme, colors, customSyntaxHighlight);
 
       state = EditorState.create({
         doc: initialContent,
@@ -362,10 +363,10 @@ const CmEditor: React.FC<CmEditorProps> = ({
     if (!view) return;
     const colors = resolveThemeColors(theme, lightCustomColors, darkCustomColors, customColors);
     view.dispatch({
-      effects: compartmentsRef.current!.theme.reconfigure(buildDynamicTheme(colors, isThemeDark(theme, colors))),
+      effects: compartmentsRef.current!.theme.reconfigure(buildDynamicTheme(colors, isSyntaxHighlightDark(theme, colors, customSyntaxHighlight))),
     });
     setEditorState(tabId, view.state);
-  }, [theme, lightCustomColors, darkCustomColors, customColors, tabId]);
+  }, [theme, lightCustomColors, darkCustomColors, customColors, customSyntaxHighlight, tabId]);
 
   // Dynamic reconfiguration: font size
   useEffect(() => {

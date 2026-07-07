@@ -11,6 +11,7 @@ describe('ThemeEditor', () => {
       lightCustomColors: {},
       darkCustomColors: {},
       customColors: {},
+      customSyntaxHighlight: 'auto',
     });
   });
 
@@ -28,5 +29,14 @@ describe('ThemeEditor', () => {
     fireEvent.blur(colorInput);
 
     expect(useSettingsStore.getState().lightCustomColors.bgPrimary).toBe('#123456');
+  });
+
+  it('updates custom syntax highlighting from the custom tab', () => {
+    render(<ThemeEditor onClose={vi.fn()} />);
+
+    fireEvent.click(document.querySelectorAll('button')[3]);
+    fireEvent.click(document.querySelector('input[value="dark"]') as HTMLInputElement);
+
+    expect(useSettingsStore.getState().customSyntaxHighlight).toBe('dark');
   });
 });

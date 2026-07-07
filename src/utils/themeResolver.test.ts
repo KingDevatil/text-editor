@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultCustomColors, defaultLightColors } from './themeDefaults';
-import { isThemeDark, resolveThemeColors } from './themeResolver';
+import { isSyntaxHighlightDark, isThemeDark, resolveThemeColors } from './themeResolver';
 
 describe('themeResolver', () => {
   it('keeps custom theme defaults independent from light theme defaults', () => {
@@ -13,5 +13,14 @@ describe('themeResolver', () => {
   it('detects custom theme darkness from the resolved background color', () => {
     expect(isThemeDark('custom', { ...defaultCustomColors, bgPrimary: '#ffffff' })).toBe(false);
     expect(isThemeDark('custom', { ...defaultCustomColors, bgPrimary: '#0d1117' })).toBe(true);
+  });
+
+  it('allows custom syntax highlighting to override automatic darkness', () => {
+    const lightCustom = { ...defaultCustomColors, bgPrimary: '#ffffff' };
+    const darkCustom = { ...defaultCustomColors, bgPrimary: '#0d1117' };
+
+    expect(isSyntaxHighlightDark('custom', lightCustom, 'auto')).toBe(false);
+    expect(isSyntaxHighlightDark('custom', lightCustom, 'dark')).toBe(true);
+    expect(isSyntaxHighlightDark('custom', darkCustom, 'light')).toBe(false);
   });
 });
