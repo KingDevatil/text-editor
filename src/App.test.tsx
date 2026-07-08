@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from './App';
 import { useEditorStore } from './hooks/useEditorStore';
+import { useUIStore } from './hooks/useUIStore';
 import { setEditorState } from './hooks/useEditorStatePool';
 
 // Mock CodeMirror-heavy child components to keep the test lightweight
@@ -39,6 +40,10 @@ describe('App', () => {
       activeGroup1TabId: null,
       activeGroup2TabId: null,
       splitMode: false,
+    });
+    useUIStore.setState({
+      previewVisible: false,
+      previewFullScreen: false,
     });
   });
 
@@ -80,5 +85,23 @@ describe('App', () => {
     expect(savedTab?.title).toBe('saved-note.txt');
     expect(savedTab?.filePath).toBe(savedPath);
     expect(savedTab?.isDirty).toBe(false);
+  });
+
+  it('closes preview automatically when enabling split view', () => {
+    useEditorStore.getState().createTab('preview.md', 'markdown', undefined, 1);
+    useEditorStore.getState().createTab('notes.txt', 'plaintext', undefined, 1);
+    useUIStore.getState().setPreviewVisible(true);
+
+    render(<App />);
+
+    const splitButton = screen.getByRole('button', { name: 'split-editor' });
+    expect(splitButton).toBeEnabled();
+
+    fireEvent.click(splitButton);
+
+    const editorState = useEditorStore.getState();
+    expect(useUIStore.getState().previewVisible).toBe(false);
+    expect(editorState.splitMode).toBe(true);
+    expect(editorState.tabs.some((tab) => tab.group === 2)).toBe(true);
   });
 });

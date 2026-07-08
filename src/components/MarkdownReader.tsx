@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 import { subscribeContentChange } from '../hooks/useEditorStatePool';
+import { useResizableMarkdownTables } from '../hooks/useResizableMarkdownTables';
 import { useSettingsStore } from '../hooks/useSettingsStore';
 import type { ThemeMode } from '../types';
 import { generateHeadingSlugs, slugify } from '../utils/slugify';
@@ -148,6 +149,7 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
   }, [onExit, visible]);
 
   const isDark = theme === 'dark';
+  useResizableMarkdownTables(scrollRef, html, visible);
 
   const bgColor = 'var(--te-bg-primary)';
   const textColor = 'var(--te-text-primary)';

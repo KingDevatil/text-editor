@@ -170,15 +170,16 @@ const Toolbar: React.FC<ToolbarProps> = React.memo(({
           <span className="hidden sm:inline font-medium">阅读</span>
         </button>
         <button
-          className={`${btnBase} ${!canSplit || previewActive ? 'opacity-40 cursor-not-allowed active:scale-100' : ''}`}
+          className={`${btnBase} ${!canSplit ? 'opacity-40 cursor-not-allowed active:scale-100' : ''}`}
           style={splitActive ? activeStyle : btnStyle}
           onClick={onToggleSplit}
-          disabled={!canSplit || previewActive}
+          disabled={!canSplit}
+          aria-label="split-editor"
           title={
             !canSplit
               ? '分屏编辑（需要至少 2 个标签页）'
               : previewActive
-                ? '分屏编辑（与预览模式互斥，请先关闭预览）'
+                ? '分屏编辑（将自动关闭预览）'
                 : '分屏编辑'
           }
         >

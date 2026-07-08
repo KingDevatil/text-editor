@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { marked } from 'marked';
 import { Copy, Clipboard } from 'lucide-react';
 import { subscribeContentChange } from '../hooks/useEditorStatePool';
+import { useResizableMarkdownTables } from '../hooks/useResizableMarkdownTables';
 import { generateHeadingSlugs, slugify } from '../utils/slugify';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 import { desktopApi } from '../platform/desktop';
@@ -64,6 +65,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ tabId, the
   }, [deferredContent, previewTooLarge]);
 
   const isDark = theme === 'dark';
+  useResizableMarkdownTables(containerRef, html, !previewTooLarge);
 
   // Intercept anchor clicks inside the overflow container
   const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {

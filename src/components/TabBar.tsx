@@ -393,16 +393,16 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
         key={tab.id}
         data-tab-id={tab.id}
         data-group={group}
+        data-group-active={isGroupActive}
+        data-focused={isActive}
         onMouseDown={(e) => handleMouseDown(e, tab.id, group)}
         onClick={() => handleTabClick(tab.id, group)}
         onContextMenu={(e) => handleContextMenu(e, tab.id, group)}
         className={`
           group relative flex items-center gap-2 px-3.5 min-w-[120px] max-w-[220px] cursor-pointer select-none flex-shrink-0
           text-sm transition-all duration-100
-          ${isActive && isGroupActive
+          ${isGroupActive
             ? 'bg-[var(--te-tab-active-bg)] text-[var(--te-text-primary)] z-10'
-            : isGroupActive
-            ? 'bg-[var(--te-tab-inactive-bg)] text-[var(--te-text-primary)]'
             : 'bg-[var(--te-tab-inactive-bg)] text-[var(--te-text-secondary)] hover:bg-[color-mix(in_srgb,var(--te-tab-inactive-bg)_75%,var(--te-tab-active-bg))] hover:text-[var(--te-text-primary)]'
           }
         `}
@@ -411,7 +411,7 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
           marginRight: '2px',
         }}
       >
-        {isActive && isGroupActive && (
+        {isGroupActive && (
           <div className="absolute top-0 left-2 right-2 h-[2px] rounded-full" style={{ background: 'linear-gradient(to right, var(--te-primary), color-mix(in srgb, var(--te-primary) 70%, transparent))' }} />
         )}
         {renamingTab === tab.id ? (

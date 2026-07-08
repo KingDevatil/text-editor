@@ -376,11 +376,12 @@ const JsonFormField: React.FC<JsonFormFieldProps> = React.memo(({
           <input
             key={index}
             type="number"
-            className="w-20 px-2 py-0.5 rounded border text-xs"
+            className="min-w-20 max-w-full px-2 py-0.5 rounded border text-xs"
             style={{
               borderColor: 'var(--te-border)',
               color: 'var(--te-text-primary)',
               backgroundColor: 'var(--te-bg-primary)',
+              width: compactNumberInputWidth(value),
             }}
             value={String(value)}
             onWheel={preventNumberWheelChange}
@@ -971,6 +972,10 @@ function isCompactNumberArray(value: unknown, maxLen = 6): value is number[] {
     value.length > 0 &&
     value.length <= maxLen &&
     value.every((item) => typeof item === 'number' && Number.isFinite(item));
+}
+
+function compactNumberInputWidth(value: number): string {
+  return `${Math.max(10, String(value).length + 4)}ch`;
 }
 
 

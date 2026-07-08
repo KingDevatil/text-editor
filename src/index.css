@@ -501,6 +501,49 @@ input[type="range"]::-webkit-slider-thumb {
   background: rgba(128,128,128,0.03);
 }
 
+.markdown-resizable-table {
+  table-layout: fixed;
+  max-width: none;
+}
+
+.markdown-resizable-cell {
+  position: relative;
+}
+
+.markdown-table-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  z-index: 2;
+}
+
+.markdown-table-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: 2px;
+  width: 2px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.markdown-table-resize-handle:hover::after,
+.markdown-table-resizing .markdown-table-resize-handle::after {
+  background: var(--te-primary);
+}
+
+.markdown-table-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
 .reader-prose hr {
   border: none;
   border-top: 1px solid rgba(128,128,128,0.25);

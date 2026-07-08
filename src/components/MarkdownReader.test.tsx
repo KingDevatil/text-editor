@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, screen } from '@testing-library/react';
 import MarkdownReader from './MarkdownReader';
 
 const getEditorContent = vi.fn(() => '');
 const unsubscribe = vi.fn();
+let currentContent = '';
 const subscribeContentChange = vi.fn((_tabId: string, listener: (content: string) => void) => {
-  listener('');
+  listener(currentContent);
   return unsubscribe;
 });
 
@@ -26,6 +27,7 @@ describe('MarkdownReader', () => {
     getEditorContent.mockClear();
     subscribeContentChange.mockClear();
     unsubscribe.mockClear();
+    currentContent = '';
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   });
 
@@ -86,5 +88,19 @@ describe('MarkdownReader', () => {
 
     // Menu should be gone
     expect(container.querySelector('[role="menu"]')).not.toBeInTheDocument();
+  });
+
+  it('adds resizable handles to markdown tables in reader mode', () => {
+    currentContent = [
+      '| Name | Count |',
+      '| --- | --- |',
+      '| Alpha | 1 |',
+    ].join('\n');
+
+    render(
+      <MarkdownReader tabId="tab1" theme="light" onExit={vi.fn()} onToggleTheme={vi.fn()} visible={true} />
+    );
+
+    expect(screen.getByRole('separator', { name: 'Resize table column' })).toBeInTheDocument();
   });
 });

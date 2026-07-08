@@ -125,6 +125,14 @@ describe('JsonFormField', () => {
     preventDefault.mockRestore();
   });
 
+  it('sizes compact number array inputs to fit long values', () => {
+    renderArrayField('{"arr":[11111111111,22222222222,33333333333]}');
+
+    expect(screen.getByDisplayValue('11111111111')).toHaveStyle({ width: '15ch' });
+    expect(screen.getByDisplayValue('22222222222')).toHaveStyle({ width: '15ch' });
+    expect(screen.getByDisplayValue('33333333333')).toHaveStyle({ width: '15ch' });
+  });
+
   it('keeps form action buttons out of the tab order', () => {
     renderObjectChild('{"count":10}', 'count');
 

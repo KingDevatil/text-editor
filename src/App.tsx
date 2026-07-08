@@ -863,8 +863,11 @@ function App() {
   });
 
   const handleToggleSplit = useCallback(() => {
+    if (!splitMode && previewVisible) {
+      setPreviewVisible(false);
+    }
     setSplitMode(!splitMode);
-  }, [splitMode, setSplitMode]);
+  }, [previewVisible, setPreviewVisible, splitMode, setSplitMode]);
 
   const handleToggleDiff = useCallback(() => {
     const state = useEditorStore.getState();
