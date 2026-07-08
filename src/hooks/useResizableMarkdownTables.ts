@@ -8,8 +8,16 @@ function getFirstRowCells(table: HTMLTableElement): HTMLTableCellElement[] {
   return Array.from(row.cells);
 }
 
-function getColumnWidths(cells: HTMLTableCellElement[]): number[] {
-  return cells.map((cell) => Math.max(MIN_COLUMN_WIDTH, Math.round(cell.getBoundingClientRect().width || cell.offsetWidth || MIN_COLUMN_WIDTH)));
+function getAvailableTableWidth(table: HTMLTableElement): number {
+  const parentWidth = table.parentElement?.getBoundingClientRect().width ?? 0;
+  const tableWidth = table.getBoundingClientRect().width || table.offsetWidth || 0;
+  return Math.max(parentWidth, tableWidth, MIN_COLUMN_WIDTH);
+}
+
+function getInitialColumnWidths(table: HTMLTableElement, columnCount: number): number[] {
+  const availableWidth = getAvailableTableWidth(table);
+  const width = Math.max(MIN_COLUMN_WIDTH, Math.floor(availableWidth / columnCount));
+  return Array.from({ length: columnCount }, () => width);
 }
 
 function setTableWidth(table: HTMLTableElement, widths: number[]) {
@@ -46,11 +54,28 @@ function enhanceTable(table: HTMLTableElement): () => void {
   table.dataset.resizableMarkdownTable = 'true';
   table.classList.add('markdown-resizable-table');
 
-  const widths = getColumnWidths(cells);
+  const widths = getInitialColumnWidths(table, cells.length);
   const cols = ensureColgroup(table, widths);
   setTableWidth(table, widths);
+  let userResized = false;
 
   const cleanupFns: Array<() => void> = [];
+
+  const resizeObserver = typeof ResizeObserver === 'undefined'
+    ? null
+    : new ResizeObserver(() => {
+        if (userResized) return;
+        const nextWidths = getInitialColumnWidths(table, cells.length);
+        nextWidths.forEach((width, index) => {
+          widths[index] = width;
+          cols[index].style.width = `${width}px`;
+        });
+        setTableWidth(table, widths);
+      });
+  if (resizeObserver && table.parentElement) {
+    resizeObserver.observe(table.parentElement);
+    cleanupFns.push(() => resizeObserver.disconnect());
+  }
 
   cells.slice(0, -1).forEach((cell, columnIndex) => {
     cell.classList.add('markdown-resizable-cell');
@@ -60,37 +85,47 @@ function enhanceTable(table: HTMLTableElement): () => void {
     handle.setAttribute('aria-orientation', 'vertical');
     handle.setAttribute('aria-label', 'Resize table column');
 
-    const handlePointerDown = (event: PointerEvent) => {
+    const handleResizeStart = (event: PointerEvent | MouseEvent) => {
       event.preventDefault();
       event.stopPropagation();
 
       const startX = event.clientX;
       const startWidth = widths[columnIndex];
+      userResized = true;
       document.body.classList.add('markdown-table-resizing');
+      table.classList.add('markdown-table-is-resizing');
 
-      const handlePointerMove = (moveEvent: PointerEvent) => {
+      const handleMove = (moveEvent: PointerEvent | MouseEvent) => {
+        moveEvent.preventDefault();
         const nextWidth = Math.max(MIN_COLUMN_WIDTH, startWidth + moveEvent.clientX - startX);
         widths[columnIndex] = nextWidth;
         cols[columnIndex].style.width = `${nextWidth}px`;
         setTableWidth(table, widths);
       };
 
-      const handlePointerUp = () => {
+      const handleEnd = () => {
         document.body.classList.remove('markdown-table-resizing');
-        window.removeEventListener('pointermove', handlePointerMove);
-        window.removeEventListener('pointerup', handlePointerUp);
-        window.removeEventListener('pointercancel', handlePointerUp);
+        table.classList.remove('markdown-table-is-resizing');
+        window.removeEventListener('pointermove', handleMove);
+        window.removeEventListener('pointerup', handleEnd);
+        window.removeEventListener('pointercancel', handleEnd);
+        window.removeEventListener('mousemove', handleMove);
+        window.removeEventListener('mouseup', handleEnd);
       };
 
-      window.addEventListener('pointermove', handlePointerMove);
-      window.addEventListener('pointerup', handlePointerUp);
-      window.addEventListener('pointercancel', handlePointerUp);
+      window.addEventListener('pointermove', handleMove);
+      window.addEventListener('pointerup', handleEnd);
+      window.addEventListener('pointercancel', handleEnd);
+      window.addEventListener('mousemove', handleMove);
+      window.addEventListener('mouseup', handleEnd);
     };
 
-    handle.addEventListener('pointerdown', handlePointerDown);
+    handle.addEventListener('pointerdown', handleResizeStart);
+    handle.addEventListener('mousedown', handleResizeStart);
     cell.appendChild(handle);
     cleanupFns.push(() => {
-      handle.removeEventListener('pointerdown', handlePointerDown);
+      handle.removeEventListener('pointerdown', handleResizeStart);
+      handle.removeEventListener('mousedown', handleResizeStart);
       handle.remove();
       cell.classList.remove('markdown-resizable-cell');
     });

@@ -491,24 +491,50 @@ input[type="range"]::-webkit-slider-thumb {
   display: block;
 }
 
+.prose table,
 .reader-prose table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   margin: 1em 0;
+  overflow: hidden;
+  border: 1px solid rgba(128,128,128,0.24);
+  border-radius: 6px;
 }
 
+.prose th,
+.prose td,
 .reader-prose th,
 .reader-prose td {
-  border: 1px solid rgba(128,128,128,0.2);
+  border: 0;
+  border-right: 1px solid rgba(128,128,128,0.2);
+  border-bottom: 1px solid rgba(128,128,128,0.2);
   padding: 0.5em 0.75em;
   text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
+.prose th:last-child,
+.prose td:last-child,
+.reader-prose th:last-child,
+.reader-prose td:last-child {
+  border-right: 0;
+}
+
+.prose tr:last-child td,
+.reader-prose tr:last-child td {
+  border-bottom: 0;
+}
+
+.prose th,
 .reader-prose th {
   background: rgba(128,128,128,0.08);
   font-weight: 600;
 }
 
+.prose tr:nth-child(even),
 .reader-prose tr:nth-child(even) {
   background: rgba(128,128,128,0.03);
 }
@@ -516,6 +542,7 @@ input[type="range"]::-webkit-slider-thumb {
 .markdown-resizable-table {
   table-layout: fixed;
   max-width: none;
+  min-width: 100%;
 }
 
 .markdown-resizable-cell {
@@ -525,13 +552,13 @@ input[type="range"]::-webkit-slider-thumb {
 .markdown-table-resize-handle {
   position: absolute;
   top: 0;
-  right: -3px;
-  width: 6px;
+  right: -5px;
+  width: 10px;
   height: 100%;
   cursor: col-resize;
   user-select: none;
   touch-action: none;
-  z-index: 2;
+  z-index: 5;
 }
 
 .markdown-table-resize-handle::after {
@@ -542,11 +569,13 @@ input[type="range"]::-webkit-slider-thumb {
   left: 2px;
   width: 2px;
   border-radius: 999px;
-  background: transparent;
+  background: color-mix(in srgb, var(--te-border) 72%, transparent);
   transition: background 120ms ease;
 }
 
+.markdown-resizable-table:hover .markdown-table-resize-handle::after,
 .markdown-table-resize-handle:hover::after,
+.markdown-table-is-resizing .markdown-table-resize-handle::after,
 .markdown-table-resizing .markdown-table-resize-handle::after {
   background: var(--te-primary);
 }
