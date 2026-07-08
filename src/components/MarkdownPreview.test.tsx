@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import MarkdownPreview from './MarkdownPreview';
+import { useMarkdownSearchStore } from '../hooks/useMarkdownDocumentSearch';
 
 const getEditorContent = vi.fn(() => '');
 const unsubscribe = vi.fn();
@@ -21,6 +22,7 @@ describe('MarkdownPreview', () => {
     subscribeContentChange.mockClear();
     unsubscribe.mockClear();
     currentContent = '';
+    useMarkdownSearchStore.setState({ query: null, direction: 1, sequence: 0, matchCount: 0, currentMatch: 0 });
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   });
 
@@ -82,5 +84,25 @@ describe('MarkdownPreview', () => {
 
     const firstCol = container.querySelector('col');
     expect(firstCol).toHaveStyle({ width: '88px' });
+  });
+
+  it('highlights markdown preview matches and jumps to the next match', async () => {
+    currentContent = 'alpha beta alpha';
+    const { container } = render(<MarkdownPreview tabId="tab1" theme="light" visible={true} />);
+
+    await act(async () => {
+      useMarkdownSearchStore.getState().setQuery({ query: 'alpha', caseSensitive: false, regexMode: false });
+    });
+
+    expect(container.querySelectorAll('mark.markdown-search-match')).toHaveLength(2);
+    expect(container.querySelector('mark.markdown-search-match-active')?.textContent).toBe('alpha');
+    expect(useMarkdownSearchStore.getState().matchCount).toBe(2);
+    expect(useMarkdownSearchStore.getState().currentMatch).toBe(1);
+
+    await act(async () => {
+      useMarkdownSearchStore.getState().findNext();
+    });
+
+    expect(useMarkdownSearchStore.getState().currentMatch).toBe(2);
   });
 });

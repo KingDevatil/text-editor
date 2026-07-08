@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, fireEvent, screen } from '@testing-library/react';
+import { act, render, fireEvent, screen } from '@testing-library/react';
 import MarkdownReader from './MarkdownReader';
+import { useMarkdownSearchStore } from '../hooks/useMarkdownDocumentSearch';
 
 const getEditorContent = vi.fn(() => '');
 const unsubscribe = vi.fn();
@@ -28,6 +29,7 @@ describe('MarkdownReader', () => {
     subscribeContentChange.mockClear();
     unsubscribe.mockClear();
     currentContent = '';
+    useMarkdownSearchStore.setState({ query: null, direction: 1, sequence: 0, matchCount: 0, currentMatch: 0 });
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   });
 
@@ -102,5 +104,19 @@ describe('MarkdownReader', () => {
     );
 
     expect(screen.getByRole('separator', { name: 'Resize table column' })).toBeInTheDocument();
+  });
+
+  it('highlights markdown reader matches', async () => {
+    currentContent = 'alpha beta alpha';
+    const { container } = render(
+      <MarkdownReader tabId="tab1" theme="light" onExit={vi.fn()} onToggleTheme={vi.fn()} visible={true} />
+    );
+
+    await act(async () => {
+      useMarkdownSearchStore.getState().setQuery({ query: 'alpha', caseSensitive: false, regexMode: false });
+    });
+
+    expect(container.querySelectorAll('mark.markdown-search-match')).toHaveLength(2);
+    expect(useMarkdownSearchStore.getState().matchCount).toBe(2);
   });
 });

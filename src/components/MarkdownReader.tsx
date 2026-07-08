@@ -12,6 +12,7 @@ import {
   Clipboard,
 } from 'lucide-react';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
+import { useMarkdownDocumentSearch } from '../hooks/useMarkdownDocumentSearch';
 import { subscribeContentChange } from '../hooks/useEditorStatePool';
 import { useResizableMarkdownTables } from '../hooks/useResizableMarkdownTables';
 import { useSettingsStore } from '../hooks/useSettingsStore';
@@ -150,6 +151,7 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
 
   const isDark = theme === 'dark';
   useResizableMarkdownTables(scrollRef, html, visible);
+  useMarkdownDocumentSearch(scrollRef, html, visible);
 
   const bgColor = 'var(--te-bg-primary)';
   const textColor = 'var(--te-text-primary)';
@@ -279,8 +281,11 @@ const MarkdownReader: React.FC<MarkdownReaderProps> = React.memo(({
       {/* Main content */}
       <div
         ref={scrollRef}
+        data-markdown-search-surface="reader"
+        tabIndex={-1}
         className={`flex-1 overflow-auto ${tocVisible && toc.length > 0 ? 'pl-64' : ''}`}
         onScroll={handleScroll}
+        onPointerDown={(e) => e.currentTarget.focus({ preventScroll: true })}
         onClick={handleContentClick}
         onContextMenu={(e) => {
           e.preventDefault();

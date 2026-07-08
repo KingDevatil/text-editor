@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { marked } from 'marked';
 import { Copy, Clipboard } from 'lucide-react';
+import { useMarkdownDocumentSearch } from '../hooks/useMarkdownDocumentSearch';
 import { subscribeContentChange } from '../hooks/useEditorStatePool';
 import { useResizableMarkdownTables } from '../hooks/useResizableMarkdownTables';
 import { generateHeadingSlugs, slugify } from '../utils/slugify';
@@ -66,6 +67,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ tabId, the
 
   const isDark = theme === 'dark';
   useResizableMarkdownTables(containerRef, html, !previewTooLarge);
+  useMarkdownDocumentSearch(containerRef, html, visible && !previewTooLarge);
 
   // Intercept anchor clicks inside the overflow container
   const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -123,12 +125,15 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ tabId, the
     <>
       <div
         ref={containerRef}
+        data-markdown-search-surface="preview"
+        tabIndex={-1}
         className="w-full h-full overflow-auto px-6 py-6"
         style={{
           backgroundColor: 'var(--te-bg-primary)',
           userSelect: 'text',
           WebkitUserSelect: 'text',
         }}
+        onPointerDown={(e) => e.currentTarget.focus({ preventScroll: true })}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
       >

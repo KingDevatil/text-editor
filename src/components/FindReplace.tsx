@@ -2,7 +2,9 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { ChevronDown, ChevronUp, X, Replace, ReplaceAll, ChevronRight, ChevronLeft, Wand2, Search, FolderOpen } from 'lucide-react';
 import { SearchCursor, RegExpCursor } from '@codemirror/search';
 import type { Text } from '@codemirror/state';
+import { useMarkdownSearchStore } from '../hooks/useMarkdownDocumentSearch';
 import { useEditorStore } from '../hooks/useEditorStore';
+import { useUIStore } from '../hooks/useUIStore';
 import { getActiveView } from '../hooks/useEditorStatePool';
 import RegexBuilderModal from './RegexBuilderModal';
 import { setSearchQuery } from '../utils/searchHighlight';
@@ -31,6 +33,10 @@ function createSearchCursor(doc: Text, query: string, from: number, to: number, 
   return new SearchCursor(doc, query, from, to, getSearchNormalize(caseSensitive));
 }
 
+function isMarkdownSearchSurface(element: Element | null): boolean {
+  return Boolean(element?.closest('[data-markdown-search-surface]'));
+}
+
 interface FindReplaceProps {
   visible: boolean;
   onClose: () => void;
@@ -52,10 +58,23 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
   const [folderMode, setFolderMode] = useState(false);
   const [searchDir, setSearchDir] = useState('');
   const [searching, setSearching] = useState(false);
+  const [searchTarget, setSearchTarget] = useState<'editor' | 'markdown'>('editor');
   const findInputRef = useRef<HTMLInputElement>(null);
   const dirInputRef = useRef<HTMLInputElement>(null);
 
   const activeTabId = useEditorStore((s) => s.activeTabId);
+  const activeTab = useEditorStore((s) => s.tabs.find((tab) => tab.id === s.activeTabId) || null);
+  const previewVisible = useUIStore((s) => s.previewVisible);
+  const readMode = useUIStore((s) => s.readMode);
+  const markdownMatchCount = useMarkdownSearchStore((s) => s.matchCount);
+  const markdownCurrentMatch = useMarkdownSearchStore((s) => s.currentMatch);
+  const setMarkdownQuery = useMarkdownSearchStore((s) => s.setQuery);
+  const markdownFindNext = useMarkdownSearchStore((s) => s.findNext);
+  const markdownFindPrevious = useMarkdownSearchStore((s) => s.findPrevious);
+  const markdownSearchActive = !folderMode && activeTab?.language === 'markdown' && searchTarget === 'markdown';
+  const effectiveMatchCount = markdownSearchActive ? markdownMatchCount : matchCount;
+  const effectiveCurrentMatch = markdownSearchActive ? markdownCurrentMatch : currentMatch;
+  const replaceVisible = showReplace && !folderMode && !markdownSearchActive;
 
   const defaultSearchDir = useMemo(() => {
     if (activeTabFilePath) {
@@ -83,8 +102,15 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
 
   useEffect(() => {
     if (visible) {
+      const nextSearchTarget =
+        activeTab?.language === 'markdown' &&
+        (readMode || (previewVisible && isMarkdownSearchSurface(document.activeElement)))
+          ? 'markdown'
+          : 'editor';
+      setSearchTarget(nextSearchTarget);
+
       const view = activeTabId ? getActiveView(activeTabId) : undefined;
-      if (view && !folderMode) {
+      if (view && !folderMode && nextSearchTarget === 'editor') {
         const sel = view.state.selection.main;
         if (sel.from !== sel.to) {
           const text = view.state.doc.sliceString(sel.from, sel.to);
@@ -105,6 +131,8 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
       if (view) {
         view.dispatch({ effects: setSearchQuery.of(null) });
       }
+      setMarkdownQuery(null);
+      setSearchTarget('editor');
       queueMicrotask(() => {
         setFindText('');
         setReplaceText('');
@@ -114,11 +142,20 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
         setSearchDir('');
       });
     }
-  }, [visible, activeTabId, folderMode]);
+  }, [visible, activeTabId, activeTab?.language, folderMode, previewVisible, readMode, setMarkdownQuery]);
 
   // Sync search highlight + debounced match counting
   useEffect(() => {
     const view = activeTabId ? getActiveView(activeTabId) : undefined;
+    if (markdownSearchActive) {
+      if (view) {
+        view.dispatch({ effects: setSearchQuery.of(null) });
+      }
+      setMarkdownQuery(findText ? { query: findText, caseSensitive, regexMode } : null);
+      return;
+    }
+
+    setMarkdownQuery(null);
     if (!view) return;
 
     view.dispatch({
@@ -151,7 +188,7 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
     }, SCAN_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [findText, caseSensitive, regexMode, activeTabId]);
+  }, [findText, caseSensitive, regexMode, activeTabId, markdownSearchActive, setMarkdownQuery]);
 
   const getView = useCallback(() => {
     return activeTabId ? getActiveView(activeTabId) : undefined;
@@ -172,6 +209,11 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
   );
 
   const findNext = useCallback(() => {
+    if (markdownSearchActive) {
+      if (findText) markdownFindNext();
+      return;
+    }
+
     const view = getView();
     if (!view || !findText) return;
 
@@ -198,9 +240,14 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
         setCurrentMatch(getMatchIndex(state.doc, wrapResult.value.from));
       }
     }
-  }, [getView, findText, caseSensitive, regexMode, getMatchIndex]);
+  }, [getView, findText, caseSensitive, regexMode, getMatchIndex, markdownFindNext, markdownSearchActive]);
 
   const findPrevious = useCallback(() => {
+    if (markdownSearchActive) {
+      if (findText) markdownFindPrevious();
+      return;
+    }
+
     const view = getView();
     if (!view || !findText) return;
 
@@ -237,7 +284,7 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
         setCurrentMatch(getMatchIndex(state.doc, finalMatch.from));
       }
     }
-  }, [getView, findText, caseSensitive, regexMode, getMatchIndex]);
+  }, [getView, findText, caseSensitive, regexMode, getMatchIndex, markdownFindPrevious, markdownSearchActive]);
 
   const handleReplace = useCallback(() => {
     const view = getView();
@@ -362,6 +409,8 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
 
   const canAct = folderMode
     ? !!findText && !!searchDir && !!onSearchInFolder && !searching
+    : markdownSearchActive
+      ? !!findText
     : !!findText && !!activeTabId;
 
   return (
@@ -378,13 +427,13 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
               onKeyDown={handleKeyDown}
               className={`${inputClass} w-full`}
             />
-            {!folderMode && matchCount !== 0 && (
+            {!folderMode && effectiveMatchCount !== 0 && (
               <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--te-text-secondary)] select-none">
-                {currentMatch}/{Math.abs(matchCount)}{matchCount < 0 ? '+' : ''}
+                {effectiveCurrentMatch}/{Math.abs(effectiveMatchCount)}{effectiveMatchCount < 0 ? '+' : ''}
               </span>
             )}
           </div>
-          {showReplace && !folderMode && (
+          {replaceVisible && (
             <div className="relative flex-1">
               <input
                 type="text"
@@ -416,7 +465,7 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
           >
             {folderMode ? <Search size={14} /> : <ChevronRight size={14} />}
           </button>
-          {showReplace && !folderMode && (
+          {replaceVisible && (
             <>
               <button
                 title="替换"
@@ -436,7 +485,7 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
               </button>
             </>
           )}
-          {!folderMode && (
+          {!folderMode && !markdownSearchActive && (
             <button
               onClick={() => setShowReplace(!showReplace)}
               className={iconBtnClass}

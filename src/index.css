@@ -328,6 +328,18 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--te-editor-search-match-active-text) !important;
 }
 
+.markdown-search-match {
+  background-color: var(--te-editor-match-highlight);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.markdown-search-match-active {
+  background-color: var(--te-editor-search-match-active-bg);
+  color: var(--te-editor-search-match-active-text);
+}
+
 /* ── Bracket Pair Colorization ────────────────────────────────── */
 .cm-matchingBracket {
   border-radius: 2px;
