@@ -21,7 +21,16 @@ function getInitialColumnWidths(table: HTMLTableElement, columnCount: number): n
 }
 
 function setTableWidth(table: HTMLTableElement, widths: number[]) {
-  table.style.width = `${widths.reduce((sum, width) => sum + width, 0)}px`;
+  table.style.setProperty('table-layout', 'fixed', 'important');
+  table.style.setProperty('width', `${widths.reduce((sum, width) => sum + width, 0)}px`, 'important');
+  table.style.setProperty('min-width', '100%', 'important');
+  table.style.setProperty('max-width', 'none', 'important');
+}
+
+function setColumnWidth(col: HTMLTableColElement, width: number) {
+  col.style.setProperty('width', `${width}px`, 'important');
+  col.style.setProperty('min-width', `${width}px`, 'important');
+  col.style.setProperty('max-width', `${width}px`, 'important');
 }
 
 function ensureColgroup(table: HTMLTableElement, widths: number[]): HTMLTableColElement[] {
@@ -40,7 +49,7 @@ function ensureColgroup(table: HTMLTableElement, widths: number[]): HTMLTableCol
 
   const cols = Array.from(colgroup.children) as HTMLTableColElement[];
   cols.forEach((col, index) => {
-    col.style.width = `${widths[index]}px`;
+    setColumnWidth(col, widths[index]);
   });
   return cols;
 }
@@ -68,7 +77,7 @@ function enhanceTable(table: HTMLTableElement): () => void {
         const nextWidths = getInitialColumnWidths(table, cells.length);
         nextWidths.forEach((width, index) => {
           widths[index] = width;
-          cols[index].style.width = `${width}px`;
+          setColumnWidth(cols[index], width);
         });
         setTableWidth(table, widths);
       });
@@ -99,7 +108,7 @@ function enhanceTable(table: HTMLTableElement): () => void {
         moveEvent.preventDefault();
         const nextWidth = Math.max(MIN_COLUMN_WIDTH, startWidth + moveEvent.clientX - startX);
         widths[columnIndex] = nextWidth;
-        cols[columnIndex].style.width = `${nextWidth}px`;
+        setColumnWidth(cols[columnIndex], nextWidth);
         setTableWidth(table, widths);
       };
 

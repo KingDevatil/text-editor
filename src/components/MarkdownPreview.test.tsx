@@ -104,6 +104,7 @@ describe('MarkdownPreview', () => {
     expect(cols[0]).toHaveStyle({ width: '300px' });
     expect(cols[1]).toHaveStyle({ width: '300px' });
     expect(cols[2]).toHaveStyle({ width: '300px' });
+    expect(cols[2].style.getPropertyPriority('width')).toBe('important');
     rectSpy.mockRestore();
   });
 
