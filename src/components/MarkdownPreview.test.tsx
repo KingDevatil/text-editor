@@ -28,6 +28,7 @@ describe('MarkdownPreview', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it('subscribes to content changes when visible', () => {
@@ -106,6 +107,70 @@ describe('MarkdownPreview', () => {
     expect(cols[2]).toHaveStyle({ width: '300px' });
     expect(cols[2].style.getPropertyPriority('width')).toBe('important');
     rectSpy.mockRestore();
+  });
+
+  it('caps long-content table columns to the visible preview width', () => {
+    currentContent = [
+      '| A | B | C |',
+      '| --- | --- | --- |',
+      '| 1 | 2 | ThisIsAVeryLongUnbrokenValueThatLoadsAfterTheHeaderAndExpandsTheRenderedTable |',
+    ].join('\n');
+    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      const isPreviewSurface = this.getAttribute('data-markdown-search-surface') === 'preview';
+      const isExpandedByContent = this.classList.contains('prose') || this.tagName === 'TABLE';
+      const width = isPreviewSurface ? 900 : isExpandedByContent ? 1800 : 0;
+      return { width, height: 100, top: 0, right: width, bottom: 100, left: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    });
+
+    const { container } = render(<MarkdownPreview tabId="tab1" theme="light" visible={true} />);
+
+    const cols = Array.from(container.querySelectorAll('col'));
+    expect(cols).toHaveLength(3);
+    expect(cols[0]).toHaveStyle({ width: '300px' });
+    expect(cols[1]).toHaveStyle({ width: '300px' });
+    expect(cols[2]).toHaveStyle({ width: '300px' });
+    rectSpy.mockRestore();
+  });
+
+  it('keeps long-content columns within the preview after the panel resizes', () => {
+    currentContent = [
+      '| A | B | C |',
+      '| --- | --- | --- |',
+      '| 1 | 2 | ThisIsAVeryLongUnbrokenValueThatKeepsTheRenderedTableExpanded |',
+    ].join('\n');
+    let previewWidth = 900;
+    let resizeCallback: ResizeObserverCallback = () => {};
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback;
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+    const setPropertySpy = vi.spyOn(CSSStyleDeclaration.prototype, 'setProperty');
+    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      const isPreviewSurface = this.getAttribute('data-markdown-search-surface') === 'preview';
+      const isExpandedByContent = this.classList.contains('prose') || this.tagName === 'TABLE';
+      const width = isPreviewSurface ? previewWidth : isExpandedByContent ? 1800 : 0;
+      return { width, height: 100, top: 0, right: width, bottom: 100, left: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    });
+
+    const { container } = render(<MarkdownPreview tabId="tab1" theme="light" visible={true} />);
+    const styleWritesAfterRender = setPropertySpy.mock.calls.length;
+    act(() => resizeCallback([], {} as ResizeObserver));
+    expect(setPropertySpy).toHaveBeenCalledTimes(styleWritesAfterRender);
+
+    previewWidth = 720;
+    act(() => resizeCallback([], {} as ResizeObserver));
+
+    const cols = Array.from(container.querySelectorAll('col'));
+    expect(cols[0]).toHaveStyle({ width: '240px' });
+    expect(cols[1]).toHaveStyle({ width: '240px' });
+    expect(cols[2]).toHaveStyle({ width: '240px' });
+    rectSpy.mockRestore();
+    setPropertySpy.mockRestore();
   });
 
   it('highlights markdown preview matches and jumps to the next match', async () => {

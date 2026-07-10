@@ -8,14 +8,19 @@ function getFirstRowCells(table: HTMLTableElement): HTMLTableCellElement[] {
   return Array.from(row.cells);
 }
 
-function getAvailableTableWidth(table: HTMLTableElement): number {
+function getAvailableTableWidth(table: HTMLTableElement, container: HTMLElement): number {
   const parentWidth = table.parentElement?.getBoundingClientRect().width ?? 0;
-  const tableWidth = table.getBoundingClientRect().width || table.offsetWidth || 0;
-  return Math.max(parentWidth, tableWidth, MIN_COLUMN_WIDTH);
+  const containerWidth = container.getBoundingClientRect().width || container.clientWidth || 0;
+  const layoutWidths = [parentWidth, containerWidth].filter((width) => width > 0);
+  return Math.max(layoutWidths.length > 0 ? Math.min(...layoutWidths) : 0, MIN_COLUMN_WIDTH);
 }
 
-function getInitialColumnWidths(table: HTMLTableElement, columnCount: number): number[] {
-  const availableWidth = getAvailableTableWidth(table);
+function getInitialColumnWidths(
+  table: HTMLTableElement,
+  container: HTMLElement,
+  columnCount: number
+): number[] {
+  const availableWidth = getAvailableTableWidth(table, container);
   const width = Math.max(MIN_COLUMN_WIDTH, Math.floor(availableWidth / columnCount));
   return Array.from({ length: columnCount }, () => width);
 }
@@ -54,7 +59,7 @@ function ensureColgroup(table: HTMLTableElement, widths: number[]): HTMLTableCol
   return cols;
 }
 
-function enhanceTable(table: HTMLTableElement): () => void {
+function enhanceTable(table: HTMLTableElement, container: HTMLElement): () => void {
   if (table.dataset.resizableMarkdownTable === 'true') return () => {};
 
   const cells = getFirstRowCells(table);
@@ -63,7 +68,7 @@ function enhanceTable(table: HTMLTableElement): () => void {
   table.dataset.resizableMarkdownTable = 'true';
   table.classList.add('markdown-resizable-table');
 
-  const widths = getInitialColumnWidths(table, cells.length);
+  const widths = getInitialColumnWidths(table, container, cells.length);
   const cols = ensureColgroup(table, widths);
   setTableWidth(table, widths);
   let userResized = false;
@@ -74,15 +79,17 @@ function enhanceTable(table: HTMLTableElement): () => void {
     ? null
     : new ResizeObserver(() => {
         if (userResized) return;
-        const nextWidths = getInitialColumnWidths(table, cells.length);
+        const nextWidths = getInitialColumnWidths(table, container, cells.length);
+        if (nextWidths.every((width, index) => width === widths[index])) return;
         nextWidths.forEach((width, index) => {
           widths[index] = width;
           setColumnWidth(cols[index], width);
         });
         setTableWidth(table, widths);
       });
-  if (resizeObserver && table.parentElement) {
-    resizeObserver.observe(table.parentElement);
+  if (resizeObserver) {
+    if (table.parentElement) resizeObserver.observe(table.parentElement);
+    if (table.parentElement !== container) resizeObserver.observe(container);
     cleanupFns.push(() => resizeObserver.disconnect());
   }
 
@@ -157,7 +164,9 @@ export function useResizableMarkdownTables(
     const container = containerRef.current;
     if (!container) return;
 
-    const cleanups = Array.from(container.querySelectorAll<HTMLTableElement>('table')).map(enhanceTable);
+    const cleanups = Array.from(container.querySelectorAll<HTMLTableElement>('table')).map((table) =>
+      enhanceTable(table, container)
+    );
     return () => {
       cleanups.forEach((cleanup) => cleanup());
     };
