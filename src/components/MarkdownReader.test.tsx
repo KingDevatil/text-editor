@@ -106,6 +106,31 @@ describe('MarkdownReader', () => {
     expect(screen.getByRole('separator', { name: 'Resize table column' })).toBeInTheDocument();
   });
 
+  it('keeps table resize handles after scrolling down and returning to the header', async () => {
+    currentContent = [
+      '| Name | Count |',
+      '| --- | --- |',
+      '| Alpha | 1 |',
+      '',
+      ...Array.from({ length: 40 }, (_, index) => `paragraph ${index + 1}`),
+    ].join('\n');
+
+    const { container } = render(
+      <MarkdownReader tabId="tab1" theme="light" onExit={vi.fn()} onToggleTheme={vi.fn()} visible={true} />
+    );
+    const scrollArea = container.querySelector<HTMLElement>('[data-markdown-search-surface="reader"]');
+    expect(scrollArea).not.toBeNull();
+    expect(screen.getByRole('separator', { name: 'Resize table column' })).toBeInTheDocument();
+
+    fireEvent.scroll(scrollArea!, { target: { scrollTop: 400 } });
+    fireEvent.scroll(scrollArea!, { target: { scrollTop: 0 } });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole('separator', { name: 'Resize table column' })).toBeInTheDocument();
+  });
+
   it('highlights markdown reader matches', async () => {
     currentContent = 'alpha beta alpha';
     const { container } = render(

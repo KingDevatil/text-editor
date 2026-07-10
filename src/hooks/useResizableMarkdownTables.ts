@@ -164,11 +164,32 @@ export function useResizableMarkdownTables(
     const container = containerRef.current;
     if (!container) return;
 
-    const cleanups = Array.from(container.querySelectorAll<HTMLTableElement>('table')).map((table) =>
-      enhanceTable(table, container)
-    );
+    const tableCleanups = new Map<HTMLTableElement, () => void>();
+    const syncTables = () => {
+      const currentTables = new Set(container.querySelectorAll<HTMLTableElement>('table'));
+
+      tableCleanups.forEach((cleanup, table) => {
+        if (currentTables.has(table)) return;
+        cleanup();
+        tableCleanups.delete(table);
+      });
+
+      currentTables.forEach((table) => {
+        if (tableCleanups.has(table)) return;
+        tableCleanups.set(table, enhanceTable(table, container));
+      });
+    };
+
+    syncTables();
+    const mutationObserver = typeof MutationObserver === 'undefined'
+      ? null
+      : new MutationObserver(syncTables);
+    mutationObserver?.observe(container, { childList: true, subtree: true });
+
     return () => {
-      cleanups.forEach((cleanup) => cleanup());
+      mutationObserver?.disconnect();
+      tableCleanups.forEach((cleanup) => cleanup());
+      tableCleanups.clear();
     };
   }, [containerRef, contentKey, enabled]);
 }
