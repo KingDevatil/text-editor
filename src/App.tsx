@@ -20,14 +20,12 @@ import TabBar from './components/TabBar';
 import FindReplace from './components/FindReplace';
 import StatusBar from './components/StatusBar';
 import Sidebar from './components/Sidebar';
-import SettingsPanel from './components/SettingsPanel';
 import MarkdownPreview from './components/MarkdownPreview';
 import MarkdownReader from './components/MarkdownReader';
 import HtmlPreview from './components/HtmlPreview';
 import HtmlReader from './components/HtmlReader';
 import CmEditor from './components/CmEditor';
 import DiffEditor from './components/DiffEditor';
-import JsonFormPanel from './components/JsonFormPanel';
 import CommandPalette from './components/CommandPalette';
 import TitleBar from './components/TitleBar';
 import DiagnosticsPanel from './components/DiagnosticsPanel';
@@ -36,9 +34,11 @@ import ExternalChangeDialog from './components/ExternalChangeDialog';
 import SearchResultsView from './components/SearchResultsView';
 import type { SearchMatch, SearchOptions } from './services/searchService';
 import { cancelSearch, searchDirectory } from './services/searchService';
-import { basename, desktopApi, dirname, joinPath } from './platform/desktop';
+import { basename, desktopApi, dirname, joinPath, type FileChangeEvent } from './platform/desktop';
 
 const SEARCH_RESULTS_PATH = '__search_results__';
+const SettingsPanel = React.lazy(() => import('./components/SettingsPanel'));
+const JsonFormPanel = React.lazy(() => import('./components/JsonFormPanel'));
 
 // Apply saved theme as early as possible to avoid flash
 applySavedTheme();
@@ -64,6 +64,10 @@ function App() {
   const handleSaveFileRef = useRef<(() => void) | null>(null);
   const handleFormatRef = useRef<(() => void) | null>(null);
   const forceClosingRef = useRef(false);
+  const fileChangeGenerationRef = useRef(new Map<string, number>());
+  const savingTabsRef = useRef(new Set<string>());
+  const pendingSaveTabsRef = useRef(new Set<string>());
+  const saveTabByIdRef = useRef<((tabId: string) => void) | null>(null);
   const findReplaceVisibleRef = useRef(findReplaceVisible);
   const columnAlignSupportedRef = useRef(false);
   const columnAlignSupported = useSettingsStore((s) => s.columnAlignSupported);
@@ -144,6 +148,11 @@ function App() {
   const openFile = useFileOpener();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [settingsEverOpened, setSettingsEverOpened] = useState(false);
+  const handleToggleSettings = useCallback(() => {
+    setSettingsEverOpened(true);
+    setSettingsVisible((visible) => !visible);
+  }, []);
   const [readerScrollToTop, setReaderScrollToTop] = useState(false);
   const SIDEBAR_WIDTH = 220;
 
@@ -156,14 +165,24 @@ function App() {
     };
   }, []);
 
-  const handleFileChanged = useCallback(async (changedPath: string) => {
+  const handleFileChanged = useCallback(async ({ path: changedPath, kind }: FileChangeEvent) => {
+    const generation = (fileChangeGenerationRef.current.get(changedPath) ?? 0) + 1;
+    fileChangeGenerationRef.current.set(changedPath, generation);
     const tab = useEditorStore.getState().tabs.find((t) => t.filePath === changedPath);
     if (!tab) return;
+
+    if (kind === 'unlink') {
+      markTabDirty(tab.id, true);
+      setExternalChangeNotice('文件已从磁盘删除；保存将重新创建该文件');
+      window.setTimeout(() => setExternalChangeNotice(null), 4000);
+      return;
+    }
 
     let externalText: string;
     let externalEncoding: string;
     try {
       const result = await desktopApi.readFileAuto(changedPath);
+      if (fileChangeGenerationRef.current.get(changedPath) !== generation) return;
       externalText = result.text;
       externalEncoding = result.encoding;
     } catch (err) {
@@ -175,7 +194,7 @@ function App() {
     if (!stillTab) return;
 
     // If no unsaved changes, silently reload and show a transient notice
-    if (!tab.isDirty) {
+    if (!stillTab.isDirty) {
       updateEditorContent(stillTab.id, externalText);
       markTabSaved(stillTab.id);
       setTabEncoding(stillTab.id, externalEncoding as Encoding);
@@ -195,7 +214,7 @@ function App() {
       externalEncoding,
       tabId: stillTab.id,
     });
-  }, [markTabSaved, setTabEncoding, setTabLineEnding]);
+  }, [markTabDirty, markTabSaved, setTabEncoding, setTabLineEnding]);
 
   const { pauseWatch, resumeWatch } = useFileWatcher(tabs, handleFileChanged);
 
@@ -439,16 +458,8 @@ function App() {
               await openFile(filePath);
             } else {
               const text = await file.text();
-              const currentTabs = useEditorStore.getState().tabs;
-              const existing = currentTabs.find((t) => t.title === fileName);
               const lineEnding = detectLineEnding(text);
-              if (existing) {
-                setActiveTabId(existing.id);
-                setTabLineEnding(existing.id, lineEnding);
-                updateEditorContent(existing.id, text);
-              } else {
-                createTab(fileName, undefined, undefined, 1, 'UTF-8', text, lineEnding);
-              }
+              createTab(fileName, undefined, undefined, 1, 'UTF-8', text, lineEnding);
             }
           } catch (err) {
             console.error('Failed to read file:', fileName, err);
@@ -462,36 +473,85 @@ function App() {
       await Promise.all(filePromises);
       e.target.value = '';
     },
-    [openFile, setActiveTabId, createTab, setTabLineEnding]
+    [openFile, createTab]
   );
 
-  const handleSaveFile = useCallback(async () => {
-    if (!activeTab) return;
+  const saveTabById = useCallback(async (tabId: string) => {
+    const targetTab = useEditorStore.getState().tabs.find((tab) => tab.id === tabId);
+    if (!targetTab) return;
+    if (savingTabsRef.current.has(tabId)) {
+      pendingSaveTabsRef.current.add(tabId);
+      return;
+    }
+    savingTabsRef.current.add(tabId);
 
     try {
-      if (desktopApi.isDesktop() && activeTab.filePath) {
-        const content = normalizeLineEnding(getEditorContent(activeTab.id), activeTab.lineEnding);
-        await pauseWatch(activeTab.filePath);
-        await desktopApi.writeFile(activeTab.filePath, content, activeTab.encoding);
-        await resumeWatch(activeTab.filePath);
-        markTabSaved(activeTab.id);
+      if (desktopApi.isDesktop() && targetTab.filePath) {
+        const contentSnapshot = getEditorContent(tabId);
+        const revisionSnapshot = targetTab.revision ?? 0;
+        const content = normalizeLineEnding(contentSnapshot, targetTab.lineEnding);
+        await pauseWatch(targetTab.filePath);
+        let resumeError: unknown;
+        try {
+          await desktopApi.writeFile(targetTab.filePath, content, targetTab.encoding);
+        } finally {
+          const stillOpen = useEditorStore.getState().tabs.some((tab) =>
+            tab.id === tabId && tab.filePath === targetTab.filePath
+          );
+          if (stillOpen) {
+            try {
+              await resumeWatch(targetTab.filePath);
+            } catch (error) {
+              resumeError = error;
+            }
+          }
+        }
+        const latest = useEditorStore.getState().tabs.find((tab) => tab.id === tabId);
+        if (
+          latest &&
+          (latest.revision ?? 0) === revisionSnapshot &&
+          getEditorContent(tabId) === contentSnapshot
+        ) {
+          markTabSaved(tabId);
+        }
+        if (resumeError) {
+          window.setTimeout(() => {
+            const stillOpen = useEditorStore.getState().tabs.some((tab) =>
+              tab.id === tabId && tab.filePath === targetTab.filePath
+            );
+            if (stillOpen) resumeWatch(targetTab.filePath!).catch((error) => {
+              console.error('[Save] failed to recover file watcher:', error);
+            });
+          }, 1000);
+          void desktopApi.message('文件已保存，但文件变更监听暂时恢复失败，应用将自动重试。', {
+            title: '保存完成',
+            kind: 'warning',
+          }).catch(() => {});
+        }
         return;
       }
 
       if (desktopApi.isDesktop()) {
-        const filePath = await desktopApi.saveFileDialog({ suggestedName: activeTab.title });
+        const filePath = await desktopApi.saveFileDialog({ suggestedName: targetTab.title });
         if (!filePath) return;
 
-        const content = normalizeLineEnding(getEditorContent(activeTab.id), activeTab.lineEnding);
-        await desktopApi.writeFile(filePath, content, activeTab.encoding);
-        renameTab(activeTab.id, basename(filePath), filePath);
-        markTabSaved(activeTab.id);
+        const latestBeforeWrite = useEditorStore.getState().tabs.find((tab) => tab.id === tabId);
+        if (!latestBeforeWrite) return;
+        const contentSnapshot = getEditorContent(tabId);
+        const revisionSnapshot = latestBeforeWrite.revision ?? 0;
+        const content = normalizeLineEnding(contentSnapshot, latestBeforeWrite.lineEnding);
+        await desktopApi.writeFile(filePath, content, latestBeforeWrite.encoding);
+        renameTab(tabId, basename(filePath), filePath);
+        const latest = useEditorStore.getState().tabs.find((tab) => tab.id === tabId);
+        if (latest && (latest.revision ?? 0) === revisionSnapshot && getEditorContent(tabId) === contentSnapshot) {
+          markTabSaved(tabId);
+        }
         return;
       }
 
       if ('showSaveFilePicker' in window) {
         const pickerOpts = {
-          suggestedName: activeTab.title,
+          suggestedName: targetTab.title,
           types: [
             {
               description: 'Text Files',
@@ -502,19 +562,26 @@ function App() {
         // @ts-expect-error showSaveFilePicker is not in standard DOM types yet
         const handle = await window.showSaveFilePicker(pickerOpts);
         const writable = await handle.createWritable();
-        await writable.write(normalizeLineEnding(getEditorContent(activeTab.id), activeTab.lineEnding));
+        const latestBeforeWrite = useEditorStore.getState().tabs.find((tab) => tab.id === tabId);
+        if (!latestBeforeWrite) return;
+        const contentSnapshot = getEditorContent(tabId);
+        const revisionSnapshot = latestBeforeWrite.revision ?? 0;
+        await writable.write(normalizeLineEnding(contentSnapshot, latestBeforeWrite.lineEnding));
         await writable.close();
-        markTabSaved(activeTab.id);
-        renameTab(activeTab.id, handle.name);
+        const latest = useEditorStore.getState().tabs.find((tab) => tab.id === tabId);
+        if (latest && (latest.revision ?? 0) === revisionSnapshot && getEditorContent(tabId) === contentSnapshot) {
+          markTabSaved(tabId);
+        }
+        renameTab(tabId, handle.name);
       } else {
-        const blob = new Blob([normalizeLineEnding(getEditorContent(activeTab.id), activeTab.lineEnding)], { type: 'text/plain' });
+        const blob = new Blob([normalizeLineEnding(getEditorContent(tabId), targetTab.lineEnding)], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = activeTab.title;
+        a.download = targetTab.title;
         a.click();
         URL.revokeObjectURL(url);
-        markTabSaved(activeTab.id);
+        markTabSaved(tabId);
       }
     } catch (err) {
       // Ignore user cancellation (file picker abort)
@@ -524,14 +591,22 @@ function App() {
       const msg = typeof err === 'string' ? err : (err instanceof Error ? err.message : String(err));
       console.error('Save failed:', err);
 
-      // Resume file watch if it was paused for a desktop save attempt.
-      if (desktopApi.isDesktop() && activeTab?.filePath) {
-        await resumeWatch(activeTab.filePath).catch(() => {});
-      }
-
       await desktopApi.message(msg, { title: '保存失败', kind: 'error' });
+    } finally {
+      savingTabsRef.current.delete(tabId);
+      if (pendingSaveTabsRef.current.delete(tabId)) {
+        queueMicrotask(() => saveTabByIdRef.current?.(tabId));
+      }
     }
-  }, [activeTab, markTabSaved, renameTab, pauseWatch, resumeWatch]);
+  }, [markTabSaved, renameTab, pauseWatch, resumeWatch]);
+  useEffect(() => {
+    saveTabByIdRef.current = saveTabById;
+  }, [saveTabById]);
+
+  const handleSaveFile = useCallback(() => {
+    const tabId = useEditorStore.getState().activeTabId;
+    if (tabId) void saveTabById(tabId);
+  }, [saveTabById]);
   useEffect(() => {
     handleSaveFileRef.current = handleSaveFile;
   });
@@ -549,7 +624,10 @@ function App() {
   const handleSidebarOpenFile = useCallback(
     async (filePath: string) => {
       if (!desktopApi.isDesktop()) return;
-      const existing = useEditorStore.getState().tabs.find((t) => normalizePath(t.filePath || '') === normalizePath(filePath));
+      const platform = desktopApi.platform();
+      const existing = useEditorStore.getState().tabs.find((t) =>
+        normalizePath(t.filePath || '', platform) === normalizePath(filePath, platform)
+      );
       if (existing) {
         setReaderScrollToTop(false);
         setActiveTabId(existing.id);
@@ -564,7 +642,10 @@ function App() {
   /** Open a file from search results and scroll to the matched line. */
   const handleOpenSearchResult = useCallback(
     async (filePath: string, lineNumber: number) => {
-      const existing = useEditorStore.getState().tabs.find((t) => normalizePath(t.filePath || '') === normalizePath(filePath));
+      const platform = desktopApi.platform();
+      const existing = useEditorStore.getState().tabs.find((t) =>
+        normalizePath(t.filePath || '', platform) === normalizePath(filePath, platform)
+      );
       if (existing) {
         // Already open — switch and jump immediately
         setActiveTabId(existing.id);
@@ -583,7 +664,9 @@ function App() {
 
       // Not yet open — open it and set pending line number for CmEditor to apply on mount
       await openFile(filePath);
-      const openedTab = useEditorStore.getState().tabs.find((t) => normalizePath(t.filePath || '') === normalizePath(filePath));
+      const openedTab = useEditorStore.getState().tabs.find((t) =>
+        normalizePath(t.filePath || '', platform) === normalizePath(filePath, platform)
+      );
       if (openedTab) {
         setActiveTabId(openedTab.id);
         setPendingLineNumber(openedTab.id, lineNumber);
@@ -669,20 +752,52 @@ function App() {
     if (!tab) return;
 
     if (tab.filePath && desktopApi.isDesktop()) {
+      await pauseWatch(tab.filePath);
+      const dir = dirname(tab.filePath);
+      const newPath = joinPath(dir, newTitle);
       try {
-        const dir = dirname(tab.filePath);
-        const newPath = joinPath(dir, newTitle);
         await desktopApi.renameFile(tab.filePath, newPath);
-        renameTab(tabId, newTitle, newPath);
       } catch (err) {
+        try {
+          await resumeWatch(tab.filePath);
+        } catch (watchError) {
+          console.error('[Rename] failed to restore original watcher:', watchError);
+          window.setTimeout(() => {
+            resumeWatch(tab.filePath!).catch((retryError) => {
+              console.error('[Rename] failed to recover original watcher:', retryError);
+            });
+          }, 1000);
+        }
         console.error('[Rename] 重命名文件失败:', err);
-        // 文件重命名失败，仍然更新标签标题
-        renameTab(tabId, newTitle);
+        await desktopApi.message('目标文件已存在或无法完成重命名，原文件名保持不变。', {
+          title: '重命名失败',
+          kind: 'error',
+        });
+        return;
+      }
+
+      renameTab(tabId, newTitle, newPath);
+      try {
+        await resumeWatch(newPath);
+      } catch (error) {
+        console.error('[Rename] failed to resume watcher:', error);
+        window.setTimeout(() => {
+          const stillOpen = useEditorStore.getState().tabs.some((candidate) =>
+            candidate.id === tabId && candidate.filePath === newPath
+          );
+          if (stillOpen) resumeWatch(newPath).catch((retryError) => {
+            console.error('[Rename] failed to recover watcher:', retryError);
+          });
+        }, 1000);
+        void desktopApi.message('文件已重命名，但文件变更监听暂时恢复失败，应用将自动重试。', {
+          title: '重命名完成',
+          kind: 'warning',
+        }).catch(() => {});
       }
     } else {
       renameTab(tabId, newTitle);
     }
-  }, [tabs, renameTab]);
+  }, [tabs, pauseWatch, renameTab, resumeWatch]);
 
   const resolvedThemeColors = useMemo(
     () => resolveThemeColors(theme, lightCustomColors, darkCustomColors, customColors),
@@ -720,22 +835,39 @@ function App() {
       if (!activeTab) return;
       const tabId = activeTab.id;
       const filePath = activeTab.filePath;
-      console.log('[EncodingChange] switching encoding:', enc, 'tabId:', tabId, 'filePath:', filePath);
-      setTabEncoding(tabId, enc);
 
       if (desktopApi.isDesktop() && filePath) {
         try {
+          if (activeTab.isDirty) {
+            const confirmed = await desktopApi.confirm(
+              `"${activeTab.title}" 有未保存的更改。切换编码会从磁盘重新读取并丢弃这些更改，是否继续？`,
+              { title: '切换编码' }
+            );
+            if (!confirmed) return;
+          }
+          const tabBeforeRead = useEditorStore.getState().tabs.find((tab) => tab.id === tabId);
+          if (!tabBeforeRead) return;
+          const contentBeforeRead = getEditorContent(tabId);
+          const revisionBeforeRead = tabBeforeRead.revision ?? 0;
           const { text } = await desktopApi.readFileWithEncoding(filePath, enc);
-          console.log('[EncodingChange] re-read file, length:', text.length);
+          const latest = useEditorStore.getState().tabs.find((tab) => tab.id === tabId);
+          if (
+            !latest ||
+            (latest.revision ?? 0) !== revisionBeforeRead ||
+            getEditorContent(tabId) !== contentBeforeRead
+          ) return;
           updateEditorContent(tabId, text);
+          setTabEncoding(tabId, enc);
+          setTabLineEnding(tabId, detectLineEnding(text));
+          markTabSaved(tabId);
         } catch (err) {
           console.error('[EncodingChange] failed to re-read file with encoding:', enc, err);
         }
       } else {
-        console.log('[EncodingChange] skipped re-read (not desktop or no filePath)');
+        setTabEncoding(tabId, enc);
       }
     },
-    [activeTab, setTabEncoding]
+    [activeTab, markTabSaved, setTabEncoding, setTabLineEnding]
   );
 
   // Handle file drop using native desktop drag-drop events.
@@ -806,16 +938,8 @@ function App() {
 
         try {
           const text = await file.text();
-          const currentTabs = useEditorStore.getState().tabs;
-          const existing = currentTabs.find((t) => t.title === fileName);
           const lineEnding = detectLineEnding(text);
-          if (existing) {
-            setActiveTabId(existing.id);
-            setTabLineEnding(existing.id, lineEnding);
-            updateEditorContent(existing.id, text);
-          } else {
-            createTab(fileName, undefined, undefined, 1, 'UTF-8', text, lineEnding);
-          }
+          createTab(fileName, undefined, undefined, 1, 'UTF-8', text, lineEnding);
         } catch (err) {
           console.error('Failed to read dropped file:', fileName, err);
         }
@@ -828,7 +952,7 @@ function App() {
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('drop', handleDrop);
     };
-  }, [setActiveTabId, createTab, setTabLineEnding]);
+  }, [createTab]);
 
   const canFormat = !!activeTab;
 
@@ -1062,7 +1186,7 @@ function App() {
         onTogglePreview={() => setPreviewVisible(!previewVisible)}
         onToggleSplit={handleToggleSplit}
         onToggleReadMode={handleToggleReadMode}
-        onToggleSettings={() => setSettingsVisible((v) => !v)}
+        onToggleSettings={handleToggleSettings}
         onToggleJsonForm={() => setJsonFormVisible(!jsonFormVisible)}
         canFormat={canFormat}
         canPreview={canPreview}
@@ -1251,12 +1375,14 @@ function App() {
                   <>
                     <div className="w-px bg-gray-200 dark:bg-gray-800 self-stretch flex-shrink-0" />
                     <div className="flex-1 h-full min-w-0">
-                      <JsonFormPanel
-                        tabId={activeTab.id}
-                        visible={jsonFormVisible}
-                        fullScreen={false}
-                        onToggleFullScreen={() => setJsonFormFullScreen(true)}
-                      />
+                      <React.Suspense fallback={null}>
+                        <JsonFormPanel
+                          tabId={activeTab.id}
+                          visible={jsonFormVisible}
+                          fullScreen={false}
+                          onToggleFullScreen={() => setJsonFormFullScreen(true)}
+                        />
+                      </React.Suspense>
                     </div>
                   </>
                 )}
@@ -1300,13 +1426,15 @@ function App() {
                 </div>
               ))}
             {jsonFormVisible && jsonFormFullScreen && activeTab && (activeTab.language === 'json' || activeTab.language === 'jsonl') && (
-              <JsonFormPanel
-                tabId={activeTab.id}
-                visible={jsonFormVisible}
-                fullScreen={true}
-                onToggleFullScreen={() => setJsonFormFullScreen(false)}
-                onExitFullScreen={() => { setJsonFormFullScreen(false); setJsonFormVisible(false); }}
-              />
+              <React.Suspense fallback={null}>
+                <JsonFormPanel
+                  tabId={activeTab.id}
+                  visible={jsonFormVisible}
+                  fullScreen={true}
+                  onToggleFullScreen={() => setJsonFormFullScreen(false)}
+                  onExitFullScreen={() => { setJsonFormFullScreen(false); setJsonFormVisible(false); }}
+                />
+              </React.Suspense>
             )}
             {previewVisible && previewFullScreen && activeTab && (activeTab.language === 'markdown' || activeTab.language === 'html') && (
               <div className="absolute inset-0 z-30 flex flex-col" style={{ backgroundColor: 'var(--te-bg-primary)' }}>
@@ -1338,7 +1466,11 @@ function App() {
           </div>
 
       {/* Settings Panel overlay */}
-      <SettingsPanel visible={settingsVisible} onClose={() => setSettingsVisible(false)} />
+      {settingsEverOpened && (
+        <React.Suspense fallback={null}>
+          <SettingsPanel visible={settingsVisible} onClose={() => setSettingsVisible(false)} />
+        </React.Suspense>
+      )}
 
           <DiagnosticsPanel
             tabId={activeTabId}

@@ -28,7 +28,8 @@ function onDragDropEvent(handler) {
   };
 }
 
-contextBridge.exposeInMainWorld('electronDesktop', {
+if (process.isMainFrame) contextBridge.exposeInMainWorld('electronDesktop', {
+  platform: process.platform,
   readFileAuto: (path) => ipcRenderer.invoke('file:readAuto', path),
   readFileWithEncoding: (path, encoding) => ipcRenderer.invoke('file:readWithEncoding', path, encoding),
   readFileMeta: (path) => ipcRenderer.invoke('file:readMeta', path),

@@ -7,12 +7,14 @@ const { listDirectory } = require('./services/directory.cjs');
 const { cancelSearch, searchDirectory } = require('./services/search.cjs');
 const { createWatcherManager } = require('./services/watcher.cjs');
 const { collectFileArgs } = require('./services/launchArgs.cjs');
+const { isAllowedRendererUrl: checkAllowedRendererUrl } = require('./services/ipcSecurity.cjs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 
 const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
+const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:1420';
 const pendingFiles = [];
 let mainWindow = null;
 let mainWindowState = null;
@@ -21,6 +23,33 @@ let rendererReadyForOpenFiles = false;
 
 function isString(value) {
   return typeof value === 'string' && value.length > 0;
+}
+
+function isAllowedRendererUrl(value) {
+  return checkAllowedRendererUrl(value, {
+    isDev,
+    devServerUrl,
+    entryFile: path.resolve(__dirname, '..', 'dist', 'index.html'),
+  });
+}
+
+function assertTrustedIpcSender(event) {
+  if (
+    !mainWindow ||
+    mainWindow.isDestroyed() ||
+    event.sender !== mainWindow.webContents ||
+    event.senderFrame !== mainWindow.webContents.mainFrame ||
+    !isAllowedRendererUrl(event.senderFrame.url)
+  ) {
+    throw new Error('Untrusted IPC sender');
+  }
+}
+
+function handleIpc(channel, listener) {
+  ipcMain.handle(channel, (event, ...args) => {
+    assertTrustedIpcSender(event);
+    return listener(event, ...args);
+  });
 }
 
 function logStartup(message, meta) {
@@ -194,9 +223,9 @@ function createWindow() {
   logStartup('window-created', { isDev, isPackaged: app.isPackaged, argv: process.argv.slice(1) });
 
   let rendererReadyToShow = false;
-  watcherManager = createWatcherManager((filePath) => {
+  watcherManager = createWatcherManager((change) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.webContents.send('file:changed', filePath);
+    mainWindow.webContents.send('file:changed', change);
   });
 
   const showWindow = () => {
@@ -213,12 +242,27 @@ function createWindow() {
   const showFallbackTimer = setTimeout(showWindow, 12000);
 
   if (isDev) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL || 'http://localhost:1420');
+    mainWindow.loadURL(devServerUrl);
   } else {
     const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
     logStartup('window-load-file', { indexPath });
     mainWindow.loadFile(indexPath);
   }
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!isAllowedRendererUrl(url)) event.preventDefault();
+  });
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const parsed = new URL(url);
+      if (['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+        shell.openExternal(url).catch(() => {});
+      }
+    } catch {
+      // Invalid URLs are denied below.
+    }
+    return { action: 'deny' };
+  });
 
   mainWindow.once('ready-to-show', () => {
     logStartup('ready-to-show', { rendererReadyToShow });
@@ -288,67 +332,67 @@ function forceRepaint(window) {
 }
 
 function registerIpc() {
-  ipcMain.handle('file:readAuto', (_event, filePath) => {
+  handleIpc('file:readAuto', (_event, filePath) => {
     if (!isString(filePath)) throw new Error('Invalid path');
     return fileService.readFileAuto(filePath);
   });
-  ipcMain.handle('file:readWithEncoding', (_event, filePath, encoding) => {
+  handleIpc('file:readWithEncoding', (_event, filePath, encoding) => {
     if (!isString(filePath) || !isString(encoding)) throw new Error('Invalid file read arguments');
     return fileService.readFileWithEncoding(filePath, encoding);
   });
-  ipcMain.handle('file:readMeta', (_event, filePath) => {
+  handleIpc('file:readMeta', (_event, filePath) => {
     if (!isString(filePath)) throw new Error('Invalid path');
     return fileService.readFileMeta(filePath);
   });
-  ipcMain.handle('file:writeWithEncoding', (_event, filePath, content, encoding) => {
+  handleIpc('file:writeWithEncoding', (_event, filePath, content, encoding) => {
     if (!isString(filePath) || typeof content !== 'string' || !isString(encoding)) {
       throw new Error('Invalid file write arguments');
     }
     return fileService.writeFile(filePath, content, encoding);
   });
-  ipcMain.handle('file:rename', (_event, oldPath, newPath) => {
+  handleIpc('file:rename', (_event, oldPath, newPath) => {
     if (!isString(oldPath) || !isString(newPath)) throw new Error('Invalid rename arguments');
     return fileService.renameFile(oldPath, newPath);
   });
-  ipcMain.handle('dir:list', (_event, dirPath) => {
+  handleIpc('dir:list', (_event, dirPath) => {
     if (!isString(dirPath)) throw new Error('Invalid path');
     return listDirectory(dirPath);
   });
-  ipcMain.handle('search:directory', (_event, dir, options, maxResults, searchId) => {
+  handleIpc('search:directory', (_event, dir, options, maxResults, searchId) => {
     if (!isString(dir) || !options || typeof options.query !== 'string') throw new Error('Invalid search arguments');
     return searchDirectory(dir, options, maxResults, isString(searchId) ? searchId : undefined);
   });
-  ipcMain.handle('search:cancel', (_event, searchId) => {
+  handleIpc('search:cancel', (_event, searchId) => {
     cancelSearch(isString(searchId) ? searchId : undefined);
   });
-  ipcMain.handle('watch:file', (_event, filePath) => {
+  handleIpc('watch:file', (_event, filePath) => {
     if (!isString(filePath)) throw new Error('Invalid path');
     watcherManager?.watch(filePath);
   });
-  ipcMain.handle('watch:unfile', (_event, filePath) => {
+  handleIpc('watch:unfile', (_event, filePath) => {
     if (!isString(filePath)) throw new Error('Invalid path');
     return watcherManager?.unwatch(filePath);
   });
-  ipcMain.handle('app:getPendingFiles', () => {
+  handleIpc('app:getPendingFiles', () => {
     rendererReadyForOpenFiles = true;
     return pendingFiles.splice(0);
   });
-  ipcMain.handle('dialog:openFile', async (_event, options = {}) => {
+  handleIpc('dialog:openFile', async (_event, options = {}) => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: options.multiple === false ? ['openFile'] : ['openFile', 'multiSelections'],
       filters: options.filters,
     });
     return result.canceled ? [] : result.filePaths;
   });
-  ipcMain.handle('dialog:openFolder', async () => {
+  handleIpc('dialog:openFolder', async () => {
     const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] });
     return result.canceled ? null : result.filePaths[0] ?? null;
   });
-  ipcMain.handle('dialog:saveFile', async (_event, options = {}) => {
+  handleIpc('dialog:saveFile', async (_event, options = {}) => {
     const result = await dialog.showSaveDialog(mainWindow, { defaultPath: options.suggestedName });
     return result.canceled ? null : result.filePath ?? null;
   });
-  ipcMain.handle('dialog:confirm', async (_event, message, options = {}) => {
+  handleIpc('dialog:confirm', async (_event, message, options = {}) => {
     const result = await dialog.showMessageBox(mainWindow, {
       type: 'question',
       buttons: ['OK', 'Cancel'],
@@ -359,39 +403,39 @@ function registerIpc() {
     });
     return result.response === 0;
   });
-  ipcMain.handle('dialog:message', async (_event, message, options = {}) => {
+  handleIpc('dialog:message', async (_event, message, options = {}) => {
     await dialog.showMessageBox(mainWindow, {
       type: options.kind || 'info',
       title: options.title || app.name,
       message: String(message),
     });
   });
-  ipcMain.handle('shell:revealInFolder', (_event, filePath) => {
+  handleIpc('shell:revealInFolder', (_event, filePath) => {
     if (!isString(filePath)) throw new Error('Invalid path');
     shell.showItemInFolder(filePath);
   });
-  ipcMain.handle('shell:openExternal', (_event, url) => {
+  handleIpc('shell:openExternal', (_event, url) => {
     const parsed = new URL(url);
     if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) throw new Error('Unsupported URL protocol');
     return shell.openExternal(url);
   });
-  ipcMain.handle('clipboard:writeText', (_event, text) => clipboard.writeText(String(text)));
-  ipcMain.handle('clipboard:readText', () => clipboard.readText());
-  ipcMain.handle('window:show', () => mainWindow?.show());
-  ipcMain.handle('app:rendererReady', () => {
+  handleIpc('clipboard:writeText', (_event, text) => clipboard.writeText(String(text)));
+  handleIpc('clipboard:readText', () => clipboard.readText());
+  handleIpc('window:show', () => mainWindow?.show());
+  handleIpc('app:rendererReady', () => {
     mainWindowState?.markRendererReadyToShow();
   });
-  ipcMain.handle('window:isMaximized', () => Boolean(mainWindow?.isMaximized()));
-  ipcMain.handle('window:minimize', () => mainWindow?.minimize());
-  ipcMain.handle('window:toggleMaximize', () => {
+  handleIpc('window:isMaximized', () => Boolean(mainWindow?.isMaximized()));
+  handleIpc('window:minimize', () => mainWindow?.minimize());
+  handleIpc('window:toggleMaximize', () => {
     if (!mainWindow) return false;
     if (mainWindow.isMaximized()) mainWindow.unmaximize();
     else mainWindow.maximize();
     return mainWindow.isMaximized();
   });
-  ipcMain.handle('window:close', () => mainWindow?.close());
-  ipcMain.handle('window:forceClose', () => mainWindow?.destroy());
-  ipcMain.handle('app:registerDefaultApp', async () => {
+  handleIpc('window:close', () => mainWindow?.close());
+  handleIpc('window:forceClose', () => mainWindow?.destroy());
+  handleIpc('app:registerDefaultApp', async () => {
     if (process.platform === 'win32') {
       await registerWindowsContextMenu();
       const { protectedExts } = await registerWindowsFileAssociations();

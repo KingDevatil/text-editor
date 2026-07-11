@@ -3,6 +3,7 @@ export interface EditorTab {
   title: string;
   language: Language;
   isDirty: boolean;
+  revision?: number;
   filePath?: string;
   encoding: Encoding;
   group?: 1 | 2;

@@ -13,9 +13,15 @@ export interface ReadFileResult {
   encoding: string;
 }
 
+export interface FileChangeEvent {
+  path: string;
+  kind: 'change' | 'unlink';
+}
+
 type Unlisten = () => void;
 
 interface ElectronDesktopBridge {
+  platform?: string;
   readFileAuto(path: string): Promise<ReadFileResult>;
   readFileWithEncoding(path: string, encoding: string): Promise<ReadFileResult>;
   readFileMeta(path: string): Promise<FileMeta>;
@@ -44,7 +50,7 @@ interface ElectronDesktopBridge {
   windowClose(): Promise<void>;
   windowForceClose(): Promise<void>;
   registerDefaultApp(): Promise<string>;
-  onFileChanged(handler: (path: string) => void): Unlisten;
+  onFileChanged(handler: (change: FileChangeEvent) => void): Unlisten;
   onOpenFile(handler: (path: string) => void): Unlisten;
   onDragDropEvent(handler: (paths: string[]) => void): Promise<Unlisten>;
 }
@@ -67,6 +73,10 @@ function requireDesktop(bridge: ElectronDesktopBridge | undefined): ElectronDesk
 export const desktopApi = {
   isDesktop(): boolean {
     return Boolean(electronBridge());
+  },
+
+  platform(): string {
+    return electronBridge()?.platform ?? 'browser';
   },
 
   async readFileAuto(path: string): Promise<ReadFileResult> {
@@ -200,7 +210,7 @@ export const desktopApi = {
     return requireDesktop(electronBridge()).registerDefaultApp();
   },
 
-  onFileChanged(handler: (path: string) => void): Unlisten {
+  onFileChanged(handler: (change: FileChangeEvent) => void): Unlisten {
     const electron = electronBridge();
     return electron ? electron.onFileChanged(handler) : () => {};
   },

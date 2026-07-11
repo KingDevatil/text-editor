@@ -1,4 +1,5 @@
 const fs = require('node:fs/promises');
+const { constants } = require('node:fs');
 const path = require('node:path');
 const iconv = require('iconv-lite');
 const jschardet = require('jschardet');
@@ -120,7 +121,40 @@ async function writeFile(filePath, content, encoding) {
 }
 
 async function renameFile(oldPath, newPath) {
-  await fs.rename(oldPath, newPath);
+  if (path.resolve(oldPath) === path.resolve(newPath)) return;
+
+  try {
+    const [sourceStat, targetStat] = await Promise.all([fs.stat(oldPath), fs.stat(newPath)]);
+    const [sourceRealPath, targetRealPath] = await Promise.all([fs.realpath(oldPath), fs.realpath(newPath)]);
+    const normalizeRealPath = (value) => process.platform === 'win32' ? value.toLowerCase() : value;
+    const sameResolvedPath = normalizeRealPath(sourceRealPath) === normalizeRealPath(targetRealPath);
+    const sameInode = sourceStat.ino !== 0 && sourceStat.dev === targetStat.dev && sourceStat.ino === targetStat.ino;
+    if (!sameResolvedPath && !sameInode) {
+      const error = new Error(`Target already exists: ${newPath}`);
+      error.code = 'EEXIST';
+      throw error;
+    }
+    if (sameResolvedPath) await fs.rename(oldPath, newPath);
+    else await fs.unlink(oldPath);
+    return;
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+
+  let targetCreated = false;
+  try {
+    try {
+      await fs.link(oldPath, newPath);
+    } catch (error) {
+      if (!['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'EXDEV'].includes(error?.code)) throw error;
+      await fs.copyFile(oldPath, newPath, constants.COPYFILE_EXCL);
+    }
+    targetCreated = true;
+    await fs.unlink(oldPath);
+  } catch (error) {
+    if (targetCreated) await fs.unlink(newPath).catch(() => {});
+    throw error;
+  }
 }
 
 module.exports = {

@@ -1,5 +1,9 @@
 const chokidar = require('chokidar');
 
+function shouldSuppressEvent(last, kind, now, windowMs = 500) {
+  return last?.kind === kind && now - last.time < windowMs;
+}
+
 function createWatcherManager(sendChanged) {
   const watchers = new Map();
   const lastEvents = new Map();
@@ -11,17 +15,16 @@ function createWatcherManager(sendChanged) {
         ignoreInitial: true,
         awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 },
       });
-      watcher.on('change', () => {
+      const emit = (kind) => {
         const now = Date.now();
-        const last = lastEvents.get(filePath) ?? 0;
-        if (now - last < 500) return;
-        lastEvents.set(filePath, now);
-        sendChanged(filePath);
-      });
-      watcher.on('unlink', () => {
-        lastEvents.set(filePath, Date.now());
-        sendChanged(filePath);
-      });
+        const last = lastEvents.get(filePath);
+        if (shouldSuppressEvent(last, kind, now)) return;
+        lastEvents.set(filePath, { kind, time: now });
+        sendChanged({ path: filePath, kind });
+      };
+      watcher.on('change', () => emit('change'));
+      watcher.on('add', () => emit('change'));
+      watcher.on('unlink', () => emit('unlink'));
       watcher.on('error', (error) => {
         console.error('[Watcher] failed:', filePath, error);
       });
@@ -43,4 +46,4 @@ function createWatcherManager(sendChanged) {
   };
 }
 
-module.exports = { createWatcherManager };
+module.exports = { createWatcherManager, shouldSuppressEvent };

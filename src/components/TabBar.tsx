@@ -284,8 +284,8 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
             onTabClose(contextMenu.tabId);
           }
           closeContextMenu();
-        }).catch(() => {
-          onTabClose(contextMenu.tabId);
+        }).catch((error) => {
+          console.error('[TabBar] close confirmation failed:', error);
           closeContextMenu();
         });
         return;
@@ -306,8 +306,8 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
       desktopApi.confirm('要关闭的页签中有未保存的更改，确定关闭吗？', { title: '未保存的更改' }).then((ok) => {
         if (ok && idsToClose.length > 0) onCloseTabs(idsToClose);
         closeContextMenu();
-      }).catch(() => {
-        if (idsToClose.length > 0) onCloseTabs(idsToClose);
+      }).catch((error) => {
+        console.error('[TabBar] close confirmation failed:', error);
         closeContextMenu();
       });
       return;
@@ -331,8 +331,8 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
         desktopApi.confirm('要关闭的页签中有未保存的更改，确定关闭吗？', { title: '未保存的更改' }).then((ok) => {
           if (ok) onCloseTabs(idsToClose);
           closeContextMenu();
-        }).catch(() => {
-          onCloseTabs(idsToClose);
+        }).catch((error) => {
+          console.error('[TabBar] close confirmation failed:', error);
           closeContextMenu();
         });
         return;
@@ -355,8 +355,8 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
         desktopApi.confirm('要关闭的页签中有未保存的更改，确定关闭吗？', { title: '未保存的更改' }).then((ok) => {
           if (ok) onCloseTabs(idsToClose);
           closeContextMenu();
-        }).catch(() => {
-          onCloseTabs(idsToClose);
+        }).catch((error) => {
+          console.error('[TabBar] close confirmation failed:', error);
           closeContextMenu();
         });
         return;
@@ -454,7 +454,9 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
             if (isDirty) {
               desktopApi.confirm(`"${tab.title}" 有未保存的更改，确定要关闭吗？`, { title: '未保存的更改' }).then((ok) => {
                 if (ok) onTabClose(tab.id);
-              }).catch(() => onTabClose(tab.id));
+              }).catch((error) => {
+                console.error('[TabBar] close confirmation failed:', error);
+              });
               return;
             }
             onTabClose(tab.id);

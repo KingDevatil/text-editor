@@ -69,6 +69,7 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
       title,
       language: lang,
       isDirty: false,
+      revision: 0,
       filePath,
       encoding,
       group,
@@ -90,7 +91,11 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
 
   markTabDirty: (tabId, isDirty) => {
     set((state) => ({
-      tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, isDirty } : tab)),
+      tabs: state.tabs.map((tab) => (
+        tab.id === tabId
+          ? { ...tab, isDirty, revision: isDirty ? (tab.revision ?? 0) + 1 : tab.revision }
+          : tab
+      )),
     }));
   },
 
@@ -208,7 +213,9 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
 
   setTabEncoding: (tabId, encoding) => {
     set((state) => ({
-      tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, encoding } : tab)),
+      tabs: state.tabs.map((tab) => (
+        tab.id === tabId ? { ...tab, encoding, revision: (tab.revision ?? 0) + 1 } : tab
+      )),
     }));
   },
 
@@ -232,7 +239,9 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
 
   setTabLineEnding: (tabId, lineEnding) => {
     set((state) => ({
-      tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, lineEnding } : tab)),
+      tabs: state.tabs.map((tab) => (
+        tab.id === tabId ? { ...tab, lineEnding, revision: (tab.revision ?? 0) + 1 } : tab
+      )),
     }));
   },
 
