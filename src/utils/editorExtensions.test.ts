@@ -17,6 +17,7 @@ import { getAutocompleteExtension } from './autocomplete';
 import { foldGutter, foldKeymap, indentUnit } from '@codemirror/language';
 import { json } from '@codemirror/lang-json';
 import { xml } from '@codemirror/lang-xml';
+import { undo } from '@codemirror/commands';
 import { keymap } from '@codemirror/view';
 import { forceLinting, forEachDiagnostic } from '@codemirror/lint';
 import { highlightSelectionMatches } from '@codemirror/search';
@@ -334,6 +335,9 @@ describe('buildBaseExtensions', () => {
     expect(insertedLine.text).toBe('');
     expect(view.state.doc.line(insertedLine.number - 1).text).toBe(currentLine);
     expect(view.state.doc.line(insertedLine.number + 1).text).toBe('4.黄金五段失败不扣分；');
+
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(doc);
 
     view.destroy();
   });

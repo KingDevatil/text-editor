@@ -1,5 +1,5 @@
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightActiveLine, highlightWhitespace, highlightTrailingWhitespace, highlightSpecialChars, scrollPastEnd as scrollPastEndExt, rectangularSelection, crosshairCursor, drawSelection, dropCursor, ViewPlugin, ViewUpdate, Decoration } from '@codemirror/view';
-import { EditorState, Compartment, EditorSelection, Prec, countColumn, type Extension, RangeSetBuilder } from '@codemirror/state';
+import { EditorState, Compartment, EditorSelection, Prec, Transaction, countColumn, type Extension, RangeSetBuilder } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentMore, indentLess, insertNewlineAndIndent } from '@codemirror/commands';
 import { selectNextOccurrence, selectSelectionMatches, highlightSelectionMatches } from '@codemirror/search';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
@@ -297,6 +297,7 @@ export function alignNewlineIndentToPreviousLine(view: EditorView, inheritedInde
   view.dispatch({
     changes: { from: line.from, to: selection.head, insert: inheritedIndent },
     selection: { anchor: line.from + inheritedIndent.length },
+    annotations: Transaction.addToHistory.of(false),
     userEvent: 'input',
   });
   return true;
