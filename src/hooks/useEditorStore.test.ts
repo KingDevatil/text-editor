@@ -12,6 +12,27 @@ describe('useEditorStore', () => {
     });
   });
 
+  it('increments the tab revision for content and persisted metadata changes', () => {
+    const tab = useEditorStore.getState().createTab('revision.txt');
+    expect(tab.revision).toBe(0);
+
+    useEditorStore.getState().markTabDirty(tab.id, true);
+    useEditorStore.getState().setTabEncoding(tab.id, 'UTF-8 BOM');
+    useEditorStore.getState().setTabLineEnding(tab.id, 'CRLF');
+
+    expect(useEditorStore.getState().tabs.find((candidate) => candidate.id === tab.id)?.revision).toBe(3);
+  });
+
+  it('does not change the revision when a tab is marked saved', () => {
+    const tab = useEditorStore.getState().createTab('saved.txt');
+    useEditorStore.getState().markTabDirty(tab.id, true);
+    useEditorStore.getState().markTabSaved(tab.id);
+
+    const saved = useEditorStore.getState().tabs.find((candidate) => candidate.id === tab.id);
+    expect(saved?.revision).toBe(1);
+    expect(saved?.isDirty).toBe(false);
+  });
+
   // ── setActiveTabId ──
   it('setActiveTabId syncs activeGroup1TabId when tab is in group 1', () => {
     useEditorStore.setState({

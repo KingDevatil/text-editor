@@ -162,7 +162,8 @@ export function useMarkdownDocumentSearch(containerRef: RefObject<HTMLElement | 
       return () => clearHighlights(container);
     }
 
-    const nextIndex = direction === -1 ? matches.length - 1 : 0;
+    const initialDirection = useMarkdownSearchStore.getState().direction;
+    const nextIndex = initialDirection === -1 ? matches.length - 1 : 0;
     setActiveMatch(matches, nextIndex);
     setResult(matches.length, nextIndex + 1);
 

@@ -3,7 +3,7 @@ import type { Encoding, Language } from '../types';
 import { EXT_TO_LANGUAGE } from '../types';
 import { useEditorStore } from './useEditorStore';
 import { useSettingsStore } from './useSettingsStore';
-import { updateEditorContent } from './useEditorStatePool';
+import { getEditorContent, hasEditorState, updateEditorContent } from './useEditorStatePool';
 import { addToMru } from './useMru';
 import { detectLineEnding } from '../utils/lineEnding';
 import { perf } from '../utils/perf';
@@ -17,8 +17,14 @@ function getLanguageFromFileName(fileName: string): Language {
   return EXT_TO_LANGUAGE[ext] || 'plaintext';
 }
 
-export function normalizePath(p: string): string {
-  return p.toLowerCase().replace(/\\/g, '/');
+export function normalizePath(p: string, platform = 'win32'): string {
+  const normalized = p.replace(/\\/g, '/');
+  return platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function currentTabContent(tabId: string): string {
+  if (hasEditorState(tabId)) return getEditorContent(tabId);
+  return useEditorStore.getState().tabs.find((tab) => tab.id === tabId)?.initialContent ?? '';
 }
 
 export type OpenFileResult = ReadFileResult;
@@ -51,19 +57,24 @@ export function useFileOpener() {
       const openStart = performance.now();
 
       try {
+        const platform = desktopApi.platform();
         // Fast path: content already provided (e.g. from drag-drop)
         if (options?.text !== undefined) {
           const text = options.text;
           const detectedEncoding = options.encoding || 'UTF-8';
           const fileName = filePath.split(/[\\/]/).pop() || filePath;
-          const existing = useEditorStore.getState().tabs.find((t) => normalizePath(t.filePath || '') === normalizePath(filePath));
+          const existing = useEditorStore.getState().tabs.find((t) =>
+            normalizePath(t.filePath || '', platform) === normalizePath(filePath, platform)
+          );
           const lineEnding = detectLineEnding(text);
 
           if (existing) {
             setActiveTabId(existing.id);
+            if (existing.isDirty) return;
             setTabEncoding(existing.id, detectedEncoding as Encoding);
             setTabLineEnding(existing.id, lineEnding);
             updateEditorContent(existing.id, text);
+            markTabSaved(existing.id);
           } else {
             const isLarge = text.length > LARGE_FILE_THRESHOLD;
             const lang = isLarge ? 'plaintext' : getLanguageFromFileName(fileName);
@@ -75,15 +86,21 @@ export function useFileOpener() {
         }
 
         const fileName = filePath.split(/[\\/]/).pop() || filePath;
-        const existing = useEditorStore.getState().tabs.find((t) => normalizePath(t.filePath || '') === normalizePath(filePath));
+        const existing = useEditorStore.getState().tabs.find((t) =>
+          normalizePath(t.filePath || '', platform) === normalizePath(filePath, platform)
+        );
 
         if (existing) {
-          // Re-read existing tab
-          const result = await readFileAuto(filePath);
           setActiveTabId(existing.id);
+          if (existing.isDirty) return;
+          const contentBeforeRead = currentTabContent(existing.id);
+          const result = await readFileAuto(filePath);
+          const latest = useEditorStore.getState().tabs.find((tab) => tab.id === existing.id);
+          if (!latest || latest.isDirty || currentTabContent(existing.id) !== contentBeforeRead) return;
           setTabEncoding(existing.id, result.encoding as Encoding);
           setTabLineEnding(existing.id, detectLineEnding(result.text));
           updateEditorContent(existing.id, result.text);
+          markTabSaved(existing.id);
           return;
         }
 
@@ -104,10 +121,11 @@ export function useFileOpener() {
           perf.recordFileOpen(meta.file_size, performance.now() - openStart);
 
           runBackground(() => {
+            const expectedPartialContent = meta.first_chunk;
             readFileAuto(filePath)
               .then((result) => {
-                const isStillOpen = useEditorStore.getState().tabs.some((t) => t.id === tab.id);
-                if (!isStillOpen) return;
+                const latest = useEditorStore.getState().tabs.find((candidate) => candidate.id === tab.id);
+                if (!latest || latest.isDirty || currentTabContent(tab.id) !== expectedPartialContent) return;
                 setTabInitialContent(tab.id, result.text);
                 updateEditorContent(tab.id, result.text);
                 setTabLineEnding(tab.id, detectLineEnding(result.text));

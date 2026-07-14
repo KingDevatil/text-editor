@@ -1,4 +1,5 @@
-export function prepareHtmlSrcDoc(content: string, _isDark: boolean): string {
+export function prepareHtmlSrcDoc(content: string, isDark: boolean): string {
+  void isDark;
   const scrollbarCss = `
     html, body {
       scrollbar-width: none;

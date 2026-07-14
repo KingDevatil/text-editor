@@ -23,4 +23,9 @@ describe('normalizePath', () => {
   it('handles forward-only paths', () => {
     expect(normalizePath('/home/user/file.txt')).toBe('/home/user/file.txt');
   });
+
+  it('preserves path casing on case-sensitive platforms', () => {
+    expect(normalizePath('/home/user/A.txt', 'linux')).toBe('/home/user/A.txt');
+    expect(normalizePath('/home/user/a.txt', 'linux')).toBe('/home/user/a.txt');
+  });
 });

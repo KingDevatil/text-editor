@@ -1,8 +1,10 @@
 import React from 'react';
+import { EditorState } from '@codemirror/state';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { useEditorStore } from './useEditorStore';
 import { useSessionRestore } from './useSessionRestore';
+import { getEditorContent, setEditorState } from './useEditorStatePool';
 
 const SESSION_KEY = 'te2-session';
 
@@ -87,5 +89,48 @@ describe('useSessionRestore', () => {
     expect(tab.title).toBe('existing.txt');
     expect(tab.filePath).toBe(existingPath);
     expect(localStorage.getItem(SESSION_KEY)).toBeNull();
+  });
+
+  it('does not replace edits made before a progressive restore finishes', async () => {
+    const filePath = 'C:\\tmp\\large.txt';
+    let finishRead!: (value: { text: string; encoding: string }) => void;
+    window.electronDesktop = {
+      readFileMeta: vi.fn(async () => ({
+        file_size: 3 * 1024 * 1024,
+        encoding: 'UTF-8',
+        total_lines: 1,
+        first_chunk: 'partial',
+      })),
+      readFileAuto: vi.fn(() => new Promise((resolve) => {
+        finishRead = resolve;
+      })),
+    } as unknown as typeof window.electronDesktop;
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      tabs: [{
+        title: 'large.txt',
+        filePath,
+        language: 'plaintext',
+        encoding: 'UTF-8',
+        group: 1,
+        scrollTop: 0,
+      }],
+      activeFilePath: filePath,
+      splitMode: false,
+      timestamp: Date.now(),
+    }));
+
+    render(<RestoreHarness />);
+    await waitFor(() => expect(useEditorStore.getState().tabs).toHaveLength(1));
+    const [tab] = useEditorStore.getState().tabs;
+    setEditorState(tab.id, EditorState.create({ doc: 'partial + user edit' }));
+    useEditorStore.getState().markTabDirty(tab.id, true);
+
+    await act(async () => {
+      finishRead({ text: 'complete file from disk', encoding: 'UTF-8' });
+      await Promise.resolve();
+    });
+
+    expect(getEditorContent(tab.id)).toBe('partial + user edit');
+    expect(useEditorStore.getState().tabs[0].isDirty).toBe(true);
   });
 });

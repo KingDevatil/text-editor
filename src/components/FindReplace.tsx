@@ -101,13 +101,16 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
   }, [folderModeRef, setFolderModeWithDefaultDir]);
 
   useEffect(() => {
+    let cancelled = false;
     if (visible) {
       const nextSearchTarget =
         activeTab?.language === 'markdown' &&
         (readMode || (previewVisible && isMarkdownSearchSurface(document.activeElement)))
           ? 'markdown'
           : 'editor';
-      setSearchTarget(nextSearchTarget);
+      queueMicrotask(() => {
+        if (!cancelled) setSearchTarget(nextSearchTarget);
+      });
 
       const view = activeTabId ? getActiveView(activeTabId) : undefined;
       if (view && !folderMode && nextSearchTarget === 'editor') {
@@ -132,8 +135,9 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
         view.dispatch({ effects: setSearchQuery.of(null) });
       }
       setMarkdownQuery(null);
-      setSearchTarget('editor');
       queueMicrotask(() => {
+        if (cancelled) return;
+        setSearchTarget('editor');
         setFindText('');
         setReplaceText('');
         setMatchCount(0);
@@ -142,6 +146,9 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
         setSearchDir('');
       });
     }
+    return () => {
+      cancelled = true;
+    };
   }, [visible, activeTabId, activeTab?.language, folderMode, previewVisible, readMode, setMarkdownQuery]);
 
   // Sync search highlight + debounced match counting

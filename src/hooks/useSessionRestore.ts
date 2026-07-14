@@ -2,7 +2,9 @@ import { useEffect } from 'react';
 import { useEditorStore } from './useEditorStore';
 import {
   getEditorState,
+  getEditorContent,
   getEditorScrollTop,
+  hasEditorState,
   setPendingScrollTop,
   setPendingSelection,
   updateEditorContent,
@@ -101,6 +103,11 @@ function takeUserOpenedFile(): string | null {
 /** Promise that resolves when session restore finishes (or immediately if no session). */
 let sessionRestorePromise: Promise<void> | null = null;
 
+function currentTabContent(tabId: string): string {
+  if (hasEditorState(tabId)) return getEditorContent(tabId);
+  return useEditorStore.getState().tabs.find((tab) => tab.id === tabId)?.initialContent ?? '';
+}
+
 export function waitForSessionRestore(): Promise<void> {
   return sessionRestorePromise ?? Promise.resolve();
 }
@@ -166,10 +173,11 @@ export function useSessionRestore() {
                 st.lineEnding as import('../types').LineEnding
               );
               const restoredTabId = newTab.id;
+              const expectedPartialContent = firstChunk;
               desktopApi.readFileAuto(st.filePath)
                 .then((result) => {
-                  const isStillOpen = useEditorStore.getState().tabs.some((tab) => tab.id === restoredTabId);
-                  if (!isStillOpen) return;
+                  const latest = useEditorStore.getState().tabs.find((tab) => tab.id === restoredTabId);
+                  if (!latest || latest.isDirty || currentTabContent(restoredTabId) !== expectedPartialContent) return;
                   const normalizedText = normalizeLineEnding(
                     result.text,
                     st.lineEnding as import('../types').LineEnding
