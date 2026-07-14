@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EditorState, StateField } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorView, runScopeHandlers } from '@codemirror/view';
 import {
   createCompartments,
   buildBaseExtensions,
@@ -16,6 +16,7 @@ import { getLinterExtension } from './lint';
 import { getAutocompleteExtension } from './autocomplete';
 import { foldGutter, foldKeymap, indentUnit } from '@codemirror/language';
 import { json } from '@codemirror/lang-json';
+import { xml } from '@codemirror/lang-xml';
 import { keymap } from '@codemirror/view';
 import { forceLinting, forEachDiagnostic } from '@codemirror/lint';
 import { highlightSelectionMatches } from '@codemirror/search';
@@ -295,6 +296,62 @@ describe('buildBaseExtensions', () => {
 
     expect(view.state.doc.toString()).toBe('{\n\t"realm_names": [\n\t\t\n\t]\n}');
     expect(view.state.selection.main.head).toBe(cursor + 3);
+
+    view.destroy();
+  });
+
+  it('routes a real Enter key through the XML indentation fallback', () => {
+    const doc = '<Root>\n\t<SubRule Desc="1.青铜段位失败不扣分；\n2.白银段位失败扣5分；\n3.黄金段位失败扣7分；\n4.黄金五段失败不扣分；\n5.白金段位失败扣9分；" />\n</Root>';
+    const currentLine = '3.黄金段位失败扣7分；';
+    const cursor = doc.indexOf(currentLine) + currentLine.length;
+    const compartments = createCompartments();
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: cursor },
+      extensions: [
+        ...buildBaseExtensions(
+          compartments,
+          'xml',
+          defaultDarkColors,
+          14,
+          false,
+          false,
+          false,
+          false,
+          false,
+          'tab-xml-indent',
+          false,
+          true,
+        ),
+        xml(),
+      ],
+    });
+    const view = new EditorView({ state });
+    const event = new KeyboardEvent('keydown', { key: 'Enter' });
+
+    expect(runScopeHandlers(view, event, 'editor')).toBe(true);
+    const insertedLine = view.state.doc.lineAt(view.state.selection.main.head);
+    expect(insertedLine.text).toBe('');
+    expect(view.state.doc.line(insertedLine.number - 1).text).toBe(currentLine);
+    expect(view.state.doc.line(insertedLine.number + 1).text).toBe('4.黄金五段失败不扣分；');
+
+    view.destroy();
+  });
+
+  it('keeps structural XML indentation after an opening tag at column zero', () => {
+    const doc = '<Root></Root>';
+    const cursor = '<Root>'.length;
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: cursor },
+      extensions: [indentUnit.of('\t'), xml()],
+    });
+    const view = new EditorView({ state });
+
+    insertNewlineAndIndentWithFallback(view);
+
+    expect(view.state.doc.toString()).toBe('<Root>\n\t\n</Root>');
+    expect(view.state.doc.lineAt(view.state.selection.main.head).text).toBe('\t');
 
     view.destroy();
   });

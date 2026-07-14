@@ -76,6 +76,10 @@ describe('MarkdownPreview', () => {
       '| Alpha | 1 |',
     ].join('\n');
 
+    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      const width = this.classList.contains('prose') ? 200 : 0;
+      return { width, height: 100, top: 0, right: width, bottom: 100, left: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    });
     const { container } = render(<MarkdownPreview tabId="tab1" theme="light" visible={true} />);
     const handle = screen.getByRole('separator', { name: 'Resize table column' });
 
@@ -83,8 +87,36 @@ describe('MarkdownPreview', () => {
     fireEvent.pointerMove(window, { clientX: 140 });
     fireEvent.pointerUp(window);
 
-    const firstCol = container.querySelector('col');
-    expect(firstCol).toHaveStyle({ width: '88px' });
+    const cols = Array.from(container.querySelectorAll('col'));
+    expect(cols[0]).toHaveStyle({ width: '140px' });
+    expect(cols[1]).toHaveStyle({ width: '60px' });
+    rectSpy.mockRestore();
+  });
+
+  it('moves only the dragged separator by resizing its adjacent columns', () => {
+    currentContent = [
+      '| A | B | C |',
+      '| --- | --- | --- |',
+      '| 1 | 2 | 3 |',
+    ].join('\n');
+    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      const width = this.classList.contains('prose') ? 900 : 0;
+      return { width, height: 100, top: 0, right: width, bottom: 100, left: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    });
+
+    const { container } = render(<MarkdownPreview tabId="tab1" theme="light" visible={true} />);
+    const handles = screen.getAllByRole('separator', { name: 'Resize table column' });
+    expect(handles).toHaveLength(2);
+    fireEvent.pointerDown(handles[1], { clientX: 300 });
+    fireEvent.pointerMove(window, { clientX: 200 });
+    fireEvent.pointerUp(window);
+
+    const cols = Array.from(container.querySelectorAll('col'));
+    expect(cols[0]).toHaveStyle({ width: '300px' });
+    expect(cols[1]).toHaveStyle({ width: '200px' });
+    expect(cols[2]).toHaveStyle({ width: '400px' });
+    expect(container.querySelector('table')).toHaveStyle({ width: '900px' });
+    rectSpy.mockRestore();
   });
 
   it('initializes table columns evenly when later columns contain long text', () => {

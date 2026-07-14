@@ -2,6 +2,16 @@ import { useEffect, type RefObject } from 'react';
 
 const MIN_COLUMN_WIDTH = 48;
 
+interface TableResizeState {
+  widths: number[];
+  userResized: boolean;
+}
+
+interface TableEnhancement {
+  cleanup: () => void;
+  state: TableResizeState;
+}
+
 function getFirstRowCells(table: HTMLTableElement): HTMLTableCellElement[] {
   const row = table.tHead?.rows[0] ?? table.rows[0];
   if (!row) return [];
@@ -59,26 +69,41 @@ function ensureColgroup(table: HTMLTableElement, widths: number[]): HTMLTableCol
   return cols;
 }
 
-function enhanceTable(table: HTMLTableElement, container: HTMLElement): () => void {
-  if (table.dataset.resizableMarkdownTable === 'true') return () => {};
-
+function enhanceTable(
+  table: HTMLTableElement,
+  container: HTMLElement,
+  savedState?: TableResizeState
+): TableEnhancement {
   const cells = getFirstRowCells(table);
-  if (cells.length < 2) return () => {};
+  if (cells.length < 2) {
+    return {
+      cleanup: () => {},
+      state: savedState ?? { widths: [], userResized: false },
+    };
+  }
+  const state = savedState && savedState.widths.length === cells.length
+    ? savedState
+    : {
+        widths: getInitialColumnWidths(table, container, cells.length),
+        userResized: false,
+      };
+  if (table.dataset.resizableMarkdownTable === 'true') {
+    return { cleanup: () => {}, state };
+  }
 
   table.dataset.resizableMarkdownTable = 'true';
   table.classList.add('markdown-resizable-table');
 
-  const widths = getInitialColumnWidths(table, container, cells.length);
+  const widths = state.widths;
   const cols = ensureColgroup(table, widths);
   setTableWidth(table, widths);
-  let userResized = false;
 
   const cleanupFns: Array<() => void> = [];
 
   const resizeObserver = typeof ResizeObserver === 'undefined'
     ? null
     : new ResizeObserver(() => {
-        if (userResized) return;
+        if (state.userResized) return;
         const nextWidths = getInitialColumnWidths(table, container, cells.length);
         if (nextWidths.every((width, index) => width === widths[index])) return;
         nextWidths.forEach((width, index) => {
@@ -106,16 +131,23 @@ function enhanceTable(table: HTMLTableElement, container: HTMLElement): () => vo
       event.stopPropagation();
 
       const startX = event.clientX;
-      const startWidth = widths[columnIndex];
-      userResized = true;
+      const startLeftWidth = widths[columnIndex];
+      const startRightWidth = widths[columnIndex + 1];
+      state.userResized = true;
       document.body.classList.add('markdown-table-resizing');
       table.classList.add('markdown-table-is-resizing');
 
       const handleMove = (moveEvent: PointerEvent | MouseEvent) => {
         moveEvent.preventDefault();
-        const nextWidth = Math.max(MIN_COLUMN_WIDTH, startWidth + moveEvent.clientX - startX);
-        widths[columnIndex] = nextWidth;
-        setColumnWidth(cols[columnIndex], nextWidth);
+        const requestedDelta = moveEvent.clientX - startX;
+        const delta = Math.max(
+          MIN_COLUMN_WIDTH - startLeftWidth,
+          Math.min(requestedDelta, startRightWidth - MIN_COLUMN_WIDTH)
+        );
+        widths[columnIndex] = startLeftWidth + delta;
+        widths[columnIndex + 1] = startRightWidth - delta;
+        setColumnWidth(cols[columnIndex], widths[columnIndex]);
+        setColumnWidth(cols[columnIndex + 1], widths[columnIndex + 1]);
         setTableWidth(table, widths);
       };
 
@@ -147,10 +179,13 @@ function enhanceTable(table: HTMLTableElement, container: HTMLElement): () => vo
     });
   });
 
-  return () => {
-    cleanupFns.forEach((cleanup) => cleanup());
-    table.classList.remove('markdown-resizable-table');
-    delete table.dataset.resizableMarkdownTable;
+  return {
+    state,
+    cleanup: () => {
+      cleanupFns.forEach((cleanup) => cleanup());
+      table.classList.remove('markdown-resizable-table');
+      delete table.dataset.resizableMarkdownTable;
+    },
   };
 }
 
@@ -165,8 +200,10 @@ export function useResizableMarkdownTables(
     if (!container) return;
 
     const tableCleanups = new Map<HTMLTableElement, () => void>();
+    const tableStates = new Map<number, TableResizeState>();
     const syncTables = () => {
-      const currentTables = new Set(container.querySelectorAll<HTMLTableElement>('table'));
+      const currentTableList = Array.from(container.querySelectorAll<HTMLTableElement>('table'));
+      const currentTables = new Set(currentTableList);
 
       tableCleanups.forEach((cleanup, table) => {
         if (currentTables.has(table)) return;
@@ -174,9 +211,11 @@ export function useResizableMarkdownTables(
         tableCleanups.delete(table);
       });
 
-      currentTables.forEach((table) => {
+      currentTableList.forEach((table, tableIndex) => {
         if (tableCleanups.has(table)) return;
-        tableCleanups.set(table, enhanceTable(table, container));
+        const enhancement = enhanceTable(table, container, tableStates.get(tableIndex));
+        tableStates.set(tableIndex, enhancement.state);
+        tableCleanups.set(table, enhancement.cleanup);
       });
     };
 

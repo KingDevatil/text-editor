@@ -3,7 +3,7 @@ import { EditorState, Compartment, EditorSelection, Prec, countColumn, type Exte
 import { defaultKeymap, history, historyKeymap, indentMore, indentLess, insertNewlineAndIndent } from '@codemirror/commands';
 import { selectNextOccurrence, selectSelectionMatches, highlightSelectionMatches } from '@codemirror/search';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
-import { foldGutter, foldKeymap, indentOnInput, indentUnit } from '@codemirror/language';
+import { foldGutter, foldKeymap, indentOnInput, indentUnit, syntaxTree } from '@codemirror/language';
 import { unicodeHighlight as unicodeHighlightExt } from './unicodeHighlight';
 import { eolMarkers } from './showInvisibles';
 import { loadLanguageExtensions, getLanguageExtensionsSync } from './languageExtensions';
@@ -245,7 +245,10 @@ export function insertNewlineAndIndentWithFallback(view: EditorView): boolean {
   const inheritedIndent = beforeLine.text.match(/^[\t ]*/)?.[0] ?? '';
   const handled = insertNewlineAndIndent(view);
 
-  if (!handled || inheritedIndent.length === 0) {
+  if (
+    !handled
+    || (inheritedIndent.length === 0 && !isInsideAttributeValue(beforeState, beforeSelection.head))
+  ) {
     return handled;
   }
 
@@ -264,9 +267,19 @@ function shouldInheritPreviousLineIndent(lineText: string, cursorOffset: number)
   return lastChar !== '{' && lastChar !== '[' && lastChar !== '(';
 }
 
+function isInsideAttributeValue(state: EditorState, pos: number): boolean {
+  let node = syntaxTree(state).resolveInner(pos, -1);
+  while (true) {
+    if (node.name === 'AttributeValue') return true;
+    const parent = node.parent;
+    if (parent === null) return false;
+    node = parent;
+  }
+}
+
 export function alignNewlineIndentToPreviousLine(view: EditorView, inheritedIndent: string): boolean {
   const selection = view.state.selection.main;
-  if (!selection.empty || inheritedIndent.length === 0) {
+  if (!selection.empty) {
     return false;
   }
 
