@@ -140,12 +140,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center"
       style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
-      onClick={handleClose}
     >
       <div
         className="w-[640px] max-w-[92vw] h-[520px] max-h-[85vh] flex flex-col rounded-xl shadow-2xl border overflow-hidden"
         style={{ backgroundColor: 'var(--te-bg-secondary)', borderColor: 'var(--te-border)' }}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b shrink-0" style={{ borderColor: 'var(--te-border)' }}>

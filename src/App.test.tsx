@@ -300,4 +300,17 @@ describe('App', () => {
     fireEvent.click(screen.getByTitle('设置'));
     expect(await screen.findByText('当前主题')).toBeInTheDocument();
   });
+
+  it('keeps settings open when clicking outside the dialog', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByTitle('设置'));
+    const heading = await screen.findByRole('heading', { name: '设置' });
+    const backdrop = heading.closest('div.fixed.inset-0');
+    expect(backdrop).not.toBeNull();
+
+    fireEvent.click(backdrop!);
+
+    expect(screen.getByRole('heading', { name: '设置' })).toBeInTheDocument();
+  });
 });
