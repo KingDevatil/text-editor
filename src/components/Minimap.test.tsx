@@ -123,4 +123,28 @@ describe('Minimap', () => {
 
     expect(ctxMock.fillRect.mock.calls.length).toBeGreaterThan(fillRectCallsBefore);
   });
+
+  it('samples a large document instead of visiting every line', () => {
+    const line = vi.fn((n: number) => ({ text: `line ${n}`, from: n * 10, to: n * 10 + 9 }));
+    const largeView = {
+      ...mockView,
+      state: {
+        ...mockView.state,
+        doc: {
+          ...mockView.state.doc,
+          lines: 200000,
+          length: 2_000_000,
+          line,
+          lineAt: (pos: number) => ({ number: Math.max(1, Math.floor(pos / 10) + 1) }),
+        },
+      },
+      viewport: { from: 0, to: 500 },
+    };
+    const viewRef = { current: largeView as unknown as import('@codemirror/view').EditorView };
+    render(<Minimap tabId="large" viewRef={viewRef} theme="dark" />);
+
+    window.dispatchEvent(new CustomEvent('te-theme-change'));
+
+    expect(line.mock.calls.length).toBeLessThan(2000);
+  });
 });

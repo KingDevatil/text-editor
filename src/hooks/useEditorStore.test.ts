@@ -33,6 +33,17 @@ describe('useEditorStore', () => {
     expect(saved?.isDirty).toBe(false);
   });
 
+  it('does not rebuild tab state for every edit after the dirty flag is already set', () => {
+    const tab = useEditorStore.getState().createTab('typing.txt');
+    useEditorStore.getState().markTabDirty(tab.id, true);
+    const tabsAfterFirstEdit = useEditorStore.getState().tabs;
+
+    useEditorStore.getState().markTabDirty(tab.id, true);
+
+    expect(useEditorStore.getState().tabs).toBe(tabsAfterFirstEdit);
+    expect(useEditorStore.getState().tabs[0].revision).toBe(1);
+  });
+
   // ── setActiveTabId ──
   it('setActiveTabId syncs activeGroup1TabId when tab is in group 1', () => {
     useEditorStore.setState({
@@ -327,6 +338,14 @@ describe('useEditorStore', () => {
     expect(state.activeTabId).toBe(newTab.id);
     expect(state.activeGroup2TabId).toBe(newTab.id);
     expect(state.activeGroup1TabId).toBe('tab-a');
+  });
+
+  it('creates a search-results tab without a disk file path', () => {
+    const tab = useEditorStore.getState().createVirtualTab('查找结果', 'searchResults');
+
+    expect(tab.kind).toBe('searchResults');
+    expect(tab.filePath).toBeUndefined();
+    expect(tab.isDirty).toBe(false);
   });
 
   // ── setSplitMode ──

@@ -7,6 +7,10 @@ const jschardet = require('jschardet');
 const META_CHUNK_SIZE = 256 * 1024;
 
 const aliases = new Map([
+  // ASCII is a strict subset of UTF-8. Promoting it prevents silent data loss
+  // when a user adds non-ASCII text and saves with the detected encoding.
+  ['ascii', 'UTF-8'],
+  ['us-ascii', 'UTF-8'],
   ['utf-8', 'UTF-8'],
   ['utf8', 'UTF-8'],
   ['utf-16le', 'UTF-16LE'],

@@ -7,12 +7,11 @@ import { useFileOpener, normalizePath } from './hooks/useFileOpener';
 import { useFileWatcher } from './hooks/useFileWatcher';
 import { useSessionRestore, saveSession, recordUserOpenedFile, waitForSessionRestore } from './hooks/useSessionRestore';
 import { useMru } from './hooks/useMru';
-import { getEditorContent, updateEditorContent, getActiveView, setPendingLineNumber } from './hooks/useEditorStatePool';
+import { getEditorContent, updateEditorContent, getActiveView, setPendingLineNumber, subscribeDocumentChange } from './hooks/useEditorStatePool';
 import { formatDocument, goToDefinition } from './utils/cmCommands';
 import { perf } from './utils/perf';
 import type { Encoding, LineEnding } from './types';
 import { detectLineEnding, normalizeLineEnding } from './utils/lineEnding';
-import { preloadCommonLanguages, loadLanguageExtensions, isLanguageCached } from './utils/languageExtensions';
 import { isSyntaxHighlightDark, isThemeDark, resolveThemeColors } from './utils/themeResolver';
 import { injectThemeVars, applySavedTheme } from './utils/themeInjector';
 import Toolbar from './components/Toolbar';
@@ -20,25 +19,31 @@ import TabBar from './components/TabBar';
 import FindReplace from './components/FindReplace';
 import StatusBar from './components/StatusBar';
 import Sidebar from './components/Sidebar';
-import MarkdownPreview from './components/MarkdownPreview';
-import MarkdownReader from './components/MarkdownReader';
-import HtmlPreview from './components/HtmlPreview';
-import HtmlReader from './components/HtmlReader';
 import CmEditor from './components/CmEditor';
-import DiffEditor from './components/DiffEditor';
 import CommandPalette from './components/CommandPalette';
 import TitleBar from './components/TitleBar';
 import DiagnosticsPanel from './components/DiagnosticsPanel';
 import QuickOpen from './components/QuickOpen';
-import ExternalChangeDialog from './components/ExternalChangeDialog';
 import SearchResultsView from './components/SearchResultsView';
 import type { SearchMatch, SearchOptions } from './services/searchService';
 import { cancelSearch, searchDirectory } from './services/searchService';
 import { basename, desktopApi, dirname, joinPath, type FileChangeEvent } from './platform/desktop';
 
-const SEARCH_RESULTS_PATH = '__search_results__';
+const SEARCH_RESULT_LIMIT = 1000;
 const SettingsPanel = React.lazy(() => import('./components/SettingsPanel'));
 const JsonFormPanel = React.lazy(() => import('./components/JsonFormPanel'));
+const MarkdownPreview = React.lazy(() => import('./components/MarkdownPreview'));
+const MarkdownReader = React.lazy(() => import('./components/MarkdownReader'));
+const HtmlPreview = React.lazy(() => import('./components/HtmlPreview'));
+const HtmlReader = React.lazy(() => import('./components/HtmlReader'));
+const DiffEditor = React.lazy(() => import('./components/DiffEditor'));
+const ExternalChangeDialog = React.lazy(() => import('./components/ExternalChangeDialog'));
+
+const FeatureLoading = () => (
+  <div className="flex h-full w-full items-center justify-center text-sm" role="status" style={{ color: 'var(--te-text-secondary)' }}>
+    正在加载视图…
+  </div>
+);
 
 // Apply saved theme as early as possible to avoid flash
 applySavedTheme();
@@ -112,6 +117,7 @@ function App() {
     query: string;
     directory: string;
     matches: SearchMatch[];
+    truncated: boolean;
   }>>({});
   const [searchLoadingMap, setSearchLoadingMap] = useState<Record<string, boolean>>({});
   const activeSearchIdRef = useRef<string | null>(null);
@@ -130,6 +136,7 @@ function App() {
   const setTabLineEnding = useEditorStore((s) => s.setTabLineEnding);
   const setTabLanguage = useEditorStore((s) => s.setTabLanguage);
   const createTab = useEditorStore((s) => s.createTab);
+  const createVirtualTab = useEditorStore((s) => s.createVirtualTab);
   const markTabDirty = useEditorStore((s) => s.markTabDirty);
   const closeTab = useEditorStore((s) => s.closeTab);
   const closeTabs = useEditorStore((s) => s.closeTabs);
@@ -155,6 +162,11 @@ function App() {
   }, []);
   const [readerScrollToTop, setReaderScrollToTop] = useState(false);
   const SIDEBAR_WIDTH = 220;
+  const overlayOpenRef = useRef(false);
+
+  useEffect(() => {
+    overlayOpenRef.current = commandPaletteOpen || quickOpenOpen || settingsVisible || Boolean(externalDiff?.open);
+  }, [commandPaletteOpen, quickOpenOpen, settingsVisible, externalDiff?.open]);
 
   useEffect(() => {
     return () => {
@@ -220,35 +232,29 @@ function App() {
 
   useSessionRestore();
 
+  // Debounced recovery snapshots for dirty and untitled documents. The
+  // session layer caps stored content so typing never writes unbounded data.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => saveSession(), 1500);
+    };
+    const unsubscribers = tabs
+      .filter((tab) => tab.kind !== 'searchResults')
+      .map((tab) => subscribeDocumentChange(tab.id, schedule));
+    return () => {
+      for (const unsubscribe of unsubscribers) unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, [tabs]);
+
   // Auto-disable split when less than 2 tabs
   useEffect(() => {
     if (splitMode && tabs.length < 2) {
       setSplitMode(false);
     }
   }, [tabs.length, splitMode, setSplitMode]);
-
-  // Preload language packs for currently open tabs during idle time
-  useEffect(() => {
-    const langs = new Set(tabs.map((t) => t.language));
-    const idleCallback =
-      typeof window !== 'undefined' && 'requestIdleCallback' in window
-        ? window.requestIdleCallback
-        : (cb: () => void) => setTimeout(cb, 500);
-    const handle = idleCallback(() => {
-      for (const lang of langs) {
-        if (!isLanguageCached(lang)) {
-          loadLanguageExtensions(lang).catch(() => {});
-        }
-      }
-    });
-    return () => {
-      if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-        window.cancelIdleCallback(handle as number);
-      } else {
-        clearTimeout(handle as ReturnType<typeof setTimeout>);
-      }
-    };
-  }, [tabs]);
 
   // Tell Electron to show the window after React has committed an initial frame.
   useEffect(() => {
@@ -265,11 +271,6 @@ function App() {
       window.cancelAnimationFrame(firstFrame);
       if (secondFrame !== null) window.cancelAnimationFrame(secondFrame);
     };
-  }, []);
-
-  // Preload common language packs on startup
-  useEffect(() => {
-    preloadCommonLanguages();
   }, []);
 
   // Listen for file open events from backend (single instance / file association)
@@ -311,6 +312,8 @@ function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      if (overlayOpenRef.current || target?.closest('[role="dialog"]')) return;
       if (e.ctrlKey || e.metaKey) {
         switch (e.key.toLowerCase()) {
           case 'n':
@@ -430,7 +433,9 @@ function App() {
           await openFile(filePath);
         }
       } catch (err) {
-        console.log('Open cancelled or failed', err);
+        console.error('Open dialog failed', err);
+        const message = err instanceof Error ? err.message : String(err);
+        await desktopApi.message(message, { title: '打开文件失败', kind: 'error' });
       }
     } else {
       fileInputRef.current?.click();
@@ -479,6 +484,14 @@ function App() {
   const saveTabById = useCallback(async (tabId: string) => {
     const targetTab = useEditorStore.getState().tabs.find((tab) => tab.id === tabId);
     if (!targetTab) return;
+    if (targetTab.kind === 'searchResults') return;
+    if (targetTab.loadState && targetTab.loadState !== 'ready') {
+      const message = targetTab.loadState === 'error'
+        ? `文件未完整加载，不能保存。${targetTab.loadError ? `\n${targetTab.loadError}` : ''}`
+        : '文件正在完整加载，加载完成后才能保存。';
+      await desktopApi.message(message, { title: '暂时无法保存', kind: 'warning' });
+      return;
+    }
     if (savingTabsRef.current.has(tabId)) {
       pendingSaveTabsRef.current.add(tabId);
       return;
@@ -618,6 +631,8 @@ function App() {
       if (selected) setProjectPath(selected);
     } catch (err) {
       console.error('[OpenFolder] failed:', err);
+      const message = err instanceof Error ? err.message : String(err);
+      await desktopApi.message(message, { title: '打开文件夹失败', kind: 'error' });
     }
   }, [setProjectPath]);
 
@@ -742,7 +757,7 @@ function App() {
       if (!ok) return;
     }
 
-    saveSession();
+    saveSession({ includeRecovery: false });
     forceClosingRef.current = true;
     await desktopApi.windowForceClose();
   }, []);
@@ -821,7 +836,7 @@ function App() {
 
   const handleLineEndingChange = useCallback(
     (ending: LineEnding) => {
-      if (!activeTab) return;
+      if (!activeTab || activeTab.kind === 'searchResults' || (activeTab.loadState && activeTab.loadState !== 'ready')) return;
       setTabLineEnding(activeTab.id, ending);
       markTabDirty(activeTab.id, true);
       // Note: listeners (e.g. previews) are notified via CmEditor's lineEnding effect,
@@ -832,7 +847,7 @@ function App() {
 
   const handleEncodingChange = useCallback(
     async (enc: Encoding) => {
-      if (!activeTab) return;
+      if (!activeTab || activeTab.kind === 'searchResults' || (activeTab.loadState && activeTab.loadState !== 'ready')) return;
       const tabId = activeTab.id;
       const filePath = activeTab.filePath;
 
@@ -862,6 +877,8 @@ function App() {
           markTabSaved(tabId);
         } catch (err) {
           console.error('[EncodingChange] failed to re-read file with encoding:', enc, err);
+          const message = err instanceof Error ? err.message : String(err);
+          await desktopApi.message(message, { title: '切换编码失败', kind: 'error' });
         }
       } else {
         setTabEncoding(tabId, enc);
@@ -900,7 +917,7 @@ function App() {
     const getStore = useEditorStore.getState;
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      saveSession();
+      saveSession({ includeRecovery: !forceClosingRef.current });
       if (forceClosingRef.current) return;
       if (getStore().tabs.some((t) => t.isDirty)) {
         e.preventDefault();
@@ -954,7 +971,10 @@ function App() {
     };
   }, [createTab]);
 
-  const canFormat = !!activeTab;
+  const activeEditorReady = !!activeTab
+    && activeTab.kind !== 'searchResults'
+    && (!activeTab.loadState || activeTab.loadState === 'ready');
+  const canFormat = activeEditorReady;
 
   const handleFormat = useCallback(async () => {
     if (!activeTab) {
@@ -1039,11 +1059,11 @@ function App() {
 
   const handleSearchInFolder = useCallback(async (query: string, options: SearchOptions, directory: string) => {
     // Reuse existing search-results tab or create a new one
-    let targetTab = tabs.find((t) => t.filePath === SEARCH_RESULTS_PATH);
+    let targetTab = tabs.find((t) => t.kind === 'searchResults');
     if (targetTab) {
       setActiveTabId(targetTab.id);
     } else {
-      targetTab = createTab(`查找结果: "${query}"`, 'plaintext', SEARCH_RESULTS_PATH);
+      targetTab = createVirtualTab(`查找结果: "${query}"`, 'searchResults');
     }
 
     const searchId = `folder-search-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -1055,11 +1075,13 @@ function App() {
 
     setSearchLoadingMap((prev) => ({ ...prev, [targetTab.id]: true }));
     try {
-      const matches = await searchDirectory(directory, options, undefined, searchId);
+      const allMatches = await searchDirectory(directory, options, SEARCH_RESULT_LIMIT + 1, searchId);
       if (activeSearchIdRef.current !== searchId) return;
+      const truncated = allMatches.length > SEARCH_RESULT_LIMIT;
+      const matches = truncated ? allMatches.slice(0, SEARCH_RESULT_LIMIT) : allMatches;
       setSearchResultsMap((prev) => ({
         ...prev,
-        [targetTab.id]: { query, directory, matches },
+        [targetTab.id]: { query, directory, matches, truncated },
       }));
     } catch (err) {
       if (activeSearchIdRef.current !== searchId) return;
@@ -1076,10 +1098,13 @@ function App() {
         setSearchLoadingMap((prev) => ({ ...prev, [targetTab.id]: false }));
       }
     }
-  }, [tabs, createTab, setActiveTabId]);
+  }, [tabs, createVirtualTab, setActiveTabId]);
 
   const group1Tab = tabs.find((t) => t.id === activeGroup1TabId);
-  const canPreview = group1Tab?.language === 'markdown' || group1Tab?.language === 'html';
+  const canPreview = !!group1Tab
+    && group1Tab.kind !== 'searchResults'
+    && (!group1Tab.loadState || group1Tab.loadState === 'ready')
+    && (group1Tab.language === 'markdown' || group1Tab.language === 'html');
   const canSplit = tabs.length >= 2;
 
   const previewTabs = useMemo(
@@ -1188,14 +1213,15 @@ function App() {
         onToggleReadMode={handleToggleReadMode}
         onToggleSettings={handleToggleSettings}
         onToggleJsonForm={() => setJsonFormVisible(!jsonFormVisible)}
+        canSave={!!activeTab && activeTab.kind !== 'searchResults' && (!activeTab.loadState || activeTab.loadState === 'ready')}
         canFormat={canFormat}
         canPreview={canPreview}
         previewActive={previewVisible}
         canSplit={canSplit}
         splitActive={splitMode}
-        canReadMode={!!activeTab && (activeTab.language === 'markdown' || activeTab.language === 'html')}
+        canReadMode={activeEditorReady && (activeTab?.language === 'markdown' || activeTab?.language === 'html')}
         readModeActive={readMode}
-        canJsonForm={!!activeTab && (activeTab.language === 'json' || activeTab.language === 'jsonl')}
+        canJsonForm={activeEditorReady && (activeTab?.language === 'json' || activeTab?.language === 'jsonl')}
         jsonFormActive={jsonFormVisible}
         theme={theme}
       />
@@ -1245,7 +1271,9 @@ function App() {
             open={quickOpenOpen}
             onClose={() => setQuickOpenOpen(false)}
             mruItems={mruItems}
-            openTabs={tabs.map((t) => ({ id: t.id, title: t.title, filePath: t.filePath }))}
+            openTabs={tabs
+              .filter((t) => t.kind !== 'searchResults')
+              .map((t) => ({ id: t.id, title: t.title, filePath: t.filePath }))}
             onOpenFile={(path) => {
               setReaderScrollToTop(true);
               openFile(path);
@@ -1260,24 +1288,27 @@ function App() {
 
           <div className="flex flex-1 overflow-hidden relative">
             {diffMode && diffLeftTabId && diffRightTabId ? (
-              <DiffEditor
-                leftContent={getEditorContent(diffLeftTabId)}
-                rightContent={getEditorContent(diffRightTabId)}
-                theme={theme}
-              />
+              <React.Suspense fallback={<FeatureLoading />}>
+                <DiffEditor
+                  leftContent={getEditorContent(diffLeftTabId)}
+                  rightContent={getEditorContent(diffRightTabId)}
+                  theme={theme}
+                />
+              </React.Suspense>
             ) : group1Tab ? (
               <>
                 {group1Tabs.map((tab) => (
                   <div
                     key={tab.id}
-                    className="h-full flex-1 min-w-0"
+                    className="h-full flex-1 min-w-0 relative"
                     style={{ display: tab.id === activeGroup1TabId ? 'flex' : 'none' }}
                   >
-                    {tab.filePath === SEARCH_RESULTS_PATH ? (
+                    {tab.kind === 'searchResults' ? (
                       <SearchResultsView
                         query={searchResultsMap[tab.id]?.query || ''}
                         directory={searchResultsMap[tab.id]?.directory || ''}
                         matches={searchResultsMap[tab.id]?.matches || []}
+                        truncated={searchResultsMap[tab.id]?.truncated || false}
                         isLoading={searchLoadingMap[tab.id] || false}
                         onOpenFile={handleOpenSearchResult}
                       />
@@ -1289,6 +1320,7 @@ function App() {
                         fontSize={fontSize}
                         initialContent={tab.initialContent || ''}
                         largeFileOptimize={largeFileOptimize}
+                        forceLargeFile={tab.isLargeFile}
                         wordWrap={wordWrap}
                         showWhitespace={showWhitespace}
                         scrollPastEnd={scrollPastEnd}
@@ -1296,7 +1328,25 @@ function App() {
                         unicodeHighlight={unicodeHighlight}
                         columnAlignEnabled={columnAlignSupported && (tab.columnAlignEnabled ?? false)}
                         lineEnding={tab.lineEnding}
+                        readOnly={!!tab.loadState && tab.loadState !== 'ready'}
                       />
+                    )}
+                    {tab.kind !== 'searchResults' && tab.loadState && tab.loadState !== 'ready' && (
+                      <div
+                        className="absolute inset-0 z-20 flex items-center justify-center bg-[color-mix(in_srgb,var(--te-bg-primary)_88%,transparent)]"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        <div className="max-w-md rounded-xl border px-5 py-4 text-center shadow-lg" style={{ backgroundColor: 'var(--te-bg-secondary)', borderColor: 'var(--te-border)' }}>
+                          {tab.loadState === 'loading' && <div className="mx-auto mb-3 h-5 w-5 animate-spin rounded-full border-2 border-[var(--te-primary)] border-t-transparent" />}
+                          <p className="text-sm font-medium" style={{ color: 'var(--te-text-primary)' }}>
+                            {tab.loadState === 'loading' ? '正在加载完整文件…' : '文件未完整加载'}
+                          </p>
+                          <p className="mt-1 text-xs" style={{ color: 'var(--te-text-secondary)' }}>
+                            {tab.loadState === 'loading' ? '加载完成前暂时不能编辑或保存' : (tab.loadError || '请关闭标签后重新打开文件')}
+                          </p>
+                        </div>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -1308,14 +1358,15 @@ function App() {
                         group2Tabs.map((tab) => (
                           <div
                             key={tab.id}
-                            className="h-full w-full"
+                            className="h-full w-full relative"
                             style={{ display: tab.id === activeGroup2TabId ? 'flex' : 'none' }}
                           >
-                            {tab.filePath === SEARCH_RESULTS_PATH ? (
+                            {tab.kind === 'searchResults' ? (
                               <SearchResultsView
                                 query={searchResultsMap[tab.id]?.query || ''}
                                 directory={searchResultsMap[tab.id]?.directory || ''}
                                 matches={searchResultsMap[tab.id]?.matches || []}
+                                truncated={searchResultsMap[tab.id]?.truncated || false}
                                 isLoading={searchLoadingMap[tab.id] || false}
                                 onOpenFile={handleOpenSearchResult}
                               />
@@ -1327,6 +1378,7 @@ function App() {
                                 fontSize={fontSize}
                                 initialContent={tab.initialContent || ''}
                                 largeFileOptimize={largeFileOptimize}
+                                forceLargeFile={tab.isLargeFile}
                                 wordWrap={wordWrap}
                                 showWhitespace={showWhitespace}
                                 scrollPastEnd={scrollPastEnd}
@@ -1334,7 +1386,25 @@ function App() {
                                 unicodeHighlight={unicodeHighlight}
                                 columnAlignEnabled={columnAlignSupported && (tab.columnAlignEnabled ?? false)}
                                 lineEnding={tab.lineEnding}
+                                readOnly={!!tab.loadState && tab.loadState !== 'ready'}
                               />
+                            )}
+                            {tab.kind !== 'searchResults' && tab.loadState && tab.loadState !== 'ready' && (
+                              <div
+                                className="absolute inset-0 z-20 flex items-center justify-center bg-[color-mix(in_srgb,var(--te-bg-primary)_88%,transparent)]"
+                                role="status"
+                                aria-live="polite"
+                              >
+                                <div className="max-w-md rounded-xl border px-5 py-4 text-center shadow-lg" style={{ backgroundColor: 'var(--te-bg-secondary)', borderColor: 'var(--te-border)' }}>
+                                  {tab.loadState === 'loading' && <div className="mx-auto mb-3 h-5 w-5 animate-spin rounded-full border-2 border-[var(--te-primary)] border-t-transparent" />}
+                                  <p className="text-sm font-medium" style={{ color: 'var(--te-text-primary)' }}>
+                                    {tab.loadState === 'loading' ? '正在加载完整文件…' : '文件未完整加载'}
+                                  </p>
+                                  <p className="mt-1 text-xs" style={{ color: 'var(--te-text-secondary)' }}>
+                                    {tab.loadState === 'loading' ? '加载完成前暂时不能编辑或保存' : (tab.loadError || '请关闭标签后重新打开文件')}
+                                  </p>
+                                </div>
+                              </div>
                             )}
                           </div>
                         ))
@@ -1357,17 +1427,19 @@ function App() {
                         className="flex-1 h-full min-w-0"
                         style={{ display: tab.id === activeGroup1TabId ? 'flex' : 'none' }}
                       >
-                        {tab.language === 'markdown' ? (
-                          <MarkdownPreview tabId={tab.id} theme={theme} visible={tab.id === activeGroup1TabId} />
-                        ) : (
-                          <HtmlPreview
-                            tabId={tab.id}
-                            theme={theme}
-                            visible={tab.id === activeGroup1TabId}
-                            onToggleFullScreen={() => setPreviewFullScreen(true)}
-                            onApplyHtml={(html) => handleApplyHtmlPreview(tab.id, html)}
-                          />
-                        )}
+                        <React.Suspense fallback={<FeatureLoading />}>
+                          {tab.language === 'markdown' ? (
+                            <MarkdownPreview tabId={tab.id} theme={theme} visible={tab.id === activeGroup1TabId} />
+                          ) : (
+                            <HtmlPreview
+                              tabId={tab.id}
+                              theme={theme}
+                              visible={tab.id === activeGroup1TabId}
+                              onToggleFullScreen={() => setPreviewFullScreen(true)}
+                              onApplyHtml={(html) => handleApplyHtmlPreview(tab.id, html)}
+                            />
+                          )}
+                        </React.Suspense>
                       </div>
                     </React.Fragment>
                   ))}
@@ -1404,25 +1476,27 @@ function App() {
                   className="absolute inset-0 z-30 flex flex-col"
                   style={{ display: tab.id === activeTabId ? 'flex' : 'none' }}
                 >
-                  {tab.language === 'markdown' ? (
-                    <MarkdownReader
-                      tabId={tab.id}
-                      theme={theme}
-                      onExit={handleReaderExit}
-                      onToggleTheme={handleReaderToggleTheme}
-                      shouldScrollToTop={readerScrollToTop && tab.id === activeTabId}
-                      visible={tab.id === activeTabId}
-                    />
-                  ) : (
-                    <HtmlReader
-                      tabId={tab.id}
-                      theme={theme}
-                      onExit={handleReaderExit}
-                      onToggleTheme={handleReaderToggleTheme}
-                      shouldScrollToTop={readerScrollToTop && tab.id === activeTabId}
-                      visible={tab.id === activeTabId}
-                    />
-                  )}
+                  <React.Suspense fallback={<FeatureLoading />}>
+                    {tab.language === 'markdown' ? (
+                      <MarkdownReader
+                        tabId={tab.id}
+                        theme={theme}
+                        onExit={handleReaderExit}
+                        onToggleTheme={handleReaderToggleTheme}
+                        shouldScrollToTop={readerScrollToTop && tab.id === activeTabId}
+                        visible={tab.id === activeTabId}
+                      />
+                    ) : (
+                      <HtmlReader
+                        tabId={tab.id}
+                        theme={theme}
+                        onExit={handleReaderExit}
+                        onToggleTheme={handleReaderToggleTheme}
+                        shouldScrollToTop={readerScrollToTop && tab.id === activeTabId}
+                        visible={tab.id === activeTabId}
+                      />
+                    )}
+                  </React.Suspense>
                 </div>
               ))}
             {jsonFormVisible && jsonFormFullScreen && activeTab && (activeTab.language === 'json' || activeTab.language === 'jsonl') && (
@@ -1449,18 +1523,20 @@ function App() {
                     <Minimize2 size={14} />
                   </button>
                 )}
-                {activeTab.language === 'markdown' ? (
-                  <MarkdownPreview tabId={activeTab.id} theme={theme} visible={true} />
-                ) : (
-                  <HtmlPreview
-                    tabId={activeTab.id}
-                    theme={theme}
-                    visible={true}
-                    fullScreen={true}
-                    onToggleFullScreen={() => setPreviewFullScreen(false)}
-                    onApplyHtml={(html) => handleApplyHtmlPreview(activeTab.id, html)}
-                  />
-                )}
+                <React.Suspense fallback={<FeatureLoading />}>
+                  {activeTab.language === 'markdown' ? (
+                    <MarkdownPreview tabId={activeTab.id} theme={theme} visible={true} />
+                  ) : (
+                    <HtmlPreview
+                      tabId={activeTab.id}
+                      theme={theme}
+                      visible={true}
+                      fullScreen={true}
+                      onToggleFullScreen={() => setPreviewFullScreen(false)}
+                      onApplyHtml={(html) => handleApplyHtmlPreview(activeTab.id, html)}
+                    />
+                  )}
+                </React.Suspense>
               </div>
             )}
           </div>
@@ -1473,17 +1549,17 @@ function App() {
       )}
 
           <DiagnosticsPanel
-            tabId={activeTabId}
+            tabId={activeTab?.kind === 'searchResults' ? null : activeTabId}
             visible={diagnosticsPanelVisible}
             language={activeTab?.language || null}
           />
 
           <StatusBar
-            activeTab={activeTab}
+            activeTab={activeTab?.kind === 'searchResults' ? null : activeTab}
             theme={theme}
             onEncodingChange={handleEncodingChange}
             onLanguageChange={(lang) => {
-              if (activeTab) {
+              if (activeEditorReady && activeTab) {
                 setTabLanguage(activeTab.id, lang);
               }
             }}
@@ -1517,26 +1593,28 @@ function App() {
           />
 
           {externalDiff?.open && (
-            <ExternalChangeDialog
-              open={externalDiff.open}
-              fileName={tabs.find((t) => t.id === externalDiff.tabId)?.title ?? ''}
-              currentContent={externalDiff.currentContent}
-              externalContent={externalDiff.externalContent}
-              theme={theme}
-              onUseExternal={() => {
-                updateEditorContent(externalDiff.tabId, externalDiff.externalContent);
-                markTabSaved(externalDiff.tabId);
-                setTabEncoding(externalDiff.tabId, externalDiff.externalEncoding as Encoding);
-                setTabLineEnding(externalDiff.tabId, detectLineEnding(externalDiff.externalContent));
-                setExternalDiff(null);
-              }}
-              onKeepCurrent={() => {
-                setExternalDiff(null);
-              }}
-              onClose={() => {
-                setExternalDiff(null);
-              }}
-            />
+            <React.Suspense fallback={null}>
+              <ExternalChangeDialog
+                open={externalDiff.open}
+                fileName={tabs.find((t) => t.id === externalDiff.tabId)?.title ?? ''}
+                currentContent={externalDiff.currentContent}
+                externalContent={externalDiff.externalContent}
+                theme={theme}
+                onUseExternal={() => {
+                  updateEditorContent(externalDiff.tabId, externalDiff.externalContent);
+                  markTabSaved(externalDiff.tabId);
+                  setTabEncoding(externalDiff.tabId, externalDiff.externalEncoding as Encoding);
+                  setTabLineEnding(externalDiff.tabId, detectLineEnding(externalDiff.externalContent));
+                  setExternalDiff(null);
+                }}
+                onKeepCurrent={() => {
+                  setExternalDiff(null);
+                }}
+                onClose={() => {
+                  setExternalDiff(null);
+                }}
+              />
+            </React.Suspense>
           )}
         </div>
       </div>

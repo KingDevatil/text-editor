@@ -71,4 +71,35 @@ describe('useFileOpener progressive loading', () => {
     expect(getEditorContent(tab.id)).toBe('partial + user edit');
     expect(useEditorStore.getState().tabs[0].isDirty).toBe(true);
   });
+
+  it('keeps a progressive tab in loading state until the full read finishes', async () => {
+    let resolveFullRead!: (value: { text: string; encoding: string }) => void;
+    desktopMocks.readFileMeta.mockResolvedValue({
+      file_size: 3 * 1024 * 1024,
+      encoding: 'UTF-8',
+      total_lines: 1,
+      first_chunk: 'partial',
+    });
+    desktopMocks.readFileAuto.mockReturnValue(new Promise((resolve) => {
+      resolveFullRead = resolve;
+    }));
+
+    const { result } = renderHook(() => useFileOpener());
+    await act(async () => {
+      await result.current('C:\\tmp\\large.txt');
+    });
+
+    expect(useEditorStore.getState().tabs[0].loadState).toBe('loading');
+    expect(useEditorStore.getState().tabs[0].isLargeFile).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    await act(async () => {
+      resolveFullRead({ text: 'complete file from disk', encoding: 'UTF-8' });
+      await Promise.resolve();
+    });
+
+    expect(useEditorStore.getState().tabs[0].loadState).toBe('ready');
+  });
 });

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { EditorView, keymap, highlightWhitespace, highlightTrailingWhitespace } from '@codemirror/view';
+import { EditorView, keymap, highlightWhitespace, highlightTrailingWhitespace, type ViewUpdate } from '@codemirror/view';
 import { EditorState, StateEffect } from '@codemirror/state';
 import { eolMarkers } from '../utils/showInvisibles';
 import { isSyntaxHighlightDark, resolveThemeColors } from '../utils/themeResolver';
@@ -44,6 +44,19 @@ import { useEditorContextMenu } from '../hooks/useEditorContextMenu';
 
 const LARGE_FILE_THRESHOLD = 2 * 1024 * 1024;
 
+function hasMeaningfulDocumentChange(update: ViewUpdate): boolean {
+  let changed = false;
+  update.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+    if (changed) return;
+    if (toA - fromA !== inserted.length) {
+      changed = true;
+      return;
+    }
+    changed = update.startState.doc.sliceString(fromA, toA) !== inserted.toString();
+  });
+  return changed;
+}
+
 interface CmEditorProps {
   tabId: string;
   language: Language;
@@ -52,6 +65,7 @@ interface CmEditorProps {
   readOnly?: boolean;
   initialContent?: string;
   largeFileOptimize?: boolean;
+  forceLargeFile?: boolean;
   wordWrap?: boolean;
   showWhitespace?: boolean;
   scrollPastEnd?: boolean;
@@ -69,6 +83,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
   readOnly = false,
   initialContent = '',
   largeFileOptimize = false,
+  forceLargeFile = false,
   wordWrap = false,
   showWhitespace = false,
   scrollPastEnd: enableScrollPastEnd = true,
@@ -118,7 +133,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
         : EditorState.lineSeparator.of('\n');
 
       const contentLength = getEditorValueLength(tabId) || initialContent.length;
-      const effectiveLargeFile = largeFileOptimize && contentLength > LARGE_FILE_THRESHOLD;
+      const effectiveLargeFile = largeFileOptimize && (forceLargeFile || contentLength > LARGE_FILE_THRESHOLD);
 
       const colors = resolveThemeColors(theme, lightCustomColors, darkCustomColors, customColors);
       const editorIsDark = isSyntaxHighlightDark(theme, colors, customSyntaxHighlight);
@@ -137,9 +152,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
               // content (e.g. session-restore + get_pending_files race, or external
               // file reload) so the tab is not falsely marked dirty.
               // Fast path: length mismatch guarantees a real change.
-              const changed =
-                update.startState.doc.length !== update.state.doc.length ||
-                update.startState.doc.toString() !== update.state.doc.toString();
+              const changed = hasMeaningfulDocumentChange(update);
               if (changed) {
                 useEditorStore.getState().markTabDirty(tabId, true);
                 notifyContentChange(tabId);
@@ -150,6 +163,11 @@ const CmEditor: React.FC<CmEditorProps> = ({
         ],
       });
       setEditorState(tabId, state);
+      if (initialContent.length > 0) {
+        // EditorState now owns the document. Avoid retaining a duplicate full
+        // string in Zustand while keeping every inactive EditorView mounted.
+        useEditorStore.getState().setTabInitialContent(tabId, '');
+      }
       perf.mark(`editor-init-end-${tabId}`);
       perf.measure('editor-init', `editor-init-start-${tabId}`, `editor-init-end-${tabId}`, {
         tabId,
@@ -262,8 +280,9 @@ const CmEditor: React.FC<CmEditorProps> = ({
       dblClickCleanup = () => cmContent.removeEventListener('dblclick', handleDblClick);
     }
 
-    // Async load heavy language pack and apply when ready
-    loadLanguageExtensions(language).then((exts) => {
+    // Async load heavy language pack only when large-file mode is inactive.
+    const shouldLoadLanguage = !(largeFileOptimize && (forceLargeFile || getEditorValueLength(tabId) > LARGE_FILE_THRESHOLD));
+    if (shouldLoadLanguage) loadLanguageExtensions(language).then((exts) => {
       if (cancelled || !viewRef.current) return;
       viewRef.current.dispatch({
         effects: compartmentsRef.current!.language.reconfigure(exts),
@@ -315,31 +334,35 @@ const CmEditor: React.FC<CmEditorProps> = ({
 
     let cancelled = false;
     const nonce = ++langNonceRef.current;
-    console.log('[CmEditor] language change:', language, 'tabId:', tabId);
 
     const contentLength = getEditorValueLength(tabId) || initialContent.length;
-    const effectiveLargeFile = largeFileOptimize && contentLength > LARGE_FILE_THRESHOLD;
+    const effectiveLargeFile = largeFileOptimize && (forceLargeFile || contentLength > LARGE_FILE_THRESHOLD);
     const lintExt = getLinterExtension(language) || [];
     const autocompleteExt = getAutocompleteExtension(language, tabId) || [];
 
     // Apply lightweight extension immediately (clears old highlighting for heavy langs)
     view.dispatch({
       effects: [
-        compartmentsRef.current!.language.reconfigure(getLanguageExtensionsSync(language)),
+        compartmentsRef.current!.language.reconfigure(effectiveLargeFile ? [] : getLanguageExtensionsSync(language)),
         compartmentsRef.current!.lint.reconfigure(effectiveLargeFile ? [] : lintExt),
         compartmentsRef.current!.autocomplete.reconfigure(effectiveLargeFile ? [] : autocompleteExt),
         compartmentsRef.current!.markdownKeymap.reconfigure(
-          language === 'markdown' ? createMarkdownKeymap() : [],
+          !effectiveLargeFile && language === 'markdown' ? createMarkdownKeymap() : [],
         ),
       ],
     });
     setEditorState(tabId, view.state);
 
+    if (effectiveLargeFile) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
     // Then load heavy pack in background
     loadLanguageExtensions(language).then((exts) => {
       // Ignore stale responses from rapid language switches or unmount
       if (cancelled || nonce !== langNonceRef.current) {
-        console.log('[CmEditor] language change stale, ignoring', language);
         return;
       }
       if (viewRef.current) {
@@ -355,7 +378,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [language, tabId, largeFileOptimize, initialContent]);
+  }, [language, tabId, largeFileOptimize, forceLargeFile, initialContent]);
 
   // Dynamic reconfiguration: theme
   useEffect(() => {
@@ -452,7 +475,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
     if (!view) return;
 
     const contentLength = getEditorValueLength(tabId) || initialContent.length;
-    const effectiveLargeFile = largeFileOptimize && contentLength > LARGE_FILE_THRESHOLD;
+    const effectiveLargeFile = largeFileOptimize && (forceLargeFile || contentLength > LARGE_FILE_THRESHOLD);
 
     // Skip if effective mode hasn't changed (prevents unnecessary reconfigures)
     if (lastEffectiveLargeFileRef.current === effectiveLargeFile) return;
@@ -468,6 +491,9 @@ const CmEditor: React.FC<CmEditorProps> = ({
           compartmentsRef.current!.heavyFeatures.reconfigure([]),
           compartmentsRef.current!.lint.reconfigure([]),
           compartmentsRef.current!.autocomplete.reconfigure([]),
+          compartmentsRef.current!.language.reconfigure([]),
+          compartmentsRef.current!.unicodeHighlight.reconfigure([]),
+          compartmentsRef.current!.markdownKeymap.reconfigure([]),
         ],
       });
       setEditorState(tabId, view.state);
@@ -492,10 +518,12 @@ const CmEditor: React.FC<CmEditorProps> = ({
         compartmentsRef.current!.heavyFeatures.reconfigure(heavyExts),
         compartmentsRef.current!.lint.reconfigure(lintExt),
         compartmentsRef.current!.autocomplete.reconfigure(autocompleteExt),
+        compartmentsRef.current!.unicodeHighlight.reconfigure(enableUnicodeHighlight ? [...unicodeHighlightExt] : []),
+        compartmentsRef.current!.markdownKeymap.reconfigure(language === 'markdown' ? createMarkdownKeymap() : []),
       ],
     });
     setEditorState(tabId, view.state);
-  }, [largeFileOptimize, tabId, language, initialContent]);
+  }, [largeFileOptimize, forceLargeFile, tabId, language, initialContent, enableUnicodeHighlight]);
 
   // Dynamic reconfiguration: column align
   const dragLayerCleanupRef = useRef<(() => void) | null>(null);

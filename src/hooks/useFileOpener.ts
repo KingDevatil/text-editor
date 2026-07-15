@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 import type { Encoding, Language } from '../types';
 import { EXT_TO_LANGUAGE } from '../types';
 import { useEditorStore } from './useEditorStore';
-import { useSettingsStore } from './useSettingsStore';
 import { getEditorContent, hasEditorState, updateEditorContent } from './useEditorStatePool';
 import { addToMru } from './useMru';
 import { detectLineEnding } from '../utils/lineEnding';
@@ -10,7 +9,7 @@ import { perf } from '../utils/perf';
 import { desktopApi, type FileMeta, type ReadFileResult } from '../platform/desktop';
 
 const LARGE_FILE_THRESHOLD = 2 * 1024 * 1024; // 2MB
-const PROGRESSIVE_THRESHOLD = 2 * 1024 * 1024; // 2MB
+const PROGRESSIVE_THRESHOLD = LARGE_FILE_THRESHOLD;
 
 function getLanguageFromFileName(fileName: string): Language {
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
@@ -47,6 +46,8 @@ export function useFileOpener() {
   const setTabEncoding = useEditorStore((s) => s.setTabEncoding);
   const setTabLanguage = useEditorStore((s) => s.setTabLanguage);
   const setTabInitialContent = useEditorStore((s) => s.setTabInitialContent);
+  const setTabLoadState = useEditorStore((s) => s.setTabLoadState);
+  const setTabLargeFile = useEditorStore((s) => s.setTabLargeFile);
   const setTabLineEnding = useEditorStore((s) => s.setTabLineEnding);
   const markTabSaved = useEditorStore((s) => s.markTabSaved);
 
@@ -70,15 +71,15 @@ export function useFileOpener() {
 
           if (existing) {
             setActiveTabId(existing.id);
-            if (existing.isDirty) return;
+            if (existing.isDirty || existing.loadState !== 'ready') return;
             setTabEncoding(existing.id, detectedEncoding as Encoding);
             setTabLineEnding(existing.id, lineEnding);
             updateEditorContent(existing.id, text);
             markTabSaved(existing.id);
           } else {
-            const isLarge = text.length > LARGE_FILE_THRESHOLD;
-            const lang = isLarge ? 'plaintext' : getLanguageFromFileName(fileName);
-            createTab(fileName, lang, filePath, 1, detectedEncoding as Encoding, text, lineEnding);
+            const lang = getLanguageFromFileName(fileName);
+            const tab = createTab(fileName, lang, filePath, 1, detectedEncoding as Encoding, text, lineEnding);
+            if (text.length > LARGE_FILE_THRESHOLD) setTabLargeFile(tab.id, true);
             if (filePath) addToMru(filePath, fileName);
           }
           perf.recordFileOpen(text.length, performance.now() - openStart);
@@ -92,7 +93,7 @@ export function useFileOpener() {
 
         if (existing) {
           setActiveTabId(existing.id);
-          if (existing.isDirty) return;
+          if (existing.isDirty || existing.loadState !== 'ready') return;
           const contentBeforeRead = currentTabContent(existing.id);
           const result = await readFileAuto(filePath);
           const latest = useEditorStore.getState().tabs.find((tab) => tab.id === existing.id);
@@ -111,13 +112,15 @@ export function useFileOpener() {
         if (isProgressive) {
           const tab = createTab(
             fileName,
-            'plaintext',
+            getLanguageFromFileName(fileName),
             filePath,
             1,
             meta.encoding as Encoding,
             meta.first_chunk,
             detectLineEnding(meta.first_chunk)
           );
+          setTabLargeFile(tab.id, true);
+          setTabLoadState(tab.id, 'loading');
           perf.recordFileOpen(meta.file_size, performance.now() - openStart);
 
           runBackground(() => {
@@ -125,44 +128,53 @@ export function useFileOpener() {
             readFileAuto(filePath)
               .then((result) => {
                 const latest = useEditorStore.getState().tabs.find((candidate) => candidate.id === tab.id);
-                if (!latest || latest.isDirty || currentTabContent(tab.id) !== expectedPartialContent) return;
-                setTabInitialContent(tab.id, result.text);
-                updateEditorContent(tab.id, result.text);
+                if (!latest) return;
+                if (latest.isDirty || currentTabContent(tab.id) !== expectedPartialContent) {
+                  setTabLoadState(tab.id, 'error', '完整内容加载期间标签内容发生变化，请关闭后重新打开文件。');
+                  return;
+                }
+                if (hasEditorState(tab.id)) {
+                  updateEditorContent(tab.id, result.text);
+                  setTabInitialContent(tab.id, '');
+                } else {
+                  setTabInitialContent(tab.id, result.text);
+                }
                 setTabLineEnding(tab.id, detectLineEnding(result.text));
                 setTabLanguage(tab.id, getLanguageFromFileName(fileName));
                 addToMru(filePath, fileName);
                 // Content was reloaded from disk, not edited by user
                 markTabSaved(tab.id);
+                setTabLoadState(tab.id, 'ready');
               })
               .catch((err) => {
                 console.error('Failed to load full content for:', filePath, err);
+                const message = err instanceof Error ? err.message : String(err);
+                setTabLoadState(tab.id, 'error', message);
+                void desktopApi.message(`无法完整加载“${fileName}”：${message}`, {
+                  title: '文件加载失败',
+                  kind: 'error',
+                }).catch(() => {});
               });
           }, 100);
         } else {
           const result = await readFileAuto(filePath);
-          const isLarge = result.text.length > LARGE_FILE_THRESHOLD;
-          const lang = isLarge ? 'plaintext' : getLanguageFromFileName(fileName);
+          const lang = getLanguageFromFileName(fileName);
           const lineEnding = detectLineEnding(result.text);
 
           createTab(fileName, lang, filePath, 1, result.encoding as Encoding, result.text, lineEnding);
           addToMru(filePath, fileName);
           perf.recordFileOpen(result.text.length, performance.now() - openStart);
-
-          if (isLarge) {
-            const targetLang = getLanguageFromFileName(fileName);
-            const shouldSwitchLang = targetLang !== 'plaintext' && !useSettingsStore.getState().largeFileOptimize;
-            if (shouldSwitchLang) {
-              runBackground(() => {
-                setTabLanguage(useEditorStore.getState().tabs.find((t) => t.filePath === filePath)?.id || '', targetLang);
-              }, 200);
-            }
-          }
         }
       } catch (err) {
         console.error('Failed to open file:', filePath, err);
+        const message = err instanceof Error ? err.message : String(err);
+        void desktopApi.message(`无法打开“${filePath}”：${message}`, {
+          title: '打开文件失败',
+          kind: 'error',
+        }).catch(() => {});
       }
     },
-    [createTab, setActiveTabId, setTabEncoding, setTabLanguage, setTabInitialContent, setTabLineEnding, markTabSaved]
+    [createTab, setActiveTabId, setTabEncoding, setTabLanguage, setTabInitialContent, setTabLargeFile, setTabLoadState, setTabLineEnding, markTabSaved]
   );
 
   return openFile;

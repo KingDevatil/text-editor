@@ -3,7 +3,7 @@ import { EditorState } from '@codemirror/state';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, waitFor } from '@testing-library/react';
 import { useEditorStore } from './useEditorStore';
-import { useSessionRestore } from './useSessionRestore';
+import { saveSession, useSessionRestore } from './useSessionRestore';
 import { getEditorContent, setEditorState } from './useEditorStatePool';
 
 const SESSION_KEY = 'te2-session';
@@ -22,6 +22,7 @@ describe('useSessionRestore', () => {
       activeGroup2TabId: null,
       splitMode: false,
     });
+    localStorage.removeItem(SESSION_KEY);
   });
 
   afterEach(() => {
@@ -132,5 +133,20 @@ describe('useSessionRestore', () => {
 
     expect(getEditorContent(tab.id)).toBe('partial + user edit');
     expect(useEditorStore.getState().tabs[0].isDirty).toBe(true);
+  });
+
+  it('snapshots and restores dirty untitled content', async () => {
+    const tab = useEditorStore.getState().createTab('Untitled');
+    setEditorState(tab.id, EditorState.create({ doc: 'recover me' }));
+    useEditorStore.getState().markTabDirty(tab.id, true);
+
+    saveSession();
+    useEditorStore.getState().closeAllTabs();
+    render(<RestoreHarness />);
+
+    await waitFor(() => expect(useEditorStore.getState().tabs).toHaveLength(1));
+    const [restored] = useEditorStore.getState().tabs;
+    expect(restored.initialContent).toBe('recover me');
+    expect(restored.isDirty).toBe(true);
   });
 });

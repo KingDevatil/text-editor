@@ -268,12 +268,13 @@ describe('App', () => {
     expect(useEditorStore.getState().tabs.find((candidate) => candidate.id === tab.id)?.isDirty).toBe(true);
   });
 
-  it('closes preview automatically when enabling split view', () => {
+  it('closes preview automatically when enabling split view', async () => {
     useEditorStore.getState().createTab('preview.md', 'markdown', undefined, 1);
     useEditorStore.getState().createTab('notes.txt', 'plaintext', undefined, 1);
     useUIStore.getState().setPreviewVisible(true);
 
     render(<App />);
+    await screen.findByTestId('markdown-preview');
 
     const splitButton = screen.getByRole('button', { name: 'split-editor' });
     expect(splitButton).toBeEnabled();
@@ -299,6 +300,42 @@ describe('App', () => {
 
     fireEvent.click(screen.getByTitle('设置'));
     expect(await screen.findByText('当前主题')).toBeInTheDocument();
+  });
+
+  it('blocks saving while a progressive file is still loading', async () => {
+    const writeFile = vi.fn(async () => {});
+    const message = vi.fn(async () => {});
+    window.electronDesktop = {
+      platform: 'win32',
+      writeFile,
+      message,
+      getPendingFiles: vi.fn(async () => []),
+      rendererReady: vi.fn(async () => {}),
+      onOpenFile: vi.fn(() => () => {}),
+      onFileChanged: vi.fn(() => () => {}),
+      onDragDropEvent: vi.fn(async () => () => {}),
+      watchFile: vi.fn(async () => {}),
+      unwatchFile: vi.fn(async () => {}),
+    } as unknown as typeof window.electronDesktop;
+
+    const tab = useEditorStore.getState().createTab('large.txt', 'plaintext', 'C:\\tmp\\large.txt');
+    useEditorStore.getState().setTabLoadState(tab.id, 'loading');
+    setEditorState(tab.id, EditorState.create({ doc: 'partial' }));
+
+    render(<App />);
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+
+    await waitFor(() => expect(message).toHaveBeenCalled());
+    expect(writeFile).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toHaveTextContent('正在加载完整文件');
+  });
+
+  it('does not expose file-save actions for a virtual search-results tab', () => {
+    useEditorStore.getState().createVirtualTab('查找结果', 'searchResults');
+
+    render(<App />);
+
+    expect(screen.getByTitle('当前标签暂不可保存')).toBeDisabled();
   });
 
   it('keeps settings open when clicking outside the dialog', async () => {

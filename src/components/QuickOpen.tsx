@@ -84,11 +84,11 @@ const QuickOpen: React.FC<QuickOpenProps> = ({
       switch (e.key) {
         case 'ArrowDown':
           e.preventDefault();
-          setSelectedIndex((i) => (i + 1) % results.length);
+          if (results.length > 0) setSelectedIndex((i) => (i + 1) % results.length);
           break;
         case 'ArrowUp':
           e.preventDefault();
-          setSelectedIndex((i) => (i - 1 + results.length) % results.length);
+          if (results.length > 0) setSelectedIndex((i) => (i - 1 + results.length) % results.length);
           break;
         case 'Enter':
           e.preventDefault();
@@ -123,6 +123,9 @@ const QuickOpen: React.FC<QuickOpenProps> = ({
       <div
         className="w-full max-w-xl rounded-lg shadow-2xl overflow-hidden flex flex-col"
         style={{ backgroundColor: 'var(--te-bg-primary)', border: '1px solid var(--te-border)' }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="快速打开"
       >
         <div className="flex items-center px-3 py-2 border-b" style={{ borderColor: 'var(--te-border)' }}>
           <input
@@ -131,14 +134,15 @@ const QuickOpen: React.FC<QuickOpenProps> = ({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="输入文件名或路径快速打开…"
+            aria-label="搜索文件"
             className="flex-1 bg-transparent outline-none text-sm"
             style={{ color: 'var(--te-text-primary)' }}
           />
-          <button onClick={onClose} className="p-1 rounded hover:opacity-70" style={{ color: 'var(--te-text-secondary)' }}>
+          <button onClick={onClose} aria-label="关闭快速打开" className="p-1 rounded hover:opacity-70" style={{ color: 'var(--te-text-secondary)' }}>
             <X size={16} />
           </button>
         </div>
-        <div ref={listRef} className="max-h-80 overflow-auto py-1">
+        <div ref={listRef} className="max-h-80 overflow-auto py-1" role="listbox" aria-label="文件列表">
           {results.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm" style={{ color: 'var(--te-text-secondary)' }}>
               没有匹配的文件
@@ -150,6 +154,8 @@ const QuickOpen: React.FC<QuickOpenProps> = ({
                 <button
                   key={item.id}
                   data-selected={isSelected}
+                  role="option"
+                  aria-selected={isSelected}
                   onClick={() => handleSelect(item)}
                   className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm transition-colors"
                   style={{

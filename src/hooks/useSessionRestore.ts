@@ -16,6 +16,8 @@ import { desktopApi } from '../platform/desktop';
 const SESSION_KEY = 'te2-session';
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
 const PROGRESSIVE_RESTORE_THRESHOLD = 2 * 1024 * 1024;
+const RECOVERY_MAX_TAB_CHARS = 1024 * 1024;
+const RECOVERY_MAX_TOTAL_CHARS = 2 * 1024 * 1024;
 
 interface SessionTab {
   title: string;
@@ -28,6 +30,9 @@ interface SessionTab {
   scrollTop: number;
   cursorAnchor?: number;
   cursorHead?: number;
+  content?: string;
+  isDirty?: boolean;
+  recoveryOmitted?: boolean;
 }
 
 interface SessionData {
@@ -39,16 +44,19 @@ interface SessionData {
   timestamp: number;
 }
 
-export function saveSession(): void {
+export function saveSession(options: { includeRecovery?: boolean } = {}): void {
   try {
+    const includeRecovery = options.includeRecovery ?? true;
     const { tabs, activeTabId, activeGroup1TabId, activeGroup2TabId, splitMode } =
       useEditorStore.getState();
 
-    const sessionTabs: SessionTab[] = tabs.map((tab) => {
+    const restorableTabs = tabs.filter((tab) => tab.kind !== 'searchResults');
+    let recoveredChars = 0;
+    const sessionTabs: SessionTab[] = restorableTabs.map((tab) => {
       const state = getEditorState(tab.id);
       const scrollTop = getEditorScrollTop(tab.id) ?? 0;
       const sel = state?.selection.main;
-      return {
+      const sessionTab: SessionTab = {
         title: tab.title,
         filePath: tab.filePath,
         language: tab.language,
@@ -60,10 +68,24 @@ export function saveSession(): void {
         cursorAnchor: sel?.anchor,
         cursorHead: sel?.head,
       };
+      if (includeRecovery && (tab.isDirty || !tab.filePath)) {
+        const content = state?.doc.toString() ?? tab.initialContent ?? '';
+        if (
+          content.length <= RECOVERY_MAX_TAB_CHARS
+          && recoveredChars + content.length <= RECOVERY_MAX_TOTAL_CHARS
+        ) {
+          sessionTab.content = content;
+          sessionTab.isDirty = tab.isDirty;
+          recoveredChars += content.length;
+        } else {
+          sessionTab.recoveryOmitted = true;
+        }
+      }
+      return sessionTab;
     });
 
     const findPath = (tabId: string | null) =>
-      tabs.find((t) => t.id === tabId)?.filePath;
+      restorableTabs.find((t) => t.id === tabId)?.filePath;
 
     const session: SessionData = {
       tabs: sessionTabs,
@@ -138,7 +160,10 @@ export function useSessionRestore() {
       setTabColumnAlign,
       setTabEncoding,
       setTabInitialContent,
+      setTabLoadState,
+      setTabLargeFile,
       setTabLineEnding,
+      markTabDirty,
       markTabSaved,
       tabs: currentTabs,
     } = useEditorStore.getState();
@@ -155,7 +180,18 @@ export function useSessionRestore() {
 
       for (const st of session.tabs) {
         let newTab;
-        if (st.filePath && desktopApi.isDesktop()) {
+        if (st.content !== undefined) {
+          newTab = createTab(
+            st.title,
+            st.language as import('../types').Language,
+            st.filePath,
+            st.group,
+            st.encoding,
+            st.content,
+            st.lineEnding as import('../types').LineEnding
+          );
+          if (st.isDirty) markTabDirty(newTab.id, true);
+        } else if (st.filePath && desktopApi.isDesktop()) {
           try {
             const meta = await desktopApi.readFileMeta(st.filePath);
             if (meta.file_size > PROGRESSIVE_RESTORE_THRESHOLD) {
@@ -172,24 +208,41 @@ export function useSessionRestore() {
                 firstChunk,
                 st.lineEnding as import('../types').LineEnding
               );
+              setTabLargeFile(newTab.id, true);
+              setTabLoadState(newTab.id, 'loading');
               const restoredTabId = newTab.id;
               const expectedPartialContent = firstChunk;
               desktopApi.readFileAuto(st.filePath)
                 .then((result) => {
                   const latest = useEditorStore.getState().tabs.find((tab) => tab.id === restoredTabId);
-                  if (!latest || latest.isDirty || currentTabContent(restoredTabId) !== expectedPartialContent) return;
+                  if (!latest) return;
+                  if (latest.isDirty || currentTabContent(restoredTabId) !== expectedPartialContent) {
+                    setTabLoadState(restoredTabId, 'error', '完整内容加载期间标签内容发生变化，请关闭后重新打开文件。');
+                    return;
+                  }
                   const normalizedText = normalizeLineEnding(
                     result.text,
                     st.lineEnding as import('../types').LineEnding
                   );
-                  setTabInitialContent(restoredTabId, normalizedText);
-                  updateEditorContent(restoredTabId, normalizedText);
+                  if (hasEditorState(restoredTabId)) {
+                    updateEditorContent(restoredTabId, normalizedText);
+                    setTabInitialContent(restoredTabId, '');
+                  } else {
+                    setTabInitialContent(restoredTabId, normalizedText);
+                  }
                   setTabEncoding(restoredTabId, result.encoding as Encoding);
                   if (st.lineEnding) setTabLineEnding(restoredTabId, st.lineEnding as import('../types').LineEnding);
                   markTabSaved(restoredTabId);
+                  setTabLoadState(restoredTabId, 'ready');
                 })
                 .catch((err) => {
                   console.error('[SessionRestore] failed to load full content:', st.filePath, err);
+                  const message = err instanceof Error ? err.message : String(err);
+                  setTabLoadState(restoredTabId, 'error', message);
+                  void desktopApi.message(`无法完整恢复“${st.title}”：${message}`, {
+                    title: '会话恢复失败',
+                    kind: 'error',
+                  }).catch(() => {});
                 });
             } else {
               const result = await desktopApi.readFileAuto(st.filePath);

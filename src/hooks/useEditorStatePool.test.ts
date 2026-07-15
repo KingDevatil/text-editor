@@ -6,6 +6,7 @@ import {
   getEditorContent,
   hasEditorState,
   subscribeContentChange,
+  subscribeDocumentChange,
   notifyContentChange,
   subscribeEditorUpdate,
   notifyEditorUpdate,
@@ -60,6 +61,19 @@ describe('useEditorStatePool', () => {
     setEditorState('tab-4', createState('updated'));
     notifyContentChange('tab-4');
     expect(listener).toHaveBeenCalledWith('updated');
+
+    unsub();
+  });
+
+  it('notifies lightweight document listeners without passing full content', () => {
+    const listener = vi.fn();
+    const unsub = subscribeDocumentChange('tab-document', listener);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    setEditorState('tab-document', createState('updated'));
+    notifyContentChange('tab-document');
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenLastCalledWith();
 
     unsub();
   });

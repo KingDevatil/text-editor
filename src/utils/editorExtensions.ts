@@ -475,8 +475,8 @@ export function buildBaseExtensions(
     highlightActiveLineGutter(),
     highlightActiveLine(),
     syntaxHighlightExtension,
-    ...(lang === 'json' || lang === 'jsonl' ? [jsoncCommentHighlighter] : []),
-    compartments.language.of(getLanguageExtensionsSync(lang)),
+    ...(!largeFileOptimize && (lang === 'json' || lang === 'jsonl') ? [jsoncCommentHighlighter] : []),
+    compartments.language.of(largeFileOptimize ? [] : getLanguageExtensionsSync(lang)),
     compartments.theme.of(buildDynamicTheme(colors, isDark)),
     compartments.fontSize.of(
       EditorView.theme({
@@ -488,8 +488,8 @@ export function buildBaseExtensions(
     compartments.lint.of([]),
     compartments.autocomplete.of([]),
     compartments.wordWrap.of(wordWrap ? EditorView.lineWrapping : []),
-    compartments.unicodeHighlight.of(enableUnicodeHighlight ? [...unicodeHighlightExt] : []),
-    compartments.markdownKeymap.of(lang === 'markdown' ? createMarkdownKeymap() : []),
+    compartments.unicodeHighlight.of(!largeFileOptimize && enableUnicodeHighlight ? [...unicodeHighlightExt] : []),
+    compartments.markdownKeymap.of(!largeFileOptimize && lang === 'markdown' ? createMarkdownKeymap() : []),
   ];
 
   // Heavy features: disabled in large-file mode to reduce CPU / memory

@@ -2,7 +2,14 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { FileType, ChevronUp, AlertCircle, RefreshCw } from 'lucide-react';
 import { forEachDiagnostic } from '@codemirror/lint';
 import type { EditorTab, Encoding, Language, LineEnding } from '../types';
-import { getEditorLineCount, getEditorValueLength, getActiveView, subscribeContentChange } from '../hooks/useEditorStatePool';
+import {
+  getActiveView,
+  getEditorLineCount,
+  getEditorState,
+  getEditorValueLength,
+  subscribeDocumentChange,
+  subscribeEditorUpdate,
+} from '../hooks/useEditorStatePool';
 
 interface StatusBarProps {
   activeTab: EditorTab | null;
@@ -66,8 +73,9 @@ const LANGUAGES: { id: Language; label: string }[] = [
   { id: 'shell', label: 'Shell' },
 ];
 
-function useClickOutside(ref: React.RefObject<HTMLElement | null>, onClose: () => void) {
+function useClickOutside(ref: React.RefObject<HTMLElement | null>, onClose: () => void, enabled: boolean) {
   useEffect(() => {
+    if (!enabled) return;
     const handle = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         onClose();
@@ -75,20 +83,44 @@ function useClickOutside(ref: React.RefObject<HTMLElement | null>, onClose: () =
     };
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
-  }, [ref, onClose]);
+  }, [ref, onClose, enabled]);
 }
 
-function countWords(text: string): number {
-  let count = 0;
-  const lines = text.split('\n');
-  const limit = Math.min(lines.length, 100000);
-  for (let i = 0; i < limit; i++) {
-    const matches = lines[i].match(/[\u4e00-\u9fa5]|[a-zA-Z]+|[0-9]+/g);
-    if (matches) {
-      count += matches.length;
-    }
+const WORD_COUNT_LINE_LIMIT = 100000;
+const WORD_COUNT_CHUNK_LINES = 2000;
+
+function scheduleWordCount(tabId: string, onDone: (count: number) => void): () => void {
+  const doc = getEditorState(tabId)?.doc;
+  if (!doc) {
+    onDone(0);
+    return () => {};
   }
-  return count;
+
+  let cancelled = false;
+  let nextLine = 1;
+  let count = 0;
+  let timer: number | null = null;
+  const limit = Math.min(doc.lines, WORD_COUNT_LINE_LIMIT);
+
+  const step = () => {
+    if (cancelled) return;
+    const end = Math.min(limit, nextLine + WORD_COUNT_CHUNK_LINES - 1);
+    for (; nextLine <= end; nextLine += 1) {
+      const matches = doc.line(nextLine).text.match(/[\u4e00-\u9fa5]|[a-zA-Z]+|[0-9]+/g);
+      if (matches) count += matches.length;
+    }
+    if (nextLine <= limit) {
+      timer = window.setTimeout(step, 0);
+    } else {
+      onDone(count);
+    }
+  };
+
+  timer = window.setTimeout(step, 0);
+  return () => {
+    cancelled = true;
+    if (timer !== null) window.clearTimeout(timer);
+  };
 }
 
 const StatusBar: React.FC<StatusBarProps> = React.memo(({
@@ -105,7 +137,6 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
   const [calculating, setCalculating] = useState(false);
   const [diagnosticCount, setDiagnosticCount] = useState(0);
   const [contentVersion, setContentVersion] = useState(0);
-  const diagRef = useRef<number | null>(null);
 
   // Quick stats from state pool — read directly so they update on every render
   const quickStats = useMemo(() => {
@@ -117,7 +148,7 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, activeTab?.id, contentVersion]);
 
-  // Event-driven word count via subscribeContentChange + debounce
+  // Event-driven word count without materializing the whole document string.
   useEffect(() => {
     if (!activeTab) {
       queueMicrotask(() => {
@@ -128,26 +159,31 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
     }
 
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let cancelCount: (() => void) | null = null;
 
-    const unsubscribe = subscribeContentChange(activeTab.id, (content) => {
+    const unsubscribe = subscribeDocumentChange(activeTab.id, () => {
       setContentVersion((v) => v + 1);
       if (timeoutId) clearTimeout(timeoutId);
-      const isLarge = content.length > 2 * 1024 * 1024;
+      cancelCount?.();
+      const isLarge = getEditorValueLength(activeTab.id) > 2 * 1024 * 1024;
       if (isLarge) setCalculating(true);
       timeoutId = setTimeout(() => {
-        setWordCount(countWords(content));
-        setCalculating(false);
+        cancelCount = scheduleWordCount(activeTab.id, (count) => {
+          setWordCount(count);
+          setCalculating(false);
+        });
       }, isLarge ? 800 : 300);
     });
 
     return () => {
       unsubscribe();
       if (timeoutId) clearTimeout(timeoutId);
+      cancelCount?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab?.id]);
 
-  // Diagnostic count polling
+  // Diagnostic count follows editor updates instead of polling in the background.
   useEffect(() => {
     if (!activeTab) {
       queueMicrotask(() => setDiagnosticCount(0));
@@ -165,13 +201,18 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
       });
       setDiagnosticCount(count);
     };
-    poll();
-    diagRef.current = window.setInterval(poll, 500);
+    let frame: number | null = null;
+    const schedulePoll = () => {
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        poll();
+      });
+    };
+    const unsubscribe = subscribeEditorUpdate(activeTab.id, schedulePoll);
     return () => {
-      if (diagRef.current !== null) {
-        clearInterval(diagRef.current);
-        diagRef.current = null;
-      }
+      unsubscribe();
+      if (frame !== null) window.cancelAnimationFrame(frame);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab?.id]);
@@ -183,9 +224,11 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
   const langRef = useRef<HTMLDivElement>(null);
   const leRef = useRef<HTMLDivElement>(null);
 
-  useClickOutside(encRef, () => setEncOpen(false));
-  useClickOutside(langRef, () => setLangOpen(false));
-  useClickOutside(leRef, () => setLeOpen(false));
+  useClickOutside(encRef, () => setEncOpen(false), encOpen);
+  useClickOutside(langRef, () => setLangOpen(false), langOpen);
+  useClickOutside(leRef, () => setLeOpen(false), leOpen);
+  const loadState = activeTab?.loadState ?? 'ready';
+  const controlsDisabled = loadState !== 'ready';
 
   return (
     <div
@@ -198,14 +241,15 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
             <div className="relative" ref={langRef}>
               <button
                 onClick={() => { setLangOpen(!langOpen); setEncOpen(false); setLeOpen(false); }}
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors cursor-pointer hover:opacity-80"
-                title="点击切换语言模式"
+                className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors hover:opacity-80 ${controlsDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                title={controlsDisabled ? '文件完整加载后可切换语言模式' : '点击切换语言模式'}
+                disabled={controlsDisabled}
               >
                 <FileType size={12} />
                 <span className="font-medium">{activeTab.language.toUpperCase()}</span>
                 <ChevronUp size={10} className={`transition-transform ${langOpen ? 'rotate-180' : ''}`} />
               </button>
-              {langOpen && (
+              {langOpen && !controlsDisabled && (
                 <div
                   className="absolute bottom-full left-0 mb-1 py-1.5 rounded-lg shadow-xl border z-50 min-w-[150px] max-h-64 overflow-auto"
                   style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)' }}
@@ -229,11 +273,17 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
             <span
               className="px-1.5 py-0.5 rounded text-[10px] font-medium"
               style={{
-                backgroundColor: activeTab.isDirty ? 'var(--te-warning)' : 'var(--te-success)',
+                backgroundColor: loadState === 'error'
+                  ? 'var(--te-error)'
+                  : loadState === 'loading'
+                    ? 'var(--te-primary)'
+                    : activeTab.isDirty
+                      ? 'var(--te-warning)'
+                      : 'var(--te-success)',
                 color: 'var(--te-text-primary)',
               }}
             >
-              {activeTab.isDirty ? '已修改' : '已保存'}
+              {loadState === 'error' ? '加载失败' : loadState === 'loading' ? '正在加载' : activeTab.isDirty ? '已修改' : '已保存'}
             </span>
           </>
         )}
@@ -320,14 +370,15 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
         )}
         <div className="relative" ref={leRef}>
           <button
-            onClick={() => { setLeOpen(!leOpen); setEncOpen(false); setLangOpen(false); }}
-            className="flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors cursor-pointer hover:opacity-80"
-            title="点击切换换行符"
+          onClick={() => { setLeOpen(!leOpen); setEncOpen(false); setLangOpen(false); }}
+          className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors hover:opacity-80 ${controlsDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+          title={controlsDisabled ? '文件完整加载后可切换换行符' : '点击切换换行符'}
+          disabled={controlsDisabled}
           >
             <span className="font-medium">{lineEnding || 'LF'}</span>
             <ChevronUp size={10} className={`transition-transform ${leOpen ? 'rotate-180' : ''}`} />
           </button>
-          {leOpen && (
+          {leOpen && !controlsDisabled && (
             <div
               className="absolute bottom-full right-0 mb-1 py-1.5 rounded-lg shadow-xl border z-50 min-w-[100px]"
               style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)' }}
@@ -350,14 +401,15 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
         </div>
         <div className="relative" ref={encRef}>
           <button
-            onClick={() => { setEncOpen(!encOpen); setLangOpen(false); setLeOpen(false); }}
-            className="flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors cursor-pointer hover:opacity-80"
-            title="点击切换编码"
+          onClick={() => { setEncOpen(!encOpen); setLangOpen(false); setLeOpen(false); }}
+          className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors hover:opacity-80 ${controlsDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+          title={controlsDisabled ? '文件完整加载后可切换编码' : '点击切换编码'}
+          disabled={controlsDisabled}
           >
             <span className="font-medium">{activeTab?.encoding || 'UTF-8'}</span>
             <ChevronUp size={10} className={`transition-transform ${encOpen ? 'rotate-180' : ''}`} />
           </button>
-          {encOpen && (
+          {encOpen && !controlsDisabled && (
             <div
               className="absolute bottom-full right-0 mb-1 py-1.5 rounded-lg shadow-xl border z-50 min-w-[150px]"
               style={{ backgroundColor: 'var(--te-bg-tertiary)', borderColor: 'var(--te-border)' }}

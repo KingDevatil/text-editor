@@ -43,6 +43,21 @@ const TreeNode: React.FC<TreeNodeProps> = ({
           className="flex items-center gap-1 rounded-md px-2 py-1 cursor-pointer transition-colors hover:bg-[var(--te-bg-tertiary)] text-[var(--te-text-primary)]"
           style={{ paddingLeft: `${paddingLeft}px` }}
           onClick={() => onToggleDir(entry.path)}
+          role="treeitem"
+          aria-expanded={isExpanded}
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onToggleDir(entry.path);
+            } else if (event.key === 'ArrowRight' && !isExpanded) {
+              event.preventDefault();
+              onToggleDir(entry.path);
+            } else if (event.key === 'ArrowLeft' && isExpanded) {
+              event.preventDefault();
+              onToggleDir(entry.path);
+            }
+          }}
         >
           {isExpanded ? (
             <ChevronDown size={14} className="text-[var(--te-text-secondary)] shrink-0" />
@@ -57,7 +72,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
           <span className="text-sm truncate select-none">{entry.name}</span>
         </div>
         {isExpanded && (
-          <div>
+          <div role="group">
             {children.map((child) => (
               <TreeNode
                 key={child.path}
@@ -88,6 +103,14 @@ const TreeNode: React.FC<TreeNodeProps> = ({
       style={{ paddingLeft: `${paddingLeft + 18}px` }}
       onClick={() => onOpenFile(entry.path)}
       title={entry.path}
+      role="treeitem"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onOpenFile(entry.path);
+        }
+      }}
     >
       <FileText size={13} className="text-[var(--te-text-secondary)] shrink-0" />
       <span className="text-sm truncate select-none">{entry.name}</span>
@@ -106,6 +129,7 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
 }) => {
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [dirCache, setDirCache] = useState<Map<string, DirEntry[]>>(new Map());
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const openFilePaths = useMemo(() => {
     return new Set(openTabs.map((t) => t.filePath).filter(Boolean) as string[]);
@@ -121,6 +145,8 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
       });
     } catch (err) {
       console.error('Failed to list directory:', path, err);
+      const message = err instanceof Error ? err.message : String(err);
+      setLoadError(`无法读取 ${path}：${message}`);
     }
   }, []);
 
@@ -145,6 +171,7 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
   useEffect(() => {
     if (projectPath) {
       queueMicrotask(() => {
+        setLoadError(null);
         setExpandedDirs(new Set([projectPath]));
         setDirCache(new Map());
         loadDirectory(projectPath);
@@ -156,13 +183,16 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
     onProjectChange(null);
     setExpandedDirs(new Set());
     setDirCache(new Map());
+    setLoadError(null);
   }, [onProjectChange]);
 
   const handleRefresh = useCallback(async () => {
     if (!projectPath) return;
-    const toRefresh = [projectPath, ...Array.from(expandedDirs)];
-    for (const path of toRefresh) {
-      await loadDirectory(path);
+    setLoadError(null);
+    const toRefresh = Array.from(new Set([projectPath, ...expandedDirs]));
+    const concurrency = 4;
+    for (let index = 0; index < toRefresh.length; index += concurrency) {
+      await Promise.all(toRefresh.slice(index, index + concurrency).map(loadDirectory));
     }
   }, [projectPath, expandedDirs, loadDirectory]);
 
@@ -227,7 +257,12 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
       </div>
 
       {/* File tree */}
-      <div className="flex-1 overflow-auto p-1.5">
+      {loadError && (
+        <div className="mx-2 mt-2 rounded-md px-2 py-1.5 text-xs" role="alert" style={{ backgroundColor: 'color-mix(in srgb, var(--te-error) 12%, transparent)', color: 'var(--te-error)' }}>
+          {loadError}
+        </div>
+      )}
+      <div className="flex-1 overflow-auto p-1.5" role="tree" aria-label="项目文件">
         {projectPath ? (
           rootEntries.length > 0 ? (
             rootEntries.map((entry) => (

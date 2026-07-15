@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
-const validChannels = new Set(['file:changed', 'open-file']);
+const validChannels = new Set(['file:changed', 'open-file', 'window:maximized-changed']);
 
 function on(channel, handler) {
   if (!validChannels.has(channel)) throw new Error(`Unsupported channel: ${channel}`);
@@ -60,5 +60,6 @@ if (process.isMainFrame) contextBridge.exposeInMainWorld('electronDesktop', {
   registerDefaultApp: () => ipcRenderer.invoke('app:registerDefaultApp'),
   onFileChanged: (handler) => on('file:changed', handler),
   onOpenFile: (handler) => on('open-file', handler),
+  onWindowMaximizedChanged: (handler) => on('window:maximized-changed', handler),
   onDragDropEvent: async (handler) => onDragDropEvent(handler),
 });

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React from 'react';
 import { X, FileCheck, FileX, GitCompare } from 'lucide-react';
 import DiffEditor from './DiffEditor';
 
@@ -23,28 +23,26 @@ const ExternalChangeDialog: React.FC<ExternalChangeDialogProps> = ({
   onKeepCurrent,
   onClose,
 }) => {
-  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) onClose();
-  }, [onClose]);
-
   if (!open) return null;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
       style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-      onClick={handleBackdropClick}
     >
       <div
         className="flex flex-col w-[90vw] h-[85vh] rounded-lg border shadow-2xl overflow-hidden"
         style={{ backgroundColor: 'var(--te-bg-primary)', borderColor: 'var(--te-border)' }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="external-change-title"
       >
         {/* Header */}
         <div
           className="flex items-center justify-between px-4 py-3 border-b"
           style={{ borderBottomColor: 'var(--te-border)', backgroundColor: 'var(--te-bg-secondary)' }}
         >
-          <div className="flex items-center gap-2 text-sm font-medium" style={{ color: 'var(--te-text-primary)' }}>
+          <div id="external-change-title" className="flex items-center gap-2 text-sm font-medium" style={{ color: 'var(--te-text-primary)' }}>
             <GitCompare size={16} />
             <span>外部变更：{fileName}</span>
           </div>
@@ -52,7 +50,8 @@ const ExternalChangeDialog: React.FC<ExternalChangeDialogProps> = ({
             onClick={onClose}
             className="p-1 rounded hover:opacity-80 transition-opacity cursor-pointer"
             style={{ color: 'var(--te-text-secondary)' }}
-            title="关闭"
+            title="保留当前编辑并关闭"
+            aria-label="保留当前编辑并关闭"
           >
             <X size={16} />
           </button>

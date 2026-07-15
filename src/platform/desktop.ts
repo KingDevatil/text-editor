@@ -52,6 +52,7 @@ interface ElectronDesktopBridge {
   registerDefaultApp(): Promise<string>;
   onFileChanged(handler: (change: FileChangeEvent) => void): Unlisten;
   onOpenFile(handler: (path: string) => void): Unlisten;
+  onWindowMaximizedChanged(handler: (isMaximized: boolean) => void): Unlisten;
   onDragDropEvent(handler: (paths: string[]) => void): Promise<Unlisten>;
 }
 
@@ -218,6 +219,11 @@ export const desktopApi = {
   onOpenFile(handler: (path: string) => void): Unlisten {
     const electron = electronBridge();
     return electron ? electron.onOpenFile(handler) : () => {};
+  },
+
+  onWindowMaximizedChanged(handler: (isMaximized: boolean) => void): Unlisten {
+    const electron = electronBridge();
+    return electron?.onWindowMaximizedChanged ? electron.onWindowMaximizedChanged(handler) : () => {};
   },
 
   async onDragDropEvent(handler: (paths: string[]) => void): Promise<Unlisten> {

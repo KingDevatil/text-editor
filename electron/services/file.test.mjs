@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { renameFile } = require('./file.cjs');
+const { readFileAuto, renameFile, writeFile } = require('./file.cjs');
 const tempDirs = [];
 
 function makeTempDir() {
@@ -54,5 +54,19 @@ describe('file service renameFile', () => {
     await renameFile(source, target);
     expect(fs.existsSync(source)).toBe(false);
     expect(fs.readFileSync(target, 'utf8')).toBe('shared');
+  });
+});
+
+describe('file service encoding', () => {
+  it('promotes detected ASCII to UTF-8 before saving non-ASCII text', async () => {
+    const dir = makeTempDir();
+    const filePath = path.join(dir, 'ascii.txt');
+    fs.writeFileSync(filePath, 'hello', 'ascii');
+
+    const detected = await readFileAuto(filePath);
+    expect(detected.encoding).toBe('UTF-8');
+
+    await writeFile(filePath, 'hello中文', detected.encoding);
+    expect(fs.readFileSync(filePath, 'utf8')).toBe('hello中文');
   });
 });

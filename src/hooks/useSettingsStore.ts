@@ -102,7 +102,7 @@ const useSettingsStore = create<SettingsState & SettingsActions>((set) => ({
   showWhitespace: loaded.showWhitespace ?? false,
   scrollPastEnd: loaded.scrollPastEnd ?? true,
   minimapVisible: loaded.minimapVisible ?? true,
-  largeFileOptimize: loaded.largeFileOptimize ?? false,
+  largeFileOptimize: loaded.largeFileOptimize ?? true,
   unicodeHighlight: loaded.unicodeHighlight ?? false,
   columnAlignSupported: loaded.columnAlignSupported ?? false,
   readerTocVisible: loaded.readerTocVisible ?? true,

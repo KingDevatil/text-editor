@@ -5,6 +5,7 @@ import StatusBar from './StatusBar';
 import type { EditorTab } from '../types';
 
 const subscribeMock = vi.fn(() => vi.fn());
+const subscribeEditorUpdateMock = vi.fn(() => vi.fn());
 const getEditorLineCountMock = vi.fn(() => 42);
 const getEditorValueLengthMock = vi.fn(() => 1337);
 
@@ -12,9 +13,13 @@ vi.mock('../hooks/useEditorStatePool', async () => {
   const actual = await vi.importActual<typeof import('../hooks/useEditorStatePool')>('../hooks/useEditorStatePool');
   return {
     ...actual,
-    subscribeContentChange: (...args: Parameters<typeof actual.subscribeContentChange>) => {
+    subscribeDocumentChange: (...args: Parameters<typeof actual.subscribeDocumentChange>) => {
       subscribeMock(...args);
       return subscribeMock.mock.results[subscribeMock.mock.results.length - 1]?.value ?? vi.fn();
+    },
+    subscribeEditorUpdate: (...args: Parameters<typeof actual.subscribeEditorUpdate>) => {
+      subscribeEditorUpdateMock(...args);
+      return subscribeEditorUpdateMock.mock.results[subscribeEditorUpdateMock.mock.results.length - 1]?.value ?? vi.fn();
     },
     getEditorLineCount: () => getEditorLineCountMock(),
     getEditorValueLength: () => getEditorValueLengthMock(),
@@ -24,6 +29,7 @@ vi.mock('../hooks/useEditorStatePool', async () => {
 describe('StatusBar', () => {
   beforeEach(() => {
     subscribeMock.mockClear();
+    subscribeEditorUpdateMock.mockClear();
     getEditorLineCountMock.mockReturnValue(42);
     getEditorValueLengthMock.mockReturnValue(1337);
   });

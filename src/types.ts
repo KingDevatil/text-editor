@@ -1,9 +1,13 @@
 export interface EditorTab {
   id: string;
   title: string;
+  kind?: EditorTabKind;
   language: Language;
   isDirty: boolean;
   revision?: number;
+  loadState?: TabLoadState;
+  loadError?: string;
+  isLargeFile?: boolean;
   filePath?: string;
   encoding: Encoding;
   group?: 1 | 2;
@@ -11,6 +15,9 @@ export interface EditorTab {
   columnAlignEnabled?: boolean;
   lineEnding?: LineEnding;
 }
+
+export type EditorTabKind = 'editor' | 'searchResults';
+export type TabLoadState = 'ready' | 'loading' | 'error';
 
 export type Encoding =
   | 'UTF-8'

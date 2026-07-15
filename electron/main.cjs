@@ -220,6 +220,14 @@ function createWindow() {
     },
   });
 
+  const sendMaximizedState = (isMaximized) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window:maximized-changed', isMaximized);
+    }
+  };
+  mainWindow.on('maximize', () => sendMaximizedState(true));
+  mainWindow.on('unmaximize', () => sendMaximizedState(false));
+
   logStartup('window-created', { isDev, isPackaged: app.isPackaged, argv: process.argv.slice(1) });
 
   let rendererReadyToShow = false;

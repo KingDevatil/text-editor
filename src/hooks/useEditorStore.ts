@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { EditorTab, Language, Encoding, LineEnding } from '../types';
+import type { EditorTab, EditorTabKind, Language, Encoding, LineEnding, TabLoadState } from '../types';
 import { EXT_TO_LANGUAGE } from '../types';
 import { deleteEditorState } from './useEditorStatePool';
 
@@ -28,6 +28,7 @@ interface EditorState {
 
 interface EditorActions {
   createTab: (title?: string, language?: Language, filePath?: string, group?: 1 | 2, encoding?: Encoding, initialContent?: string, lineEnding?: LineEnding) => EditorTab;
+  createVirtualTab: (title: string, kind: Exclude<EditorTabKind, 'editor'>, group?: 1 | 2) => EditorTab;
   markTabDirty: (tabId: string, isDirty: boolean) => void;
   closeTab: (tabId: string) => void;
   closeTabs: (idsToClose: string[]) => void;
@@ -37,6 +38,8 @@ interface EditorActions {
   setTabEncoding: (tabId: string, encoding: Encoding) => void;
   setTabLanguage: (tabId: string, language: Language) => void;
   setTabInitialContent: (tabId: string, content: string) => void;
+  setTabLoadState: (tabId: string, loadState: TabLoadState, loadError?: string) => void;
+  setTabLargeFile: (tabId: string, isLargeFile: boolean) => void;
   setTabColumnAlign: (tabId: string, enabled: boolean) => void;
   setTabLineEnding: (tabId: string, lineEnding: LineEnding) => void;
   moveTabToGroup: (tabId: string, group: 1 | 2) => void;
@@ -67,9 +70,11 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
     const newTab: EditorTab = {
       id,
       title,
+      kind: 'editor',
       language: lang,
       isDirty: false,
       revision: 0,
+      loadState: 'ready',
       filePath,
       encoding,
       group,
@@ -89,14 +94,42 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
     return newTab;
   },
 
-  markTabDirty: (tabId, isDirty) => {
+  createVirtualTab: (title, kind, group = 1) => {
+    const id = generateId();
+    const newTab: EditorTab = {
+      id,
+      title,
+      kind,
+      language: 'plaintext',
+      isDirty: false,
+      revision: 0,
+      loadState: 'ready',
+      encoding: 'UTF-8',
+      group,
+      initialContent: '',
+      lineEnding: 'LF',
+    };
     set((state) => ({
-      tabs: state.tabs.map((tab) => (
-        tab.id === tabId
-          ? { ...tab, isDirty, revision: isDirty ? (tab.revision ?? 0) + 1 : tab.revision }
-          : tab
-      )),
+      tabs: [...state.tabs, newTab],
+      activeTabId: id,
+      activeGroup1TabId: group === 1 ? id : state.activeGroup1TabId,
+      activeGroup2TabId: group === 2 ? id : state.activeGroup2TabId,
     }));
+    return newTab;
+  },
+
+  markTabDirty: (tabId, isDirty) => {
+    set((state) => {
+      const current = state.tabs.find((tab) => tab.id === tabId);
+      if (!current || current.isDirty === isDirty) return state;
+      return {
+        tabs: state.tabs.map((tab) => (
+          tab.id === tabId
+            ? { ...tab, isDirty, revision: isDirty ? (tab.revision ?? 0) + 1 : tab.revision }
+            : tab
+        )),
+      };
+    });
   },
 
   closeTab: (tabId) => {
@@ -228,6 +261,22 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
   setTabInitialContent: (tabId, content) => {
     set((state) => ({
       tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, initialContent: content } : tab)),
+    }));
+  },
+
+  setTabLoadState: (tabId, loadState, loadError) => {
+    set((state) => ({
+      tabs: state.tabs.map((tab) => (
+        tab.id === tabId
+          ? { ...tab, loadState, loadError: loadState === 'error' ? loadError : undefined }
+          : tab
+      )),
+    }));
+  },
+
+  setTabLargeFile: (tabId, isLargeFile) => {
+    set((state) => ({
+      tabs: state.tabs.map((tab) => tab.id === tabId ? { ...tab, isLargeFile } : tab),
     }));
   },
 

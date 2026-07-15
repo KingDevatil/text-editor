@@ -22,6 +22,8 @@ const TitleBar: React.FC<TitleBarProps> = ({ title = 'Text Editor', onClose }) =
       }
     };
     check();
+    const unlisten = desktopApi.onWindowMaximizedChanged(setIsMaximized);
+    return () => unlisten();
   }, []);
 
   const handleMinimize = async () => {

@@ -112,7 +112,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
     if (!desktopApi.isDesktop()) return;
     try {
       const result = await desktopApi.registerDefaultApp();
-      console.log('[RegisterDefault]', result);
       await desktopApi.message(result, { title: '默认编辑器' });
     } catch (err) {
       console.error('[RegisterDefault]', err);
@@ -144,10 +143,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = React.memo(({ visible, onClo
       <div
         className="w-[640px] max-w-[92vw] h-[520px] max-h-[85vh] flex flex-col rounded-xl shadow-2xl border overflow-hidden"
         style={{ backgroundColor: 'var(--te-bg-secondary)', borderColor: 'var(--te-border)' }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b shrink-0" style={{ borderColor: 'var(--te-border)' }}>
-          <h2 className="text-base font-semibold" style={{ color: 'var(--te-text-primary)' }}>设置</h2>
+          <h2 id="settings-title" className="text-base font-semibold" style={{ color: 'var(--te-text-primary)' }}>设置</h2>
           <button
             onClick={handleClose}
             className="p-1.5 rounded-md hover:opacity-70 transition-opacity"

@@ -33,6 +33,7 @@ interface ToolbarProps {
   onToggleReadMode: () => void;
   onToggleSettings: () => void;
   onToggleJsonForm: () => void;
+  canSave: boolean;
   canFormat: boolean;
   canPreview: boolean;
   previewActive: boolean;
@@ -59,6 +60,7 @@ const Toolbar: React.FC<ToolbarProps> = React.memo(({
   onToggleReadMode,
   onToggleSettings,
   onToggleJsonForm,
+  canSave,
   canFormat,
   canPreview,
   previewActive,
@@ -110,7 +112,13 @@ const Toolbar: React.FC<ToolbarProps> = React.memo(({
             <span className="hidden sm:inline font-medium">文件夹</span>
           </button>
         )}
-        <button className={btnBase} style={btnStyle} onClick={onSaveFile} title="保存文件 (Ctrl+S)">
+        <button
+          className={`${btnBase} ${!canSave ? 'opacity-40 cursor-not-allowed active:scale-100' : ''}`}
+          style={btnStyle}
+          onClick={onSaveFile}
+          disabled={!canSave}
+          title={canSave ? '保存文件 (Ctrl+S)' : '当前标签暂不可保存'}
+        >
           <Save size={16} />
           <span className="hidden sm:inline font-medium">保存</span>
         </button>

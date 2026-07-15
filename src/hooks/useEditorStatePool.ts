@@ -26,6 +26,7 @@ export function deleteEditorState(tabId: string): void {
   scrollTops.delete(tabId);
   activeViews.delete(tabId);
   clearContentListeners(tabId);
+  clearDocumentChangeListeners(tabId);
   clearEditorUpdateListeners(tabId);
   deleteCompartments(tabId);
 }
@@ -59,6 +60,26 @@ export function hasEditorState(tabId: string): boolean {
 export type ContentChangeListener = (content: string) => void;
 
 const contentListeners = new Map<string, Set<ContentChangeListener>>();
+export type DocumentChangeListener = () => void;
+const documentChangeListeners = new Map<string, Set<DocumentChangeListener>>();
+
+/** Subscribe without materializing the whole document as a string. */
+export function subscribeDocumentChange(
+  tabId: string,
+  listener: DocumentChangeListener
+): () => void {
+  let set = documentChangeListeners.get(tabId);
+  if (!set) {
+    set = new Set();
+    documentChangeListeners.set(tabId, set);
+  }
+  set.add(listener);
+  listener();
+  return () => {
+    set?.delete(listener);
+    if (set?.size === 0) documentChangeListeners.delete(tabId);
+  };
+}
 
 /**
  * Subscribe to content changes for a specific tab.
@@ -91,6 +112,17 @@ export function subscribeContentChange(
  * Called by CmEditor's updateListener when docChanged is true.
  */
 export function notifyContentChange(tabId: string): void {
+  const documentSet = documentChangeListeners.get(tabId);
+  if (documentSet) {
+    for (const listener of documentSet) {
+      try {
+        listener();
+      } catch (err) {
+        console.error('[notifyContentChange] document listener error:', err);
+      }
+    }
+  }
+
   const set = contentListeners.get(tabId);
   if (!set || set.size === 0) return;
   const content = getEditorContent(tabId);
@@ -106,6 +138,10 @@ export function notifyContentChange(tabId: string): void {
 /** Clean up all listeners for a tab (call on tab close). */
 export function clearContentListeners(tabId: string): void {
   contentListeners.delete(tabId);
+}
+
+export function clearDocumentChangeListeners(tabId: string): void {
+  documentChangeListeners.delete(tabId);
 }
 
 // ── Editor update pub/sub (for Minimap and other view-dependent consumers) ──
@@ -163,6 +199,7 @@ export function clearEditorUpdateListeners(tabId: string): void {
 /** Clear all listeners across every tab. Useful for test isolation. */
 export function clearAllListeners(): void {
   contentListeners.clear();
+  documentChangeListeners.clear();
   editorUpdateListeners.clear();
 }
 
@@ -203,7 +240,6 @@ export function updateEditorContent(tabId: string, newContent: string): void {
 
   const oldState = pool.states.get(tabId);
   if (!oldState) {
-    console.log('[updateEditorContent] no state for tabId:', tabId);
     return;
   }
 

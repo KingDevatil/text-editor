@@ -7,6 +7,7 @@ interface SearchResultsViewProps {
   query: string;
   directory: string;
   matches: SearchMatch[];
+  truncated?: boolean;
   isLoading?: boolean;
   onOpenFile: (filePath: string, lineNumber: number) => void;
 }
@@ -20,6 +21,7 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({
   query,
   directory,
   matches,
+  truncated = false,
   isLoading = false,
   onOpenFile,
 }) => {
@@ -74,12 +76,21 @@ const SearchResultsView: React.FC<SearchResultsViewProps> = ({
         <span className="text-xs text-[var(--te-text-secondary)]">
           — 在 {directory} 中找到 {totalFiles} 个文件，{totalMatches} 处匹配
         </span>
+        {truncated && (
+          <span className="text-xs font-medium" style={{ color: 'var(--te-warning)' }}>
+            仅显示前 {totalMatches} 条
+          </span>
+        )}
       </div>
 
       {/* Results list */}
       <div className="flex-1 overflow-auto py-1">
         {groups.map((group) => (
-          <div key={group.filePath} className="mb-1">
+          <div
+            key={group.filePath}
+            className="mb-1"
+            style={{ contentVisibility: 'auto', containIntrinsicSize: '80px' }}
+          >
             {/* File header */}
             <div className="flex items-center gap-2 px-3 py-1.5 sticky top-0 bg-[var(--te-bg-secondary)] border-b border-[var(--te-border)]">
               <FileText size={12} className="text-[var(--te-text-secondary)] shrink-0" />

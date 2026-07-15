@@ -50,13 +50,13 @@ describe('ExternalChangeDialog', () => {
     expect(baseProps.onKeepCurrent).toHaveBeenCalled();
   });
 
-  it('calls onClose when clicking backdrop', () => {
+  it('does not dismiss the decision when clicking backdrop', () => {
     render(<ExternalChangeDialog {...baseProps} />);
     const backdrop = screen.getByText('外部变更：test.txt').closest('div[class*="fixed"]');
     expect(backdrop).not.toBeNull();
     if (backdrop) {
       fireEvent.click(backdrop);
-      expect(baseProps.onClose).toHaveBeenCalled();
+      expect(baseProps.onClose).not.toHaveBeenCalled();
     }
   });
 });

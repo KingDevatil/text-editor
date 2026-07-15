@@ -56,7 +56,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, commands
           break;
         case 'ArrowDown':
           e.preventDefault();
-          setSelectedIndex((i) => Math.min(i + 1, filtered.length - 1));
+          if (filtered.length > 0) setSelectedIndex((i) => Math.min(i + 1, filtered.length - 1));
           break;
         case 'ArrowUp':
           e.preventDefault();
@@ -93,7 +93,12 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, commands
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-[560px] max-w-[90vw] rounded-xl shadow-2xl border overflow-hidden bg-[var(--te-bg-tertiary)] border-[var(--te-border)]">
+      <div
+        className="w-[560px] max-w-[90vw] rounded-xl shadow-2xl border overflow-hidden bg-[var(--te-bg-tertiary)] border-[var(--te-border)]"
+        role="dialog"
+        aria-modal="true"
+        aria-label="命令面板"
+      >
         {/* Search input */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--te-border)]">
           <Search size={18} className="text-[var(--te-text-secondary)]" />
@@ -103,10 +108,12 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, commands
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="输入命令或快捷键..."
+            aria-label="搜索命令"
             className="flex-1 bg-[var(--te-bg-primary)] outline-none text-sm text-[var(--te-text-primary)] placeholder-[var(--te-text-secondary)]"
           />
           <button
             onClick={onClose}
+            aria-label="关闭命令面板"
             className="p-1 rounded hover:bg-[var(--te-bg-secondary)] text-[var(--te-text-secondary)]"
           >
             <X size={14} />
@@ -114,13 +121,15 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, commands
         </div>
 
         {/* Command list */}
-        <div ref={listRef} className="max-h-[320px] overflow-auto py-1">
+        <div ref={listRef} className="max-h-[320px] overflow-auto py-1" role="listbox" aria-label="命令列表">
           {filtered.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-[var(--te-text-secondary)]">未找到匹配的命令</div>
           ) : (
             filtered.map((cmd, index) => (
               <button
                 key={cmd.id}
+                role="option"
+                aria-selected={index === selectedIndex}
                 onClick={() => {
                   cmd.action();
                   onClose();
