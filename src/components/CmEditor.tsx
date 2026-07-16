@@ -32,6 +32,9 @@ import {
   takePendingSelection,
   takePendingLineNumber,
   getEditorValueLength,
+  hasSavedEditorSnapshot,
+  isEditorContentSaved,
+  markEditorContentSaved,
 } from '../hooks/useEditorStatePool';
 import ContextMenu from './ContextMenu';
 import Minimap from './Minimap';
@@ -73,6 +76,8 @@ interface CmEditorProps {
   unicodeHighlight?: boolean;
   columnAlignEnabled?: boolean;
   lineEnding?: LineEnding;
+  onRequestCloseTab?: (tabId: string) => void;
+  onRequestCloseTabs?: (tabIds: string[]) => void;
 }
 
 const CmEditor: React.FC<CmEditorProps> = ({
@@ -91,6 +96,8 @@ const CmEditor: React.FC<CmEditorProps> = ({
   unicodeHighlight: enableUnicodeHighlight = false,
   columnAlignEnabled = false,
   lineEnding,
+  onRequestCloseTab,
+  onRequestCloseTabs,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -99,7 +106,13 @@ const CmEditor: React.FC<CmEditorProps> = ({
     compartmentsRef.current = getOrCreateCompartments(tabId);
   }
 
-  const { contextMenu, setContextMenu, handleContextMenu } = useEditorContextMenu(viewRef, language, tabId);
+  const { contextMenu, setContextMenu, handleContextMenu } = useEditorContextMenu(
+    viewRef,
+    language,
+    tabId,
+    onRequestCloseTab,
+    onRequestCloseTabs,
+  );
 
   // Subscribe to custom colors from settings store for dynamic theme resolution
   const lightCustomColors = useSettingsStore((s) => s.lightCustomColors);
@@ -113,8 +126,6 @@ const CmEditor: React.FC<CmEditorProps> = ({
     if (!container) return;
 
     let view = viewRef.current;
-    let cancelled = false;
-
     // Save previous tab's state before switching
     if (view) {
       setEditorState(tabId, view.state);
@@ -154,7 +165,15 @@ const CmEditor: React.FC<CmEditorProps> = ({
               // Fast path: length mismatch guarantees a real change.
               const changed = hasMeaningfulDocumentChange(update);
               if (changed) {
-                useEditorStore.getState().markTabDirty(tabId, true);
+                const store = useEditorStore.getState();
+                const tab = store.tabs.find((candidate) => candidate.id === tabId);
+                const isSaved = isEditorContentSaved(
+                  tabId,
+                  update.state.doc,
+                  tab?.encoding,
+                  tab?.lineEnding,
+                );
+                store.markTabDirty(tabId, !isSaved);
                 notifyContentChange(tabId);
               }
             }
@@ -165,7 +184,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
       setEditorState(tabId, state);
       if (initialContent.length > 0) {
         // EditorState now owns the document. Avoid retaining a duplicate full
-        // string in Zustand while keeping every inactive EditorView mounted.
+        // string in Zustand while the state pool preserves inactive documents.
         useEditorStore.getState().setTabInitialContent(tabId, '');
       }
       perf.mark(`editor-init-end-${tabId}`);
@@ -174,6 +193,11 @@ const CmEditor: React.FC<CmEditorProps> = ({
         language,
         docLength: initialContent.length,
       });
+    }
+
+    const currentTab = useEditorStore.getState().tabs.find((candidate) => candidate.id === tabId);
+    if (!currentTab?.isDirty && !hasSavedEditorSnapshot(tabId)) {
+      markEditorContentSaved(tabId, currentTab?.encoding, currentTab?.lineEnding, state);
     }
 
     // Notify content subscribers so previews/readers receive the initial content
@@ -280,24 +304,7 @@ const CmEditor: React.FC<CmEditorProps> = ({
       dblClickCleanup = () => cmContent.removeEventListener('dblclick', handleDblClick);
     }
 
-    // Async load heavy language pack only when large-file mode is inactive.
-    const shouldLoadLanguage = !(largeFileOptimize && (forceLargeFile || getEditorValueLength(tabId) > LARGE_FILE_THRESHOLD));
-    if (shouldLoadLanguage) loadLanguageExtensions(language).then((exts) => {
-      if (cancelled || !viewRef.current) return;
-      viewRef.current.dispatch({
-        effects: compartmentsRef.current!.language.reconfigure(exts),
-      });
-      // Re-apply scroll position after language extension changes layout
-      const latestScrollTop = getEditorScrollTop(tabId);
-      if (latestScrollTop !== undefined && viewRef.current) {
-        viewRef.current.scrollDOM.scrollTop = latestScrollTop;
-      }
-    }).catch((err) => {
-      console.error(`[CmEditor] Failed to load language ${language}:`, err);
-    });
-
     return () => {
-      cancelled = true;
       dblClickCleanup?.();
       scroller.removeEventListener('scroll', onScroll);
       // (contextmenu unbinding handled in dedicated useEffect below)
@@ -462,11 +469,15 @@ const CmEditor: React.FC<CmEditorProps> = ({
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
+    const contentLength = getEditorValueLength(tabId) || initialContent.length;
+    const effectiveLargeFile = largeFileOptimize && (forceLargeFile || contentLength > LARGE_FILE_THRESHOLD);
     view.dispatch({
-      effects: compartmentsRef.current!.unicodeHighlight.reconfigure(enableUnicodeHighlight ? [...unicodeHighlightExt] : []),
+      effects: compartmentsRef.current!.unicodeHighlight.reconfigure(
+        enableUnicodeHighlight && !effectiveLargeFile ? [...unicodeHighlightExt] : [],
+      ),
     });
     setEditorState(tabId, view.state);
-  }, [enableUnicodeHighlight, tabId]);
+  }, [enableUnicodeHighlight, forceLargeFile, initialContent, largeFileOptimize, tabId]);
 
   // Dynamic reconfiguration: large file optimize (disable heavy features + foldGutter)
   const lastEffectiveLargeFileRef = useRef<boolean | null>(null);

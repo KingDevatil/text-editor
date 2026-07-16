@@ -43,7 +43,11 @@ interface FindReplaceProps {
   projectPath?: string;
   activeTabFilePath?: string;
   onSearchInFolder?: (query: string, options: SearchOptions, directory: string) => void;
-  folderModeRef?: React.MutableRefObject<{ setFolderMode: (v: boolean) => void } | null>;
+  folderModeRef?: React.MutableRefObject<{
+    setFolderMode: (v: boolean) => void;
+    focusFind: () => void;
+    showReplace: () => void;
+  } | null>;
 }
 
 const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath, activeTabFilePath, onSearchInFolder, folderModeRef }) => {
@@ -91,14 +95,35 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
     setFolderMode(enabled);
   }, [defaultSearchDir, searchDir]);
 
+  const focusFind = useCallback(() => {
+    setFolderModeWithDefaultDir(false);
+    window.setTimeout(() => {
+      findInputRef.current?.focus();
+      findInputRef.current?.select();
+    }, 0);
+  }, [setFolderModeWithDefaultDir]);
+
+  const openReplace = useCallback(() => {
+    setFolderModeWithDefaultDir(false);
+    setShowReplace(true);
+    window.setTimeout(() => {
+      findInputRef.current?.focus();
+      findInputRef.current?.select();
+    }, 0);
+  }, [setFolderModeWithDefaultDir]);
+
   // Expose setFolderMode to parent via ref
   useEffect(() => {
     if (!folderModeRef) return;
-    folderModeRef.current = { setFolderMode: setFolderModeWithDefaultDir };
+    folderModeRef.current = {
+      setFolderMode: setFolderModeWithDefaultDir,
+      focusFind,
+      showReplace: openReplace,
+    };
     return () => {
       folderModeRef.current = null;
     };
-  }, [folderModeRef, setFolderModeWithDefaultDir]);
+  }, [folderModeRef, focusFind, openReplace, setFolderModeWithDefaultDir]);
 
   useEffect(() => {
     let cancelled = false;

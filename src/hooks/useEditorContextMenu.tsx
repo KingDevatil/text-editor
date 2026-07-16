@@ -13,7 +13,9 @@ import { desktopApi } from '../platform/desktop';
 export function useEditorContextMenu(
   viewRef: React.MutableRefObject<EditorView | null>,
   language: string,
-  tabId: string
+  tabId: string,
+  onRequestCloseTab?: (tabId: string) => void,
+  onRequestCloseTabs?: (tabIds: string[]) => void,
 ) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
 
@@ -119,24 +121,22 @@ export function useEditorContextMenu(
       },
     ];
 
-    if (otherTabs.length > 0) {
-      items.push(
-        { id: 'divider-tab', label: '', icon: null, divider: true, action: () => {} },
-        {
-          id: 'close-tab',
-          label: '关闭标签页',
-          icon: <X size={14} />,
-          action: () => store.closeTab(tabId),
-        }
-      );
-      if (otherTabs.length > 1) {
-        items.push({
-          id: 'close-other-tabs',
-          label: '关闭其他标签页',
-          icon: <FileMinus size={14} />,
-          action: () => store.closeTabs(otherTabs.map((t) => t.id)),
-        });
+    items.push(
+      { id: 'divider-tab', label: '', icon: null, divider: true, action: () => {} },
+      {
+        id: 'close-tab',
+        label: '关闭标签页',
+        icon: <X size={14} />,
+        action: () => (onRequestCloseTab ?? store.closeTab)(tabId),
       }
+    );
+    if (otherTabs.length > 0) {
+      items.push({
+        id: 'close-other-tabs',
+        label: '关闭其他标签页',
+        icon: <FileMinus size={14} />,
+        action: () => (onRequestCloseTabs ?? store.closeTabs)(otherTabs.map((t) => t.id)),
+      });
       if (!isDiffMode && otherTabs.length >= 1) {
         items.push({
           id: 'diff-with',
@@ -210,7 +210,7 @@ export function useEditorContextMenu(
     );
 
     return items;
-  }, [language, tabId, viewRef]);
+  }, [language, onRequestCloseTab, onRequestCloseTabs, tabId, viewRef]);
 
   const handleContextMenu = useCallback((e: MouseEvent) => {
     e.preventDefault();

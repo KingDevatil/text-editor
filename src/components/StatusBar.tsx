@@ -133,8 +133,11 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
   columnAlignSupported,
   externalChangeNotice,
 }) => {
-  const [wordCount, setWordCount] = useState(0);
-  const [calculating, setCalculating] = useState(false);
+  const [wordCountState, setWordCountState] = useState<{
+    tabId: string | null;
+    count: number;
+    calculating: boolean;
+  }>({ tabId: null, count: 0, calculating: false });
   const [diagnosticCount, setDiagnosticCount] = useState(0);
   const [contentVersion, setContentVersion] = useState(0);
 
@@ -150,13 +153,7 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
 
   // Event-driven word count without materializing the whole document string.
   useEffect(() => {
-    if (!activeTab) {
-      queueMicrotask(() => {
-        setWordCount(0);
-        setCalculating(false);
-      });
-      return;
-    }
+    if (!activeTab) return;
 
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let cancelCount: (() => void) | null = null;
@@ -166,11 +163,10 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
       if (timeoutId) clearTimeout(timeoutId);
       cancelCount?.();
       const isLarge = getEditorValueLength(activeTab.id) > 2 * 1024 * 1024;
-      if (isLarge) setCalculating(true);
+      setWordCountState({ tabId: activeTab.id, count: 0, calculating: isLarge });
       timeoutId = setTimeout(() => {
         cancelCount = scheduleWordCount(activeTab.id, (count) => {
-          setWordCount(count);
-          setCalculating(false);
+          setWordCountState({ tabId: activeTab.id, count, calculating: false });
         });
       }, isLarge ? 800 : 300);
     });
@@ -185,10 +181,7 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
 
   // Diagnostic count follows editor updates instead of polling in the background.
   useEffect(() => {
-    if (!activeTab) {
-      queueMicrotask(() => setDiagnosticCount(0));
-      return;
-    }
+    if (!activeTab) return;
     const poll = () => {
       const view = getActiveView(activeTab.id);
       if (!view) {
@@ -229,6 +222,8 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
   useClickOutside(leRef, () => setLeOpen(false), leOpen);
   const loadState = activeTab?.loadState ?? 'ready';
   const controlsDisabled = loadState !== 'ready';
+  const visibleWordCount = wordCountState.tabId === activeTab?.id ? wordCountState.count : 0;
+  const wordCountCalculating = wordCountState.tabId === activeTab?.id && wordCountState.calculating;
 
   return (
     <div
@@ -299,7 +294,7 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
           <>
             <span className="tabular-nums">行 {quickStats.lineCount}</span>
             <span className="tabular-nums">字符 {quickStats.charCount}</span>
-            <span className="tabular-nums">字数 {calculating ? '...' : wordCount.toLocaleString()}</span>
+            <span className="tabular-nums">字数 {wordCountCalculating ? '...' : visibleWordCount.toLocaleString()}</span>
           </>
         )}
         {activeTab && (
@@ -368,6 +363,8 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
             )}
           </>
         )}
+        {activeTab && (
+          <>
         <div className="relative" ref={leRef}>
           <button
           onClick={() => { setLeOpen(!leOpen); setEncOpen(false); setLangOpen(false); }}
@@ -430,6 +427,8 @@ const StatusBar: React.FC<StatusBarProps> = React.memo(({
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
     </div>
   );

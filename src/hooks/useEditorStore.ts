@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { EditorTab, EditorTabKind, Language, Encoding, LineEnding, TabLoadState } from '../types';
 import { EXT_TO_LANGUAGE } from '../types';
-import { deleteEditorState } from './useEditorStatePool';
+import { deleteEditorState, markEditorContentSaved } from './useEditorStatePool';
 
 let tabCounter = 0;
 
@@ -137,7 +137,14 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
     set((state) => {
       const tab = state.tabs.find((t) => t.id === tabId);
       const closedGroup = tab?.group || 1;
+      const oldGroupTabs = state.tabs.filter((candidate) => (candidate.group || 1) === closedGroup);
+      const closedGroupIndex = oldGroupTabs.findIndex((candidate) => candidate.id === tabId);
       const newTabs = state.tabs.filter((t) => t.id !== tabId);
+      const pickAdjacent = (candidates: EditorTab[]) => {
+        if (candidates.length === 0) return null;
+        const index = Math.min(Math.max(closedGroupIndex, 0), candidates.length - 1);
+        return candidates[index]?.id ?? null;
+      };
 
       let nextActiveTabId = state.activeTabId;
       let nextActiveGroup1Id = state.activeGroup1TabId;
@@ -145,22 +152,22 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
 
       if (state.activeGroup1TabId === tabId) {
         const g1Tabs = newTabs.filter((t) => t.group === 1 || !t.group);
-        nextActiveGroup1Id = g1Tabs[g1Tabs.length - 1]?.id || null;
+        nextActiveGroup1Id = pickAdjacent(g1Tabs);
       }
       if (state.activeGroup2TabId === tabId) {
         const g2Tabs = newTabs.filter((t) => t.group === 2);
-        nextActiveGroup2Id = g2Tabs[g2Tabs.length - 1]?.id || null;
+        nextActiveGroup2Id = pickAdjacent(g2Tabs);
       }
 
       if (state.activeTabId === tabId) {
         if (closedGroup === 1) {
           const g1Tabs = newTabs.filter((t) => t.group === 1 || !t.group);
-          if (g1Tabs.length > 0) nextActiveTabId = g1Tabs[g1Tabs.length - 1].id;
+          if (g1Tabs.length > 0) nextActiveTabId = pickAdjacent(g1Tabs);
           else if (nextActiveGroup2Id) nextActiveTabId = nextActiveGroup2Id;
           else nextActiveTabId = null;
         } else {
           const g2Tabs = newTabs.filter((t) => t.group === 2);
-          if (g2Tabs.length > 0) nextActiveTabId = g2Tabs[g2Tabs.length - 1].id;
+          if (g2Tabs.length > 0) nextActiveTabId = pickAdjacent(g2Tabs);
           else {
             const g1Tabs = newTabs.filter((t) => t.group === 1 || !t.group);
             nextActiveTabId = g1Tabs[g1Tabs.length - 1]?.id || null;
@@ -230,9 +237,15 @@ const useEditorStore = create<EditorState & EditorActions>((set) => ({
   },
 
   markTabSaved: (tabId) => {
-    set((state) => ({
-      tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, isDirty: false } : tab)),
-    }));
+    set((state) => {
+      const tab = state.tabs.find((candidate) => candidate.id === tabId);
+      if (tab) markEditorContentSaved(tabId, tab.encoding, tab.lineEnding);
+      return {
+        tabs: state.tabs.map((candidate) => (
+          candidate.id === tabId ? { ...candidate, isDirty: false } : candidate
+        )),
+      };
+    });
   },
 
   renameTab: (tabId, newTitle, newFilePath) => {

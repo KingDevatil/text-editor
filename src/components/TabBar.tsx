@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { EditorTab } from '../types';
-import { desktopApi } from '../platform/desktop';
 
 interface TabBarProps {
   tabs: EditorTab[];
@@ -27,6 +26,8 @@ interface ScrollState {
 const arrowBtnClass =
   'absolute top-0 bottom-0 z-10 flex items-center justify-center w-7 h-9 backdrop-blur-sm transition-colors cursor-pointer bg-[color-mix(in_srgb,var(--te-bg-secondary)_90%,transparent)] text-[var(--te-text-secondary)] hover:text-[var(--te-text-primary)]';
 
+const tabRevealPadding = 32;
+
 const TabBar: React.FC<TabBarProps> = React.memo(({
   tabs,
   activeTabId,
@@ -42,7 +43,6 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
   onCloseTabs,
   onRenameTab,
 }) => {
-  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const g1ScrollRef = useRef<HTMLDivElement>(null);
   const g2ScrollRef = useRef<HTMLDivElement>(null);
   const [g1Scroll, setG1Scroll] = useState<ScrollState>({ canLeft: false, canRight: false });
@@ -76,15 +76,56 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
     index: number;
     x: number;
   } | null>(null);
+  const tabLayoutKey = tabs
+    .map((tab) => `${tab.id}:${tab.group ?? 1}:${tab.title}`)
+    .join('|');
 
   const checkScroll = useCallback((el: HTMLDivElement | null, setter: React.Dispatch<React.SetStateAction<ScrollState>>) => {
     if (!el) return;
     const { scrollLeft, scrollWidth, clientWidth } = el;
-    setter({
+    const nextState = {
       canLeft: scrollLeft > 1,
       canRight: scrollLeft + clientWidth < scrollWidth - 1,
-    });
+    };
+    setter((currentState) => (
+      currentState.canLeft === nextState.canLeft && currentState.canRight === nextState.canRight
+        ? currentState
+        : nextState
+    ));
   }, []);
+
+  const revealActiveTab = useCallback((
+    el: HTMLDivElement | null,
+    tabId: string | null,
+    setter: React.Dispatch<React.SetStateAction<ScrollState>>
+  ) => {
+    if (!el || !tabId) return;
+    checkScroll(el, setter);
+    if (el.scrollWidth <= el.clientWidth + 1) return;
+
+    const tabElement = Array.from(el.children).find(
+      (child): child is HTMLElement => (
+        child instanceof HTMLElement && child.dataset.tabId === tabId
+      )
+    );
+    if (!tabElement) return;
+
+    const containerRect = el.getBoundingClientRect();
+    const tabRect = tabElement.getBoundingClientRect();
+    const visibleLeft = containerRect.left + tabRevealPadding;
+    const visibleRight = containerRect.right - tabRevealPadding;
+    let delta = 0;
+
+    if (tabRect.left < visibleLeft) {
+      delta = tabRect.left - visibleLeft;
+    } else if (tabRect.right > visibleRight) {
+      delta = tabRect.right - visibleRight;
+    }
+
+    if (Math.abs(delta) > 1) {
+      el.scrollBy({ left: delta, behavior: 'smooth' });
+    }
+  }, [checkScroll]);
 
   useEffect(() => {
     const handle = () => {
@@ -94,22 +135,38 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
     handle();
     window.addEventListener('resize', handle);
     return () => window.removeEventListener('resize', handle);
-  }, [tabs, splitMode, checkScroll]);
+  }, [tabLayoutKey, splitMode, checkScroll]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      revealActiveTab(g1ScrollRef.current, activeGroup1TabId, setG1Scroll);
+      if (splitMode) {
+        revealActiveTab(g2ScrollRef.current, activeGroup2TabId, setG2Scroll);
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeGroup1TabId, activeGroup2TabId, tabLayoutKey, splitMode, revealActiveTab]);
 
   const scrollBy = (el: HTMLDivElement | null, delta: number) => {
     if (!el) return;
     el.scrollBy({ left: delta, behavior: 'smooth' });
   };
 
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollWidth <= el.clientWidth + 1) return;
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (Math.abs(delta) < 1) return;
+    e.preventDefault();
+    el.scrollBy({ left: delta, behavior: 'auto' });
+  }, []);
+
   const handleTabActivate = useCallback((tabId: string, group: 1 | 2) => {
     onTabClick(tabId, group);
   }, [onTabClick]);
 
-  const handleTabDoubleClick = useCallback((tabId: string) => {
-    if (clickTimer.current) {
-      clearTimeout(clickTimer.current);
-      clickTimer.current = null;
-    }
+  const handleTabDoubleClick = useCallback((e: React.MouseEvent, tabId: string) => {
+    e.stopPropagation();
     const tab = tabs.find((t) => t.id === tabId);
     if (!tab) return;
     setRenamingTab(tabId);
@@ -118,26 +175,8 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
   }, [tabs]);
 
   const handleTabClick = useCallback((tabId: string, group: 1 | 2) => {
-    if (clickTimer.current) {
-      clearTimeout(clickTimer.current);
-      clickTimer.current = null;
-      handleTabDoubleClick(tabId);
-      return;
-    }
-    clickTimer.current = setTimeout(() => {
-      clickTimer.current = null;
-      handleTabActivate(tabId, group);
-    }, 250);
-  }, [handleTabActivate, handleTabDoubleClick]);
-
-  useEffect(() => {
-    return () => {
-      if (clickTimer.current) {
-        clearTimeout(clickTimer.current);
-        clickTimer.current = null;
-      }
-    };
-  }, []);
+    handleTabActivate(tabId, group);
+  }, [handleTabActivate]);
 
   const handleBlankDoubleClick = useCallback((group: 1 | 2) => {
     onNewFileInGroup?.(group);
@@ -277,23 +316,10 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
 
   const handleMenuClose = useCallback(() => {
     if (contextMenu) {
-      const tab = tabs.find((t) => t.id === contextMenu.tabId);
-      if (tab?.isDirty) {
-        desktopApi.confirm(`"${tab.title}" 有未保存的更改，确定要关闭吗？`, { title: '未保存的更改' }).then((ok) => {
-          if (ok) {
-            onTabClose(contextMenu.tabId);
-          }
-          closeContextMenu();
-        }).catch((error) => {
-          console.error('[TabBar] close confirmation failed:', error);
-          closeContextMenu();
-        });
-        return;
-      }
       onTabClose(contextMenu.tabId);
       closeContextMenu();
     }
-  }, [contextMenu, onTabClose, closeContextMenu, tabs]);
+  }, [contextMenu, onTabClose, closeContextMenu]);
 
   const handleMenuCloseOthers = useCallback(() => {
     if (!contextMenu || !onCloseTabs) return;
@@ -301,17 +327,6 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
       ? tabs.filter((t) => t.group === 1 || !t.group)
       : tabs.filter((t) => t.group === 2);
     const idsToClose = groupTabs.filter((t) => t.id !== contextMenu.tabId).map((t) => t.id);
-    const hasDirty = idsToClose.some((id) => tabs.find((t) => t.id === id)?.isDirty);
-    if (hasDirty) {
-      desktopApi.confirm('要关闭的页签中有未保存的更改，确定关闭吗？', { title: '未保存的更改' }).then((ok) => {
-        if (ok && idsToClose.length > 0) onCloseTabs(idsToClose);
-        closeContextMenu();
-      }).catch((error) => {
-        console.error('[TabBar] close confirmation failed:', error);
-        closeContextMenu();
-      });
-      return;
-    }
     if (idsToClose.length > 0) {
       onCloseTabs(idsToClose);
     }
@@ -326,17 +341,6 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
     const index = groupTabs.findIndex((t) => t.id === contextMenu.tabId);
     if (index > 0) {
       const idsToClose = groupTabs.slice(0, index).map((t) => t.id);
-      const hasDirty = idsToClose.some((id) => tabs.find((t) => t.id === id)?.isDirty);
-      if (hasDirty) {
-        desktopApi.confirm('要关闭的页签中有未保存的更改，确定关闭吗？', { title: '未保存的更改' }).then((ok) => {
-          if (ok) onCloseTabs(idsToClose);
-          closeContextMenu();
-        }).catch((error) => {
-          console.error('[TabBar] close confirmation failed:', error);
-          closeContextMenu();
-        });
-        return;
-      }
       onCloseTabs(idsToClose);
     }
     closeContextMenu();
@@ -350,17 +354,6 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
     const index = groupTabs.findIndex((t) => t.id === contextMenu.tabId);
     if (index >= 0 && index < groupTabs.length - 1) {
       const idsToClose = groupTabs.slice(index + 1).map((t) => t.id);
-      const hasDirty = idsToClose.some((id) => tabs.find((t) => t.id === id)?.isDirty);
-      if (hasDirty) {
-        desktopApi.confirm('要关闭的页签中有未保存的更改，确定关闭吗？', { title: '未保存的更改' }).then((ok) => {
-          if (ok) onCloseTabs(idsToClose);
-          closeContextMenu();
-        }).catch((error) => {
-          console.error('[TabBar] close confirmation failed:', error);
-          closeContextMenu();
-        });
-        return;
-      }
       onCloseTabs(idsToClose);
     }
     closeContextMenu();
@@ -395,8 +388,10 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
         data-group={group}
         data-group-active={isGroupActive}
         data-focused={isActive}
+        title={tab.filePath || tab.title}
         onMouseDown={(e) => handleMouseDown(e, tab.id, group)}
         onClick={() => handleTabClick(tab.id, group)}
+        onDoubleClick={(e) => handleTabDoubleClick(e, tab.id)}
         onContextMenu={(e) => handleContextMenu(e, tab.id, group)}
         className={`
           group relative flex items-center gap-2 px-3.5 min-w-[120px] max-w-[220px] cursor-pointer select-none flex-shrink-0
@@ -438,6 +433,7 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
               setRenamingTab(null);
             }}
             onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
             className="flex-1 min-w-0 text-sm bg-transparent outline-none border-b border-[var(--te-primary)] text-[var(--te-text-primary)]"
           />
         ) : (
@@ -449,16 +445,11 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
           </span>
         )}
         <button
+          type="button"
+          onMouseDown={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
-            if (isDirty) {
-              desktopApi.confirm(`"${tab.title}" 有未保存的更改，确定要关闭吗？`, { title: '未保存的更改' }).then((ok) => {
-                if (ok) onTabClose(tab.id);
-              }).catch((error) => {
-                console.error('[TabBar] close confirmation failed:', error);
-              });
-              return;
-            }
             onTabClose(tab.id);
           }}
           className="p-0.5 rounded-md transition-all duration-100 text-[var(--te-text-secondary)] hover:text-[var(--te-error)] hover:bg-[color-mix(in_srgb,var(--te-error)_10%,transparent)]"
@@ -480,9 +471,11 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
     <div className="relative flex-1 flex flex-shrink-0 overflow-hidden">
       {scrollState.canLeft && (
         <button
+          type="button"
           className={`${arrowBtnClass} left-0`}
           onClick={() => scrollBy(scrollRef.current, -200)}
           title="向左滚动"
+          aria-label="向左滚动标签"
         >
           <ChevronLeft size={16} />
         </button>
@@ -490,19 +483,25 @@ const TabBar: React.FC<TabBarProps> = React.memo(({
       <div
         ref={scrollRef}
         data-group={group}
+        data-testid={`tab-scroll-group-${group}`}
         className={`flex overflow-x-auto scrollbar-hide flex-1 pt-[2px] transition-colors duration-150 ${
           dragOver?.group === group ? 'bg-[color-mix(in_srgb,var(--te-primary)_10%,transparent)]' : ''
         }`}
         onScroll={(e) => checkScroll(e.currentTarget, setter)}
-        onDoubleClick={() => handleBlankDoubleClick(group)}
+        onWheel={handleWheel}
+        onDoubleClick={(e) => {
+          if (e.target === e.currentTarget) handleBlankDoubleClick(group);
+        }}
       >
         {groupTabs.map((tab) => renderTab(tab, group))}
       </div>
       {scrollState.canRight && (
         <button
+          type="button"
           className={`${arrowBtnClass} right-0`}
           onClick={() => scrollBy(scrollRef.current, 200)}
           title="向右滚动"
+          aria-label="向右滚动标签"
         >
           <ChevronRight size={16} />
         </button>

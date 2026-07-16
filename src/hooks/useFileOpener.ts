@@ -59,14 +59,15 @@ export function useFileOpener() {
 
       try {
         const platform = desktopApi.platform();
+        const findOpenTab = () => useEditorStore.getState().tabs.find((tab) =>
+          normalizePath(tab.filePath || '', platform) === normalizePath(filePath, platform)
+        );
         // Fast path: content already provided (e.g. from drag-drop)
         if (options?.text !== undefined) {
           const text = options.text;
           const detectedEncoding = options.encoding || 'UTF-8';
           const fileName = filePath.split(/[\\/]/).pop() || filePath;
-          const existing = useEditorStore.getState().tabs.find((t) =>
-            normalizePath(t.filePath || '', platform) === normalizePath(filePath, platform)
-          );
+          const existing = findOpenTab();
           const lineEnding = detectLineEnding(text);
 
           if (existing) {
@@ -87,9 +88,7 @@ export function useFileOpener() {
         }
 
         const fileName = filePath.split(/[\\/]/).pop() || filePath;
-        const existing = useEditorStore.getState().tabs.find((t) =>
-          normalizePath(t.filePath || '', platform) === normalizePath(filePath, platform)
-        );
+        const existing = findOpenTab();
 
         if (existing) {
           setActiveTabId(existing.id);
@@ -107,6 +106,11 @@ export function useFileOpener() {
 
         // Progressive loading for very large files (>2MB)
         const meta = await readFileMeta(filePath);
+        const openedDuringMetadataRead = findOpenTab();
+        if (openedDuringMetadataRead) {
+          setActiveTabId(openedDuringMetadataRead.id);
+          return;
+        }
         const isProgressive = meta.file_size > PROGRESSIVE_THRESHOLD;
 
         if (isProgressive) {
@@ -158,6 +162,11 @@ export function useFileOpener() {
           }, 100);
         } else {
           const result = await readFileAuto(filePath);
+          const openedDuringRead = findOpenTab();
+          if (openedDuringRead) {
+            setActiveTabId(openedDuringRead.id);
+            return;
+          }
           const lang = getLanguageFromFileName(fileName);
           const lineEnding = detectLineEnding(result.text);
 

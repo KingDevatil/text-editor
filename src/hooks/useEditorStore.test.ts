@@ -195,6 +195,23 @@ describe('useEditorStore', () => {
     expect(state.activeGroup1TabId).toBe('tab-b');
   });
 
+  it('closeTab selects the adjacent right tab instead of jumping to the end', () => {
+    useEditorStore.setState({
+      tabs: [
+        { id: 'tab-a', title: 'a.txt', language: 'plaintext', isDirty: false, group: 1 },
+        { id: 'tab-b', title: 'b.txt', language: 'plaintext', isDirty: false, group: 1 },
+        { id: 'tab-c', title: 'c.txt', language: 'plaintext', isDirty: false, group: 1 },
+      ],
+      activeTabId: 'tab-a',
+      activeGroup1TabId: 'tab-a',
+    });
+
+    useEditorStore.getState().closeTab('tab-a');
+
+    expect(useEditorStore.getState().activeTabId).toBe('tab-b');
+    expect(useEditorStore.getState().activeGroup1TabId).toBe('tab-b');
+  });
+
   it('closeTab switches group2 active to another remaining tab when closing active tab', () => {
     useEditorStore.setState({
       tabs: [

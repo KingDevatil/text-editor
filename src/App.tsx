@@ -30,7 +30,8 @@ import { cancelSearch, searchDirectory } from './services/searchService';
 import { basename, desktopApi, dirname, joinPath, type FileChangeEvent } from './platform/desktop';
 
 const SEARCH_RESULT_LIMIT = 1000;
-const SettingsPanel = React.lazy(() => import('./components/SettingsPanel'));
+const loadSettingsPanel = () => import('./components/SettingsPanel');
+const SettingsPanel = React.lazy(loadSettingsPanel);
 const JsonFormPanel = React.lazy(() => import('./components/JsonFormPanel'));
 const MarkdownPreview = React.lazy(() => import('./components/MarkdownPreview'));
 const MarkdownReader = React.lazy(() => import('./components/MarkdownReader'));
@@ -42,6 +43,16 @@ const ExternalChangeDialog = React.lazy(() => import('./components/ExternalChang
 const FeatureLoading = () => (
   <div className="flex h-full w-full items-center justify-center text-sm" role="status" style={{ color: 'var(--te-text-secondary)' }}>
     正在加载视图…
+  </div>
+);
+
+const SettingsLoading = () => (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center text-sm backdrop-blur-sm"
+    role="status"
+    style={{ backgroundColor: 'color-mix(in srgb, var(--te-bg-primary) 82%, transparent)', color: 'var(--te-text-secondary)' }}
+  >
+    正在加载设置…
   </div>
 );
 
@@ -68,19 +79,16 @@ function App() {
   const handleOpenFileRef = useRef<(() => void) | null>(null);
   const handleSaveFileRef = useRef<(() => void) | null>(null);
   const handleFormatRef = useRef<(() => void) | null>(null);
+  const handleCloseActiveTabRef = useRef<(() => void) | null>(null);
   const forceClosingRef = useRef(false);
   const fileChangeGenerationRef = useRef(new Map<string, number>());
   const savingTabsRef = useRef(new Set<string>());
   const pendingSaveTabsRef = useRef(new Set<string>());
   const saveTabByIdRef = useRef<((tabId: string) => void) | null>(null);
-  const findReplaceVisibleRef = useRef(findReplaceVisible);
   const columnAlignSupportedRef = useRef(false);
   const columnAlignSupported = useSettingsStore((s) => s.columnAlignSupported);
 
   // Keep all callback refs up-to-date outside of render phase
-  useEffect(() => {
-    findReplaceVisibleRef.current = findReplaceVisible;
-  });
   useEffect(() => {
     columnAlignSupportedRef.current = columnAlignSupported;
   });
@@ -121,7 +129,11 @@ function App() {
   }>>({});
   const [searchLoadingMap, setSearchLoadingMap] = useState<Record<string, boolean>>({});
   const activeSearchIdRef = useRef<string | null>(null);
-  const findReplaceRef = useRef<{ setFolderMode: (v: boolean) => void } | null>(null);
+  const findReplaceRef = useRef<{
+    setFolderMode: (v: boolean) => void;
+    focusFind: () => void;
+    showReplace: () => void;
+  } | null>(null);
   const [externalChangeNotice, setExternalChangeNotice] = useState<string | null>(null);
   const [externalDiff, setExternalDiff] = useState<{
     open: boolean;
@@ -156,10 +168,14 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [settingsEverOpened, setSettingsEverOpened] = useState(false);
+  const preloadSettings = useCallback(() => {
+    void loadSettingsPanel();
+  }, []);
   const handleToggleSettings = useCallback(() => {
+    preloadSettings();
     setSettingsEverOpened(true);
     setSettingsVisible((visible) => !visible);
-  }, []);
+  }, [preloadSettings]);
   const [readerScrollToTop, setReaderScrollToTop] = useState(false);
   const SIDEBAR_WIDTH = 220;
   const overlayOpenRef = useRef(false);
@@ -208,9 +224,9 @@ function App() {
     // If no unsaved changes, silently reload and show a transient notice
     if (!stillTab.isDirty) {
       updateEditorContent(stillTab.id, externalText);
-      markTabSaved(stillTab.id);
       setTabEncoding(stillTab.id, externalEncoding as Encoding);
       setTabLineEnding(stillTab.id, detectLineEnding(externalText));
+      markTabSaved(stillTab.id);
       setExternalChangeNotice('已同步外部变更');
       window.setTimeout(() => setExternalChangeNotice(null), 2500);
       return;
@@ -313,8 +329,18 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target instanceof HTMLElement ? e.target : null;
+      const modifierPressed = e.ctrlKey || e.metaKey;
+      if (modifierPressed && e.key.toLowerCase() === 'w') {
+        // Electron and browsers reserve Ctrl/Cmd+W for the entire window. Always
+        // intercept it; overlays suppress the tab action but not preventDefault.
+        e.preventDefault();
+        if (!overlayOpenRef.current && !target?.closest('[role="dialog"]')) {
+          handleCloseActiveTabRef.current?.();
+        }
+        return;
+      }
       if (overlayOpenRef.current || target?.closest('[role="dialog"]')) return;
-      if (e.ctrlKey || e.metaKey) {
+      if (modifierPressed) {
         switch (e.key.toLowerCase()) {
           case 'n':
             e.preventDefault();
@@ -329,8 +355,16 @@ function App() {
             handleSaveFileRef.current?.();
             break;
           case 'f':
+            if (e.shiftKey) break;
             e.preventDefault();
-            setFindReplaceVisible(!findReplaceVisibleRef.current);
+            setFindReplaceVisible(true);
+            findReplaceRef.current?.setFolderMode(false);
+            findReplaceRef.current?.focusFind();
+            break;
+          case 'h':
+            e.preventDefault();
+            setFindReplaceVisible(true);
+            findReplaceRef.current?.showReplace();
             break;
         }
       }
@@ -450,32 +484,27 @@ function App() {
       const files = e.target.files;
       if (!files || files.length === 0) return;
 
-      const filePromises: Promise<void>[] = [];
-
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const filePath = (file as { path?: string }).path || file.name;
         const fileName = file.name;
 
-        filePromises.push((async () => {
-          try {
-            if (desktopApi.isDesktop() && filePath) {
-              await openFile(filePath);
-            } else {
-              const text = await file.text();
-              const lineEnding = detectLineEnding(text);
-              createTab(fileName, undefined, undefined, 1, 'UTF-8', text, lineEnding);
-            }
-          } catch (err) {
-            console.error('Failed to read file:', fileName, err);
-            if (desktopApi.isDesktop() && filePath) {
-              console.warn(`[OpenFile] 无法读取文件: ${fileName}`);
-            }
+        try {
+          if (desktopApi.isDesktop() && filePath) {
+            await openFile(filePath);
+          } else {
+            const text = await file.text();
+            const lineEnding = detectLineEnding(text);
+            createTab(fileName, undefined, undefined, 1, 'UTF-8', text, lineEnding);
           }
-        })());
+        } catch (err) {
+          console.error('Failed to read file:', fileName, err);
+          if (desktopApi.isDesktop() && filePath) {
+            console.warn(`[OpenFile] 无法读取文件: ${fileName}`);
+          }
+        }
       }
 
-      await Promise.all(filePromises);
       e.target.value = '';
     },
     [openFile, createTab]
@@ -490,6 +519,13 @@ function App() {
         ? `文件未完整加载，不能保存。${targetTab.loadError ? `\n${targetTab.loadError}` : ''}`
         : '文件正在完整加载，加载完成后才能保存。';
       await desktopApi.message(message, { title: '暂时无法保存', kind: 'warning' });
+      return;
+    }
+    if (targetTab.lineEnding === 'Mixed') {
+      await desktopApi.message(
+        '文件包含混合换行符。为避免保存时静默改写，请先在底部状态栏选择 LF、CRLF 或 CR，再保存。',
+        { title: '请选择换行符', kind: 'warning' },
+      );
       return;
     }
     if (savingTabsRef.current.has(tabId)) {
@@ -707,43 +743,80 @@ function App() {
     });
   }, [setActiveGroup1TabId, setActiveGroup2TabId, setActiveTabId]);
 
-  const handleTabClose = useCallback((id: string) => {
+  const cleanupClosedTabState = useCallback((ids: string[]) => {
+    const idSet = new Set(ids);
     setSearchResultsMap((prev) => {
-      if (prev[id]) {
-        const next = { ...prev };
-        delete next[id];
-        return next;
+      const next = { ...prev };
+      let changed = false;
+      for (const id of idSet) {
+        if (id in next) {
+          delete next[id];
+          changed = true;
+        }
       }
-      return prev;
+      return changed ? next : prev;
     });
     setSearchLoadingMap((prev) => {
-      if (prev[id]) {
-        const next = { ...prev };
-        delete next[id];
-        return next;
+      const next = { ...prev };
+      let changed = false;
+      for (const id of idSet) {
+        if (id in next) {
+          delete next[id];
+          changed = true;
+        }
       }
-      return prev;
+      return changed ? next : prev;
     });
-    closeTab(id);
-  }, [closeTab]);
+  }, []);
+
+  const requestCloseTabs = useCallback(async (ids: string[]) => {
+    const requested = new Set(ids);
+    const matchingTabs = useEditorStore.getState().tabs.filter((tab) => requested.has(tab.id));
+    if (matchingTabs.length === 0) return;
+
+    const dirtyTabs = matchingTabs.filter((tab) => tab.isDirty);
+    if (dirtyTabs.length > 0) {
+      try {
+        const confirmed = await desktopApi.confirm(
+          dirtyTabs.length === 1
+            ? `"${dirtyTabs[0].title}" 有未保存的更改，确定要关闭吗？`
+            : `要关闭的标签中有 ${dirtyTabs.length} 个文件包含未保存的更改，确定关闭吗？`,
+          { title: '未保存的更改' },
+        );
+        if (!confirmed) return;
+      } catch (error) {
+        console.error('[CloseTab] close confirmation failed:', error);
+        return;
+      }
+    }
+
+    // Re-resolve after an async prompt so already-closed tabs are ignored.
+    const remainingIds = useEditorStore.getState().tabs
+      .filter((tab) => requested.has(tab.id))
+      .map((tab) => tab.id);
+    if (remainingIds.length === 0) return;
+    cleanupClosedTabState(remainingIds);
+    if (remainingIds.length === 1) closeTab(remainingIds[0]);
+    else closeTabs(remainingIds);
+  }, [cleanupClosedTabState, closeTab, closeTabs]);
+
+  const handleTabClose = useCallback((id: string) => {
+    void requestCloseTabs([id]);
+  }, [requestCloseTabs]);
 
   const handleCloseTabs = useCallback((ids: string[]) => {
-    setSearchResultsMap((prev) => {
-      const next = { ...prev };
-      for (const id of ids) {
-        delete next[id];
-      }
-      return next;
-    });
-    setSearchLoadingMap((prev) => {
-      const next = { ...prev };
-      for (const id of ids) {
-        delete next[id];
-      }
-      return next;
-    });
-    closeTabs(ids);
-  }, [closeTabs]);
+    void requestCloseTabs(ids);
+  }, [requestCloseTabs]);
+
+  useEffect(() => {
+    handleCloseActiveTabRef.current = () => {
+      const id = useEditorStore.getState().activeTabId;
+      if (id) handleTabClose(id);
+    };
+    return () => {
+      handleCloseActiveTabRef.current = null;
+    };
+  }, [handleTabClose]);
 
   const handleWindowClose = useCallback(async () => {
     const dirtyTabs = useEditorStore.getState().tabs.filter((tab) => tab.isDirty);
@@ -891,23 +964,25 @@ function App() {
   useEffect(() => {
     if (!desktopApi.isDesktop()) return;
 
-    let processing = false;
+    let disposed = false;
+    let queue = Promise.resolve();
     const p1 = desktopApi.onDragDropEvent((paths) => {
-      if (processing) return;
-      processing = true;
-      setTimeout(() => { processing = false; }, 500);
-      for (const filePath of paths) {
-        desktopApi.readFileAuto(filePath)
-          .then((result) => {
-            openFile(filePath, { text: result.text, encoding: result.encoding });
-          })
-          .catch((err) => {
+      queue = queue.then(async () => {
+        for (const filePath of paths) {
+          if (disposed) return;
+          try {
+            // Keep drag/drop on the same metadata-aware path as every other
+            // open operation (large-file mode, encoding and duplicate checks).
+            await openFile(filePath);
+          } catch (err) {
             console.error('Failed to read dropped file:', filePath, err);
-          });
-      }
+          }
+        }
+      });
     });
 
     return () => {
+      disposed = true;
       p1.then((unlisten) => unlisten()).catch(() => {});
     };
   }, [openFile]);
@@ -992,16 +1067,14 @@ function App() {
     const sel = view.state.selection.main;
     const scope = (sel.from !== sel.to) ? 'selection' : 'full';
     const ok = formatDocument(view, activeTab.language, scope);
-    if (ok) {
-      markTabDirty(activeTab.id, true);
-    } else {
+    if (!ok) {
       const msg = scope === 'selection'
         ? '格式化失败：请确保选区内容是有效的可格式化文本（如 JSON、XML、CSS、SQL 等）。'
         : '格式化失败：当前文件类型暂不支持全文格式化，或 JSON 存在语法错误。';
       if (desktopApi.isDesktop()) await desktopApi.message(msg, { title: '格式化' });
       else alert(msg);
     }
-  }, [activeTab, markTabDirty]);
+  }, [activeTab]);
   useEffect(() => {
     handleFormatRef.current = handleFormat;
   });
@@ -1129,7 +1202,9 @@ function App() {
     { id: 'new', label: '新建文件', shortcut: 'Ctrl+N', icon: <FilePlus size={16} />, action: handleNewFile },
     { id: 'open', label: '打开文件', shortcut: 'Ctrl+O', icon: <FolderOpen size={16} />, action: handleOpenFile },
     { id: 'save', label: '保存文件', shortcut: 'Ctrl+S', icon: <Save size={16} />, action: handleSaveFile },
-    { id: 'find', label: '查找替换', shortcut: 'Ctrl+F', icon: <Search size={16} />, action: () => setFindReplaceVisible(!findReplaceVisible) },
+    ...(activeTab ? [{ id: 'close', label: '关闭当前标签', shortcut: 'Ctrl+W', icon: <X size={16} />, action: () => handleTabClose(activeTab.id) }] : []),
+    { id: 'find', label: '查找', shortcut: 'Ctrl+F', icon: <Search size={16} />, action: () => { setFindReplaceVisible(true); findReplaceRef.current?.setFolderMode(false); findReplaceRef.current?.focusFind(); } },
+    { id: 'replace', label: '替换', shortcut: 'Ctrl+H', icon: <Search size={16} />, action: () => { setFindReplaceVisible(true); findReplaceRef.current?.showReplace(); } },
     { id: 'findInFolder', label: '在文件夹中查找', shortcut: 'Ctrl+Shift+F', icon: <Search size={16} />, action: () => { setFindReplaceVisible(true); findReplaceRef.current?.setFolderMode(true); } },
     { id: 'format', label: '格式化文档', shortcut: 'Shift+Alt+F', icon: <Braces size={16} />, action: handleFormat },
     { id: 'sidebar', label: sidebarVisible ? '隐藏侧边栏' : '显示侧边栏', icon: <PanelLeft size={16} />, action: () => setSidebarVisible(!sidebarVisible) },
@@ -1185,7 +1260,7 @@ function App() {
         }
       },
     }] : []),
-  ], [handleNewFile, handleOpenFile, handleSaveFile, handleFormat, handleCycleTheme, handleToggleSplit, handleToggleDiff, handleToggleReadMode, findReplaceVisible, setFindReplaceVisible, sidebarVisible, setSidebarVisible, isDark, wordWrap, showWhitespace, previewVisible, setPreviewVisible, previewFullScreen, setPreviewFullScreen, splitMode, diffMode, readMode, activeTab, theme, columnAlignSupported, setTabColumnAlign, jsonFormVisible, setJsonFormVisible, jsonFormFullScreen, setJsonFormFullScreen]);
+  ], [handleNewFile, handleOpenFile, handleSaveFile, handleTabClose, handleFormat, handleCycleTheme, handleToggleSplit, handleToggleDiff, handleToggleReadMode, setFindReplaceVisible, sidebarVisible, setSidebarVisible, isDark, wordWrap, showWhitespace, previewVisible, setPreviewVisible, previewFullScreen, setPreviewFullScreen, splitMode, diffMode, readMode, activeTab, theme, columnAlignSupported, setTabColumnAlign, jsonFormVisible, setJsonFormVisible, jsonFormFullScreen, setJsonFormFullScreen]);
 
   return (
     <div className={`flex flex-col h-screen ${isDark ? 'dark' : ''} ${syntaxIsDark ? 'syntax-dark' : 'syntax-light'}`}>
@@ -1212,6 +1287,7 @@ function App() {
         onToggleSplit={handleToggleSplit}
         onToggleReadMode={handleToggleReadMode}
         onToggleSettings={handleToggleSettings}
+        onSettingsIntent={preloadSettings}
         onToggleJsonForm={() => setJsonFormVisible(!jsonFormVisible)}
         canSave={!!activeTab && activeTab.kind !== 'searchResults' && (!activeTab.loadState || activeTab.loadState === 'ready')}
         canFormat={canFormat}
@@ -1297,7 +1373,7 @@ function App() {
               </React.Suspense>
             ) : group1Tab ? (
               <>
-                {group1Tabs.map((tab) => (
+                {group1Tabs.filter((tab) => tab.id === activeGroup1TabId).map((tab) => (
                   <div
                     key={tab.id}
                     className="h-full flex-1 min-w-0 relative"
@@ -1329,6 +1405,8 @@ function App() {
                         columnAlignEnabled={columnAlignSupported && (tab.columnAlignEnabled ?? false)}
                         lineEnding={tab.lineEnding}
                         readOnly={!!tab.loadState && tab.loadState !== 'ready'}
+                        onRequestCloseTab={handleTabClose}
+                        onRequestCloseTabs={handleCloseTabs}
                       />
                     )}
                     {tab.kind !== 'searchResults' && tab.loadState && tab.loadState !== 'ready' && (
@@ -1355,7 +1433,7 @@ function App() {
                     <div className="w-px bg-gray-200 dark:bg-gray-800 self-stretch flex-shrink-0" />
                     <div className="flex-1 h-full min-w-0">
                       {group2Tabs.length > 0 ? (
-                        group2Tabs.map((tab) => (
+                        group2Tabs.filter((tab) => tab.id === activeGroup2TabId).map((tab) => (
                           <div
                             key={tab.id}
                             className="h-full w-full relative"
@@ -1387,6 +1465,8 @@ function App() {
                                 columnAlignEnabled={columnAlignSupported && (tab.columnAlignEnabled ?? false)}
                                 lineEnding={tab.lineEnding}
                                 readOnly={!!tab.loadState && tab.loadState !== 'ready'}
+                                onRequestCloseTab={handleTabClose}
+                                onRequestCloseTabs={handleCloseTabs}
                               />
                             )}
                             {tab.kind !== 'searchResults' && tab.loadState && tab.loadState !== 'ready' && (
@@ -1417,7 +1497,7 @@ function App() {
                   </>
                 )}
                 {previewVisible && !previewFullScreen &&
-                  previewTabs.map((tab) => (
+                  previewTabs.filter((tab) => tab.id === activeGroup1TabId).map((tab) => (
                     <React.Fragment key={tab.id}>
                       <div
                         className="w-px bg-gray-200 dark:bg-gray-800 self-stretch flex-shrink-0"
@@ -1470,7 +1550,7 @@ function App() {
 
             {/* Read Mode — shown inside editor area only */}
             {readMode &&
-              readerTabs.map((tab) => (
+              readerTabs.filter((tab) => tab.id === activeTabId).map((tab) => (
                 <div
                   key={tab.id}
                   className="absolute inset-0 z-30 flex flex-col"
@@ -1543,7 +1623,7 @@ function App() {
 
       {/* Settings Panel overlay */}
       {settingsEverOpened && (
-        <React.Suspense fallback={null}>
+        <React.Suspense fallback={<SettingsLoading />}>
           <SettingsPanel visible={settingsVisible} onClose={() => setSettingsVisible(false)} />
         </React.Suspense>
       )}
@@ -1602,9 +1682,9 @@ function App() {
                 theme={theme}
                 onUseExternal={() => {
                   updateEditorContent(externalDiff.tabId, externalDiff.externalContent);
-                  markTabSaved(externalDiff.tabId);
                   setTabEncoding(externalDiff.tabId, externalDiff.externalEncoding as Encoding);
                   setTabLineEnding(externalDiff.tabId, detectLineEnding(externalDiff.externalContent));
+                  markTabSaved(externalDiff.tabId);
                   setExternalDiff(null);
                 }}
                 onKeepCurrent={() => {

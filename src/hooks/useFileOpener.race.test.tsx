@@ -102,4 +102,25 @@ describe('useFileOpener progressive loading', () => {
 
     expect(useEditorStore.getState().tabs[0].loadState).toBe('ready');
   });
+
+  it('deduplicates concurrent opens of the same file', async () => {
+    desktopMocks.readFileMeta.mockResolvedValue({
+      file_size: 12,
+      encoding: 'UTF-8',
+      total_lines: 1,
+      first_chunk: 'same content',
+    });
+    desktopMocks.readFileAuto.mockResolvedValue({ text: 'same content', encoding: 'UTF-8' });
+
+    const { result } = renderHook(() => useFileOpener());
+    await act(async () => {
+      await Promise.all([
+        result.current('C:\\tmp\\same.txt'),
+        result.current('C:\\tmp\\same.txt'),
+      ]);
+    });
+
+    expect(useEditorStore.getState().tabs).toHaveLength(1);
+    expect(useEditorStore.getState().tabs[0].filePath).toBe('C:\\tmp\\same.txt');
+  });
 });

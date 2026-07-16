@@ -1,4 +1,4 @@
-import { EditorState } from '@codemirror/state';
+import { EditorState, type Text } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { deleteCompartments } from '../utils/editorExtensions';
 
@@ -7,6 +7,14 @@ interface StatePool {
 }
 
 const pool: StatePool = { states: new Map() };
+
+interface SavedEditorSnapshot {
+  doc: Text;
+  encoding?: string;
+  lineEnding?: string;
+}
+
+const savedSnapshots = new Map<string, SavedEditorSnapshot>();
 
 export function getEditorState(tabId: string): EditorState | undefined {
   return pool.states.get(tabId);
@@ -23,6 +31,7 @@ export function setEditorState(tabId: string, state: EditorState): void {
 export function deleteEditorState(tabId: string): void {
   closedTabs.add(tabId);
   pool.states.delete(tabId);
+  savedSnapshots.delete(tabId);
   scrollTops.delete(tabId);
   activeViews.delete(tabId);
   clearContentListeners(tabId);
@@ -79,6 +88,35 @@ export function subscribeDocumentChange(
     set?.delete(listener);
     if (set?.size === 0) documentChangeListeners.delete(tabId);
   };
+}
+
+export function markEditorContentSaved(
+  tabId: string,
+  encoding?: string,
+  lineEnding?: string,
+  state: EditorState | undefined = pool.states.get(tabId),
+): void {
+  if (!state) return;
+  savedSnapshots.set(tabId, { doc: state.doc, encoding, lineEnding });
+}
+
+export function hasSavedEditorSnapshot(tabId: string): boolean {
+  return savedSnapshots.has(tabId);
+}
+
+export function isEditorContentSaved(
+  tabId: string,
+  doc: Text,
+  encoding?: string,
+  lineEnding?: string,
+): boolean {
+  const saved = savedSnapshots.get(tabId);
+  return Boolean(
+    saved
+    && saved.doc.eq(doc)
+    && saved.encoding === encoding
+    && saved.lineEnding === lineEnding
+  );
 }
 
 /**

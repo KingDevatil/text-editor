@@ -56,6 +56,114 @@ describe('App', () => {
     render(<App />);
     expect(screen.getByText(/没有打开的文件/)).toBeInTheDocument();
   });
+
+  it('mounts only the active editor in a non-split group', () => {
+    useEditorStore.getState().createTab('first.txt');
+    useEditorStore.getState().createTab('second.txt');
+    useEditorStore.getState().createTab('third.txt');
+
+    render(<App />);
+
+    expect(screen.getAllByTestId('cm-editor')).toHaveLength(1);
+  });
+
+  it('closes the active clean tab with Ctrl+W', async () => {
+    const tab = useEditorStore.getState().createTab('close-me.txt');
+    render(<App />);
+
+    fireEvent.keyDown(window, { key: 'w', ctrlKey: true });
+
+    await waitFor(() => {
+      expect(useEditorStore.getState().tabs.some((candidate) => candidate.id === tab.id)).toBe(false);
+    });
+  });
+
+  it('keeps a dirty tab open when Ctrl+W close is cancelled', async () => {
+    const tab = useEditorStore.getState().createTab('dirty.txt');
+    useEditorStore.getState().markTabDirty(tab.id, true);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<App />);
+
+    fireEvent.keyDown(window, { key: 'w', ctrlKey: true });
+
+    await waitFor(() => expect(confirm).toHaveBeenCalled());
+    expect(useEditorStore.getState().tabs.some((candidate) => candidate.id === tab.id)).toBe(true);
+    confirm.mockRestore();
+  });
+
+  it('requires an explicit line-ending choice before saving a mixed-ending file', async () => {
+    const writeFile = vi.fn(async () => {});
+    const message = vi.fn(async () => {});
+    window.electronDesktop = {
+      platform: 'win32',
+      writeFile,
+      message,
+      getPendingFiles: vi.fn(async () => []),
+      rendererReady: vi.fn(async () => {}),
+      onOpenFile: vi.fn(() => () => {}),
+      onFileChanged: vi.fn(() => () => {}),
+      onDragDropEvent: vi.fn(async () => () => {}),
+      watchFile: vi.fn(async () => {}),
+      unwatchFile: vi.fn(async () => {}),
+    } as unknown as typeof window.electronDesktop;
+    const tab = useEditorStore.getState().createTab(
+      'mixed.txt',
+      'plaintext',
+      'C:\\tmp\\mixed.txt',
+      1,
+      'UTF-8',
+      '',
+      'Mixed',
+    );
+    setEditorState(tab.id, EditorState.create({ doc: 'first\nsecond' }));
+    useEditorStore.getState().markTabDirty(tab.id, true);
+    render(<App />);
+
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+
+    await waitFor(() => expect(message).toHaveBeenCalledWith(
+      expect.stringContaining('混合换行符'),
+      expect.objectContaining({ kind: 'warning' }),
+    ));
+    expect(writeFile).not.toHaveBeenCalled();
+  });
+
+  it('routes dropped files through metadata-aware opening before reading full content', async () => {
+    let dropHandler!: (paths: string[]) => void;
+    const readFileMeta = vi.fn(async () => ({
+      file_size: 10,
+      encoding: 'UTF-8',
+      total_lines: 1,
+      first_chunk: 'small file',
+    }));
+    const readFileAuto = vi.fn(async () => ({ text: 'small file', encoding: 'UTF-8' }));
+    window.electronDesktop = {
+      platform: 'win32',
+      readFileMeta,
+      readFileAuto,
+      getPendingFiles: vi.fn(async () => []),
+      rendererReady: vi.fn(async () => {}),
+      onOpenFile: vi.fn(() => () => {}),
+      onFileChanged: vi.fn(() => () => {}),
+      onDragDropEvent: vi.fn(async (handler) => {
+        dropHandler = handler;
+        return () => {};
+      }),
+      watchFile: vi.fn(async () => {}),
+      unwatchFile: vi.fn(async () => {}),
+    } as unknown as typeof window.electronDesktop;
+    render(<App />);
+    await waitFor(() => expect(dropHandler).toBeTypeOf('function'));
+
+    act(() => dropHandler(['C:\\tmp\\drop.txt']));
+
+    await waitFor(() => {
+      expect(readFileMeta).toHaveBeenCalledWith('C:\\tmp\\drop.txt');
+      expect(readFileAuto).toHaveBeenCalledWith('C:\\tmp\\drop.txt');
+    });
+    expect(readFileMeta.mock.invocationCallOrder[0]).toBeLessThan(readFileAuto.mock.invocationCallOrder[0]);
+  });
+
   it('binds a new desktop tab to the chosen file path after saving', async () => {
     const savedPath = 'C:\\tmp\\saved-note.txt';
     const writeFile = vi.fn(async () => {});
@@ -269,8 +377,8 @@ describe('App', () => {
   });
 
   it('closes preview automatically when enabling split view', async () => {
-    useEditorStore.getState().createTab('preview.md', 'markdown', undefined, 1);
     useEditorStore.getState().createTab('notes.txt', 'plaintext', undefined, 1);
+    useEditorStore.getState().createTab('preview.md', 'markdown', undefined, 1);
     useUIStore.getState().setPreviewVisible(true);
 
     render(<App />);
@@ -291,7 +399,7 @@ describe('App', () => {
     render(<App />);
 
     fireEvent.click(screen.getByTitle('设置'));
-    const appearance = await screen.findByRole('button', { name: '外观' });
+    const appearance = await screen.findByRole('button', { name: '外观' }, { timeout: 3000 });
     fireEvent.click(appearance);
     expect(screen.getByText('当前主题')).toBeInTheDocument();
 

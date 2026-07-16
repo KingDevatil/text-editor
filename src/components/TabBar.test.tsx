@@ -14,6 +14,20 @@ function makeTab(id: string, title: string, group: 1 | 2): EditorTab {
   };
 }
 
+function mockRect(left: number, right: number): DOMRect {
+  return {
+    x: left,
+    y: 0,
+    left,
+    right,
+    top: 0,
+    bottom: 36,
+    width: right - left,
+    height: 36,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
 describe('TabBar', () => {
   afterEach(() => {
     delete window.electronDesktop;
@@ -44,27 +58,165 @@ describe('TabBar', () => {
     expect(screen.getByText('left-other.txt').closest('[data-tab-id]')).toHaveAttribute('data-group-active', 'false');
   });
 
-  it('keeps a dirty tab open when the close confirmation fails', async () => {
-    const tab = { ...makeTab('dirty', 'dirty.txt', 1), isDirty: true };
-    const onTabClose = vi.fn();
-    const confirm = vi.fn().mockRejectedValue(new Error('IPC unavailable'));
-    window.electronDesktop = { confirm } as unknown as typeof window.electronDesktop;
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+  it('activates a tab on the first click without an artificial delay', () => {
+    const onTabClick = vi.fn();
 
     render(
       <TabBar
-        tabs={[tab]}
-        activeTabId="dirty"
-        activeGroup1TabId="dirty"
+        tabs={[makeTab('first', 'first.txt', 1), makeTab('second', 'second.txt', 1)]}
+        activeTabId="first"
+        activeGroup1TabId="first"
         activeGroup2TabId={null}
         splitMode={false}
-        onTabClick={vi.fn()}
-        onTabClose={onTabClose}
+        onTabClick={onTabClick}
+        onTabClose={vi.fn()}
       />
     );
 
-    fireEvent.click(screen.getByTitle('关闭'));
-    await waitFor(() => expect(confirm).toHaveBeenCalled());
-    expect(onTabClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('second.txt'));
+    expect(onTabClick).toHaveBeenCalledWith('second', 1);
+  });
+
+  it('renames a double-clicked tab without treating it as blank-space double click', () => {
+    const onNewFileInGroup = vi.fn();
+
+    render(
+      <TabBar
+        tabs={[makeTab('first', 'first.txt', 1)]}
+        activeTabId="first"
+        activeGroup1TabId="first"
+        activeGroup2TabId={null}
+        splitMode={false}
+        onTabClick={vi.fn()}
+        onTabClose={vi.fn()}
+        onNewFileInGroup={onNewFileInGroup}
+        onRenameTab={vi.fn()}
+      />
+    );
+
+    fireEvent.doubleClick(screen.getByText('first.txt').closest('[data-tab-id]')!);
+
+    expect(screen.getByDisplayValue('first.txt')).toBeInTheDocument();
+    expect(onNewFileInGroup).not.toHaveBeenCalled();
+  });
+
+  it('scrolls the newly active tab into the visible area', async () => {
+    const tabs = [
+      makeTab('first', 'first.txt', 1),
+      makeTab('second', 'second.txt', 1),
+      makeTab('third', 'third.txt', 1),
+      makeTab('fourth', 'fourth.txt', 1),
+    ];
+    const { rerender } = render(
+      <TabBar
+        tabs={tabs}
+        activeTabId="first"
+        activeGroup1TabId="first"
+        activeGroup2TabId={null}
+        splitMode={false}
+        onTabClick={vi.fn()}
+        onTabClose={vi.fn()}
+      />
+    );
+
+    const scrollArea = screen.getByTestId('tab-scroll-group-1');
+    const fourthTab = screen.getByText('fourth.txt').closest('[data-tab-id]') as HTMLDivElement;
+    const scrollBy = vi.fn();
+    Object.defineProperties(scrollArea, {
+      clientWidth: { configurable: true, value: 300 },
+      scrollWidth: { configurable: true, value: 480 },
+      scrollBy: { configurable: true, value: scrollBy },
+    });
+    vi.spyOn(scrollArea, 'getBoundingClientRect').mockReturnValue(mockRect(0, 300));
+    vi.spyOn(fourthTab, 'getBoundingClientRect').mockReturnValue(mockRect(360, 480));
+
+    rerender(
+      <TabBar
+        tabs={tabs}
+        activeTabId="fourth"
+        activeGroup1TabId="fourth"
+        activeGroup2TabId={null}
+        splitMode={false}
+        onTabClick={vi.fn()}
+        onTabClose={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(scrollBy).toHaveBeenCalledWith({ left: 212, behavior: 'smooth' });
+    });
+  });
+
+  it('uses a vertical mouse wheel to browse an overflowing tab strip', () => {
+    render(
+      <TabBar
+        tabs={[makeTab('first', 'first.txt', 1), makeTab('second', 'second.txt', 1)]}
+        activeTabId="first"
+        activeGroup1TabId="first"
+        activeGroup2TabId={null}
+        splitMode={false}
+        onTabClick={vi.fn()}
+        onTabClose={vi.fn()}
+      />
+    );
+
+    const scrollArea = screen.getByTestId('tab-scroll-group-1');
+    const scrollBy = vi.fn();
+    Object.defineProperties(scrollArea, {
+      clientWidth: { configurable: true, value: 200 },
+      scrollWidth: { configurable: true, value: 360 },
+      scrollBy: { configurable: true, value: scrollBy },
+    });
+
+    fireEvent.wheel(scrollArea, { deltaX: 0, deltaY: 96 });
+
+    expect(scrollBy).toHaveBeenCalledWith({ left: 96, behavior: 'auto' });
+  });
+
+  it('keeps the active tab visible independently in the second split group', async () => {
+    const tabs = [
+      makeTab('left', 'left.txt', 1),
+      makeTab('right-first', 'right-first.txt', 2),
+      makeTab('right-second', 'right-second.txt', 2),
+      makeTab('right-third', 'right-third.txt', 2),
+    ];
+    const { rerender } = render(
+      <TabBar
+        tabs={tabs}
+        activeTabId="right-first"
+        activeGroup1TabId="left"
+        activeGroup2TabId="right-first"
+        splitMode={true}
+        onTabClick={vi.fn()}
+        onTabClose={vi.fn()}
+      />
+    );
+
+    const scrollArea = screen.getByTestId('tab-scroll-group-2');
+    const rightThirdTab = screen.getByText('right-third.txt').closest('[data-tab-id]') as HTMLDivElement;
+    const scrollBy = vi.fn();
+    Object.defineProperties(scrollArea, {
+      clientWidth: { configurable: true, value: 200 },
+      scrollWidth: { configurable: true, value: 360 },
+      scrollBy: { configurable: true, value: scrollBy },
+    });
+    vi.spyOn(scrollArea, 'getBoundingClientRect').mockReturnValue(mockRect(200, 400));
+    vi.spyOn(rightThirdTab, 'getBoundingClientRect').mockReturnValue(mockRect(440, 560));
+
+    rerender(
+      <TabBar
+        tabs={tabs}
+        activeTabId="right-third"
+        activeGroup1TabId="left"
+        activeGroup2TabId="right-third"
+        splitMode={true}
+        onTabClick={vi.fn()}
+        onTabClose={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(scrollBy).toHaveBeenCalledWith({ left: 192, behavior: 'smooth' });
+    });
   });
 });

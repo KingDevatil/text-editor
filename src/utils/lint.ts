@@ -1,6 +1,7 @@
 import { linter, type Diagnostic } from '@codemirror/lint';
 import type { EditorView } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
+import { parseTree, printParseErrorCode, type ParseError } from 'jsonc-parser';
 import { registerDiagnosticEngine, getDiagnosticEngine, translateDiagnosticMessage } from './diagnostics';
 
 const LINT_MAX_SIZE = 2_000_000; // Skip linting for files > 2MB
@@ -50,44 +51,28 @@ export function stripJsonComments(text: string): string {
   return result;
 }
 
-/**
- * JSON linter — uses JSON.parse() to detect syntax errors.
- * Supports JSON with Comments (JSONC) by stripping comments first.
- */
+export function getJsoncParseErrors(text: string): ParseError[] {
+  const errors: ParseError[] = [];
+  parseTree(text, errors, { allowTrailingComma: true, disallowComments: false });
+  return errors;
+}
+
+/** JSON/JSONC linter with comments and trailing commas enabled. */
 function jsonLinter(view: EditorView): Diagnostic[] {
   if (view.state.doc.length > LINT_MAX_SIZE) return [];
   const text = view.state.doc.toString();
   if (!text.trim()) return [];
 
-  try {
-    JSON.parse(text);
-    return [];
-  } catch (e) {
-    // JSONC: try stripping comments first to avoid false positives
-    try {
-      JSON.parse(stripJsonComments(text));
-      return [];
-    } catch {
-      // real syntax error, proceed with original error
-    }
-
-    // Try to extract position from error message
-    const match = (e as Error).message.match(/position (\d+)/i);
-    let pos = 0;
-    if (match) {
-      pos = parseInt(match[1], 10);
-    }
-
-    const line = view.state.doc.lineAt(Math.min(pos, view.state.doc.length));
-    return [
-      {
-        from: line.from,
-        to: line.to,
-        severity: 'error',
-        message: translateDiagnosticMessage((e as Error).message),
-      },
-    ];
-  }
+  return getJsoncParseErrors(text).slice(0, 20).map((error) => {
+    const from = Math.min(error.offset, view.state.doc.length);
+    const to = Math.min(Math.max(from + error.length, from + 1), view.state.doc.length);
+    return {
+      from,
+      to,
+      severity: 'error' as const,
+      message: `JSON 语法错误：${printParseErrorCode(error.error)}`,
+    };
+  });
 }
 
 /**

@@ -32,6 +32,7 @@ interface ToolbarProps {
   onToggleSplit: () => void;
   onToggleReadMode: () => void;
   onToggleSettings: () => void;
+  onSettingsIntent?: () => void;
   onToggleJsonForm: () => void;
   canSave: boolean;
   canFormat: boolean;
@@ -59,6 +60,7 @@ const Toolbar: React.FC<ToolbarProps> = React.memo(({
   onToggleSplit,
   onToggleReadMode,
   onToggleSettings,
+  onSettingsIntent,
   onToggleJsonForm,
   canSave,
   canFormat,
@@ -198,7 +200,14 @@ const Toolbar: React.FC<ToolbarProps> = React.memo(({
           {nextThemeIcon}
         </button>
         <div className="w-px h-5 mx-1" style={dividerStyle} />
-        <button className={btnBase} style={btnStyle} onClick={onToggleSettings} title="设置">
+        <button
+          className={btnBase}
+          style={btnStyle}
+          onClick={onToggleSettings}
+          onMouseEnter={onSettingsIntent}
+          onFocus={onSettingsIntent}
+          title="设置"
+        >
           <Settings size={16} />
         </button>
       </div>

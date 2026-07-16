@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { translateDiagnosticMessage } from './diagnostics';
-import { stripJsonComments, stripJsComments, preprocessESM } from './lint';
+import { getJsoncParseErrors, stripJsonComments, stripJsComments, preprocessESM } from './lint';
+
+describe('JSONC diagnostics', () => {
+  it('accepts comments and trailing commas consistently with the formatter', () => {
+    expect(getJsoncParseErrors('{\n  // note\n  "a": 1,\n}')).toEqual([]);
+  });
+
+  it('still reports malformed JSONC', () => {
+    expect(getJsoncParseErrors('{ "a": }')).not.toEqual([]);
+  });
+});
 
 describe('translateDiagnosticMessage', () => {
   it('translates ESM import error', () => {
