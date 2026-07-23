@@ -3,7 +3,11 @@ import { describe, it, expect } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import { undo } from '@codemirror/commands';
 import CmEditor from './CmEditor';
-import { getActiveView, setPendingSelection } from '../hooks/useEditorStatePool';
+import {
+  completeProgressiveEditorContent,
+  getActiveView,
+  setPendingSelection,
+} from '../hooks/useEditorStatePool';
 import { useEditorStore } from '../hooks/useEditorStore';
 
 describe('CmEditor', () => {
@@ -73,6 +77,36 @@ describe('CmEditor', () => {
     await waitFor(() => {
       expect(useEditorStore.getState().tabs.find((candidate) => candidate.id === tab.id)?.isDirty).toBe(false);
     });
+  });
+
+  it('does not treat progressive load completion as a user edit', async () => {
+    const preview = 'header\nfirst chunk\n';
+    const fullContent = `${preview}remaining content\n`;
+    const tab = useEditorStore.getState().createTab(
+      'progressive.xml',
+      'xml',
+      'C:\\tmp\\progressive.xml',
+      1,
+      'UTF-8',
+      preview,
+    );
+    render(
+      <CmEditor
+        tabId={tab.id}
+        language="xml"
+        theme="dark"
+        fontSize={14}
+        initialContent={preview}
+        largeFileOptimize
+        forceLargeFile
+        minimapVisible={false}
+      />,
+    );
+    const view = getActiveView(tab.id)!;
+
+    expect(completeProgressiveEditorContent(tab.id, preview, fullContent)).toBe(true);
+    expect(useEditorStore.getState().tabs.find((candidate) => candidate.id === tab.id)?.isDirty).toBe(false);
+    expect(undo(view)).toBe(false);
   });
 
   it('keeps unicode scanning disabled when it is toggled during large-file mode', async () => {

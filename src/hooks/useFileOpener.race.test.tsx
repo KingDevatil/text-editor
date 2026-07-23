@@ -1,8 +1,9 @@
 import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEditorStore } from './useEditorStore';
-import { getEditorContent, setEditorState } from './useEditorStatePool';
+import { getEditorContent, setActiveView, setEditorState } from './useEditorStatePool';
 
 const desktopMocks = vi.hoisted(() => ({
   readFileMeta: vi.fn(),
@@ -101,6 +102,51 @@ describe('useFileOpener progressive loading', () => {
     });
 
     expect(useEditorStore.getState().tabs[0].loadState).toBe('ready');
+  });
+
+  it('finishes an active progressive editor by extending its preview', async () => {
+    const preview = 'header\nfirst chunk\n';
+    const fullContent = `${preview}remaining content\n`;
+    desktopMocks.readFileMeta.mockResolvedValue({
+      file_size: 3 * 1024 * 1024,
+      encoding: 'UTF-8',
+      total_lines: 2,
+      first_chunk: preview,
+    });
+    desktopMocks.readFileAuto.mockResolvedValue({ text: fullContent, encoding: 'UTF-8' });
+
+    const { result } = renderHook(() => useFileOpener());
+    await act(async () => {
+      await result.current('C:\\tmp\\large.xml');
+    });
+
+    const [tab] = useEditorStore.getState().tabs;
+    const changes: Array<{ fromA: number; toA: number }> = [];
+    const view = new EditorView({
+      parent: document.createElement('div'),
+      state: EditorState.create({
+        doc: preview,
+        extensions: EditorView.updateListener.of((update) => {
+          update.changes.iterChanges((fromA, toA) => changes.push({ fromA, toA }));
+        }),
+      }),
+    });
+    setEditorState(tab.id, view.state);
+    setActiveView(tab.id, view);
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getEditorContent(tab.id)).toBe(fullContent);
+    expect(changes).toEqual([{ fromA: preview.length, toA: preview.length }]);
+    expect(useEditorStore.getState().tabs[0].loadState).toBe('ready');
+
+    setActiveView(tab.id, null);
+    view.destroy();
   });
 
   it('deduplicates concurrent opens of the same file', async () => {

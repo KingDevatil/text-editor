@@ -35,6 +35,7 @@ import {
   hasSavedEditorSnapshot,
   isEditorContentSaved,
   markEditorContentSaved,
+  progressiveLoadCompletionAnnotation,
 } from '../hooks/useEditorStatePool';
 import ContextMenu from './ContextMenu';
 import Minimap from './Minimap';
@@ -159,6 +160,9 @@ const CmEditor: React.FC<CmEditorProps> = ({
             // are persisted, not just doc changes.
             setEditorState(tabId, update.state);
             if (update.docChanged) {
+              const isProgressiveLoadCompletion = update.transactions.some(
+                (transaction) => transaction.annotation(progressiveLoadCompletionAnnotation) === true,
+              );
               // Guard against transactions that replace the document with identical
               // content (e.g. session-restore + get_pending_files race, or external
               // file reload) so the tab is not falsely marked dirty.
@@ -173,7 +177,9 @@ const CmEditor: React.FC<CmEditorProps> = ({
                   tab?.encoding,
                   tab?.lineEnding,
                 );
-                store.markTabDirty(tabId, !isSaved);
+                if (!isProgressiveLoadCompletion) {
+                  store.markTabDirty(tabId, !isSaved);
+                }
                 notifyContentChange(tabId);
               }
             }

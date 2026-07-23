@@ -1,4 +1,4 @@
-import { EditorState, type Text } from '@codemirror/state';
+import { Annotation, EditorState, Transaction, type Text } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { deleteCompartments } from '../utils/editorExtensions';
 
@@ -15,6 +15,9 @@ interface SavedEditorSnapshot {
 }
 
 const savedSnapshots = new Map<string, SavedEditorSnapshot>();
+
+/** Marks a document change as completion of a read-only progressive file load. */
+export const progressiveLoadCompletionAnnotation = Annotation.define<boolean>();
 
 export function getEditorState(tabId: string): EditorState | undefined {
   return pool.states.get(tabId);
@@ -289,6 +292,73 @@ export function updateEditorContent(tabId: string, newContent: string): void {
     },
   });
   pool.states.set(tabId, tr.state);
+}
+
+/**
+ * Finish a progressive file load while preserving the already-rendered prefix.
+ * This keeps CodeMirror's viewport mapped to the visible preview instead of
+ * mapping it across the entire full-document insertion.
+ */
+export function completeProgressiveEditorContent(
+  tabId: string,
+  expectedPreview: string,
+  fullContent: string,
+): boolean {
+  const view = getActiveView(tabId);
+  const state = view?.state ?? pool.states.get(tabId);
+  if (!state || state.doc.toString() !== expectedPreview || fullContent.length < expectedPreview.length) {
+    return false;
+  }
+
+  let prefixLength = 0;
+  const comparableLength = Math.min(expectedPreview.length, fullContent.length);
+  while (
+    prefixLength < comparableLength
+    && expectedPreview.charCodeAt(prefixLength) === fullContent.charCodeAt(prefixLength)
+  ) {
+    prefixLength += 1;
+  }
+
+  // A metadata chunk may end halfway through a multibyte character. Decoders
+  // represent that incomplete character as U+FFFD, so allow a small repair at
+  // the chunk boundary but reject broader differences (the file likely changed).
+  const boundaryRepairLength = expectedPreview.length - prefixLength;
+  if (boundaryRepairLength > 4) return false;
+  if (
+    prefixLength > 0
+    && prefixLength < fullContent.length
+    && /[\uD800-\uDBFF]/.test(fullContent[prefixLength - 1])
+    && /[\uDC00-\uDFFF]/.test(fullContent[prefixLength])
+  ) {
+    prefixLength -= 1;
+  }
+
+  if (
+    prefixLength === expectedPreview.length
+    && fullContent.length === expectedPreview.length
+  ) {
+    return true;
+  }
+
+  const update = {
+    changes: {
+      from: prefixLength,
+      to: expectedPreview.length,
+      insert: fullContent.slice(prefixLength),
+    },
+    annotations: [
+      Transaction.addToHistory.of(false),
+      progressiveLoadCompletionAnnotation.of(true),
+    ],
+  };
+
+  if (view) {
+    view.dispatch(update);
+    pool.states.set(tabId, view.state);
+  } else {
+    pool.states.set(tabId, state.update(update).state);
+  }
+  return true;
 }
 
 // Track active EditorView instances per tab (set by CmEditor component)

@@ -10,12 +10,15 @@ import {
   notifyContentChange,
   subscribeEditorUpdate,
   notifyEditorUpdate,
+  completeProgressiveEditorContent,
+  setActiveView,
   setPendingScrollTop,
   takePendingScrollTop,
   setPendingSelection,
   takePendingSelection,
 } from './useEditorStatePool';
 import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
 
 describe('useEditorStatePool', () => {
   const createState = (text: string) =>
@@ -63,6 +66,60 @@ describe('useEditorStatePool', () => {
     expect(listener).toHaveBeenCalledWith('updated');
 
     unsub();
+  });
+
+  it('completes a progressive load without replacing the unchanged preview prefix', () => {
+    const tabId = 'tab-progressive';
+    const preview = 'header\nfirst chunk\n';
+    const fullContent = `${preview}remaining content\n`;
+    const changes: Array<{ fromA: number; toA: number; fromB: number; toB: number }> = [];
+    const parent = document.createElement('div');
+    const view = new EditorView({
+      parent,
+      state: EditorState.create({
+        doc: preview,
+        extensions: EditorView.updateListener.of((update) => {
+          if (!update.docChanged) return;
+          update.changes.iterChanges((fromA, toA, fromB, toB) => {
+            changes.push({ fromA, toA, fromB, toB });
+          });
+        }),
+      }),
+    });
+    setEditorState(tabId, view.state);
+    setActiveView(tabId, view);
+
+    expect(completeProgressiveEditorContent(tabId, preview, fullContent)).toBe(true);
+    expect(getEditorContent(tabId)).toBe(fullContent);
+    expect(changes).toEqual([{
+      fromA: preview.length,
+      toA: preview.length,
+      fromB: preview.length,
+      toB: fullContent.length,
+    }]);
+
+    setActiveView(tabId, null);
+    view.destroy();
+  });
+
+  it('repairs a character split at the preview byte boundary', () => {
+    const tabId = 'tab-progressive-boundary';
+    const preview = 'header\nabc\uFFFD';
+    const fullContent = 'header\nabc你\nremaining content\n';
+    setEditorState(tabId, createState(preview));
+
+    expect(completeProgressiveEditorContent(tabId, preview, fullContent)).toBe(true);
+    expect(getEditorContent(tabId)).toBe(fullContent);
+  });
+
+  it('rejects progressive completion when the file changed beyond the byte boundary', () => {
+    const tabId = 'tab-progressive-file-change';
+    const preview = 'original header\nfirst chunk\n';
+    const changedContent = 'different header\ncomplete file\n';
+    setEditorState(tabId, createState(preview));
+
+    expect(completeProgressiveEditorContent(tabId, preview, changedContent)).toBe(false);
+    expect(getEditorContent(tabId)).toBe(preview);
   });
 
   it('notifies lightweight document listeners without passing full content', () => {

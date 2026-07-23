@@ -2,7 +2,12 @@ import { useCallback } from 'react';
 import type { Encoding, Language } from '../types';
 import { EXT_TO_LANGUAGE } from '../types';
 import { useEditorStore } from './useEditorStore';
-import { getEditorContent, hasEditorState, updateEditorContent } from './useEditorStatePool';
+import {
+  completeProgressiveEditorContent,
+  getEditorContent,
+  hasEditorState,
+  updateEditorContent,
+} from './useEditorStatePool';
 import { addToMru } from './useMru';
 import { detectLineEnding } from '../utils/lineEnding';
 import { perf } from '../utils/perf';
@@ -138,7 +143,19 @@ export function useFileOpener() {
                   return;
                 }
                 if (hasEditorState(tab.id)) {
-                  updateEditorContent(tab.id, result.text);
+                  const completed = completeProgressiveEditorContent(
+                    tab.id,
+                    expectedPartialContent,
+                    result.text,
+                  );
+                  if (!completed) {
+                    setTabLoadState(
+                      tab.id,
+                      'error',
+                      '文件在完整内容加载期间发生变化，请关闭后重新打开文件。',
+                    );
+                    return;
+                  }
                   setTabInitialContent(tab.id, '');
                 } else {
                   setTabInitialContent(tab.id, result.text);
