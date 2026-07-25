@@ -45,8 +45,7 @@ import { executeMarkdownAction } from '../utils/markdownActions';
 import MarkdownToolbar from './MarkdownToolbar';
 import { getOrCreateCompartments, buildBaseExtensions, loadLanguageExtensions, largeFileLineHighlighter, largeFileLineHighlightTheme, createMarkdownKeymap, type EditorCompartments } from '../utils/editorExtensions';
 import { useEditorContextMenu } from '../hooks/useEditorContextMenu';
-
-const LARGE_FILE_THRESHOLD = 2 * 1024 * 1024;
+import { shouldOptimizeLargeFile } from '../utils/largeFile';
 
 function hasMeaningfulDocumentChange(update: ViewUpdate): boolean {
   let changed = false;
@@ -145,7 +144,11 @@ const CmEditor: React.FC<CmEditorProps> = ({
         : EditorState.lineSeparator.of('\n');
 
       const contentLength = getEditorValueLength(tabId) || initialContent.length;
-      const effectiveLargeFile = largeFileOptimize && (forceLargeFile || contentLength > LARGE_FILE_THRESHOLD);
+      const effectiveLargeFile = shouldOptimizeLargeFile(
+        largeFileOptimize,
+        forceLargeFile,
+        contentLength,
+      );
 
       const colors = resolveThemeColors(theme, lightCustomColors, darkCustomColors, customColors);
       const editorIsDark = isSyntaxHighlightDark(theme, colors, customSyntaxHighlight);
@@ -349,7 +352,11 @@ const CmEditor: React.FC<CmEditorProps> = ({
     const nonce = ++langNonceRef.current;
 
     const contentLength = getEditorValueLength(tabId) || initialContent.length;
-    const effectiveLargeFile = largeFileOptimize && (forceLargeFile || contentLength > LARGE_FILE_THRESHOLD);
+    const effectiveLargeFile = shouldOptimizeLargeFile(
+      largeFileOptimize,
+      forceLargeFile,
+      contentLength,
+    );
     const lintExt = getLinterExtension(language) || [];
     const autocompleteExt = getAutocompleteExtension(language, tabId) || [];
 
@@ -476,7 +483,11 @@ const CmEditor: React.FC<CmEditorProps> = ({
     const view = viewRef.current;
     if (!view) return;
     const contentLength = getEditorValueLength(tabId) || initialContent.length;
-    const effectiveLargeFile = largeFileOptimize && (forceLargeFile || contentLength > LARGE_FILE_THRESHOLD);
+    const effectiveLargeFile = shouldOptimizeLargeFile(
+      largeFileOptimize,
+      forceLargeFile,
+      contentLength,
+    );
     view.dispatch({
       effects: compartmentsRef.current!.unicodeHighlight.reconfigure(
         enableUnicodeHighlight && !effectiveLargeFile ? [...unicodeHighlightExt] : [],
@@ -492,7 +503,11 @@ const CmEditor: React.FC<CmEditorProps> = ({
     if (!view) return;
 
     const contentLength = getEditorValueLength(tabId) || initialContent.length;
-    const effectiveLargeFile = largeFileOptimize && (forceLargeFile || contentLength > LARGE_FILE_THRESHOLD);
+    const effectiveLargeFile = shouldOptimizeLargeFile(
+      largeFileOptimize,
+      forceLargeFile,
+      contentLength,
+    );
 
     // Skip if effective mode hasn't changed (prevents unnecessary reconfigures)
     if (lastEffectiveLargeFileRef.current === effectiveLargeFile) return;

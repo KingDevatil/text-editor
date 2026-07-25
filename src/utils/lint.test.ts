@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest';
+import { EditorState } from '@codemirror/state';
+import type { EditorView } from '@codemirror/view';
 import { translateDiagnosticMessage } from './diagnostics';
-import { getJsoncParseErrors, stripJsonComments, stripJsComments, preprocessESM } from './lint';
+import {
+  getJsoncParseErrors,
+  stripJsonComments,
+  stripJsComments,
+  preprocessESM,
+  runXmlLinter,
+} from './lint';
 
 describe('JSONC diagnostics', () => {
   it('accepts comments and trailing commas consistently with the formatter', () => {
@@ -389,5 +397,22 @@ describe('xmlLinter false positive fixes', () => {
       matchedTags.push(m[2]);
     }
     expect(matchedTags).toEqual(['script', 'script']);
+  });
+});
+
+describe('xmlLinter large document performance', () => {
+  it('scans a 13,000-line XML document without repeatedly searching the whole prefix', () => {
+    const payload = 'x'.repeat(105);
+    const text = `<root>\n${Array.from(
+      { length: 12_998 },
+      (_, index) => `<item id="${index}">${payload}</item>`,
+    ).join('\n')}\n</root>`;
+    const state = EditorState.create({ doc: text });
+    const startedAt = performance.now();
+
+    const diagnostics = runXmlLinter({ state } as EditorView);
+
+    expect(diagnostics).toEqual([]);
+    expect(performance.now() - startedAt).toBeLessThan(1_000);
   });
 });

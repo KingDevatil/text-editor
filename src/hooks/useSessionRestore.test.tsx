@@ -1,10 +1,15 @@
 import React from 'react';
 import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, waitFor } from '@testing-library/react';
 import { useEditorStore } from './useEditorStore';
 import { saveSession, useSessionRestore } from './useSessionRestore';
-import { getEditorContent, setEditorState } from './useEditorStatePool';
+import {
+  getEditorContent,
+  setActiveView,
+  setEditorState,
+} from './useEditorStatePool';
 
 const SESSION_KEY = 'te2-session';
 
@@ -133,6 +138,65 @@ describe('useSessionRestore', () => {
 
     expect(getEditorContent(tab.id)).toBe('partial + user edit');
     expect(useEditorStore.getState().tabs[0].isDirty).toBe(true);
+  });
+
+  it('finishes an active progressive session restore by extending its preview', async () => {
+    const filePath = 'C:\\tmp\\large.xml';
+    const preview = 'header\nfirst chunk\n';
+    const fullContent = `${preview}remaining content\n`;
+    let finishRead!: (value: { text: string; encoding: string }) => void;
+    window.electronDesktop = {
+      readFileMeta: vi.fn(async () => ({
+        file_size: 3 * 1024 * 1024,
+        encoding: 'UTF-8',
+        total_lines: 2,
+        first_chunk: preview,
+      })),
+      readFileAuto: vi.fn(() => new Promise((resolve) => {
+        finishRead = resolve;
+      })),
+    } as unknown as typeof window.electronDesktop;
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      tabs: [{
+        title: 'large.xml',
+        filePath,
+        language: 'xml',
+        encoding: 'UTF-8',
+        group: 1,
+        scrollTop: 0,
+      }],
+      activeFilePath: filePath,
+      splitMode: false,
+      timestamp: Date.now(),
+    }));
+
+    render(<RestoreHarness />);
+    await waitFor(() => expect(useEditorStore.getState().tabs).toHaveLength(1));
+    const [tab] = useEditorStore.getState().tabs;
+    const changes: Array<{ fromA: number; toA: number }> = [];
+    const view = new EditorView({
+      parent: document.createElement('div'),
+      state: EditorState.create({
+        doc: preview,
+        extensions: EditorView.updateListener.of((update) => {
+          update.changes.iterChanges((fromA, toA) => changes.push({ fromA, toA }));
+        }),
+      }),
+    });
+    setEditorState(tab.id, view.state);
+    setActiveView(tab.id, view);
+
+    await act(async () => {
+      finishRead({ text: fullContent, encoding: 'UTF-8' });
+      await Promise.resolve();
+    });
+
+    expect(getEditorContent(tab.id)).toBe(fullContent);
+    expect(changes).toEqual([{ fromA: preview.length, toA: preview.length }]);
+    expect(useEditorStore.getState().tabs[0].loadState).toBe('ready');
+
+    setActiveView(tab.id, null);
+    view.destroy();
   });
 
   it('snapshots and restores dirty untitled content', async () => {

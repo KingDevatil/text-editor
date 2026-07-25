@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import { undo } from '@codemirror/commands';
 import CmEditor from './CmEditor';
+import { shouldOptimizeLargeFile } from '../utils/largeFile';
 import {
   completeProgressiveEditorContent,
   getActiveView,
@@ -11,6 +12,10 @@ import {
 import { useEditorStore } from '../hooks/useEditorStore';
 
 describe('CmEditor', () => {
+  it('always enables the safety mode for files explicitly classified as large', () => {
+    expect(shouldOptimizeLargeFile(false, true, 1.6 * 1024 * 1024)).toBe(true);
+  });
+
   it('renders editor container for a tab', () => {
     const { container } = render(
       <CmEditor

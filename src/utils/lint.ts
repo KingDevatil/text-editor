@@ -265,55 +265,45 @@ function jsLinter(view: EditorView): Diagnostic[] {
 }
 
 /**
- * Check if a position is inside an XML/HTML comment.
- */
-function isInsideComment(text: string, pos: number): boolean {
-  const before = text.lastIndexOf('<!--', pos);
-  if (before === -1) return false;
-  const after = text.indexOf('-->', before);
-  return after === -1 || after > pos;
-}
-
-/**
- * Check if a position is inside a <script> or <style> block.
- * Excludes the opening/closing tags themselves.
- */
-function isInsideScriptOrStyle(text: string, pos: number): boolean {
-  const scriptStart = text.lastIndexOf('<script', pos);
-  if (scriptStart !== -1 && scriptStart !== pos) {
-    const scriptEnd = text.indexOf('</script>', scriptStart);
-    if (scriptEnd === -1 || scriptEnd > pos) return true;
-  }
-  const styleStart = text.lastIndexOf('<style', pos);
-  if (styleStart !== -1 && styleStart !== pos) {
-    const styleEnd = text.indexOf('</style>', styleStart);
-    if (styleEnd === -1 || styleEnd > pos) return true;
-  }
-  return false;
-}
-
-/**
  * Simple XML/HTML linter — checks for basic tag mismatch.
  * Skips comments and script/style content to reduce false positives.
  */
-function xmlLinter(view: EditorView): Diagnostic[] {
+export function runXmlLinter(view: EditorView): Diagnostic[] {
   if (view.state.doc.length > LINT_MAX_SIZE) return [];
   const text = view.state.doc.toString();
   if (!text.trim()) return [];
 
   const diagnostics: Diagnostic[] = [];
   const stack: { tag: string; from: number }[] = [];
-  const tagRegex = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)[^>]*?\/?>/g;
+  const openTagCounts = new Map<string, number>();
+  // Comments are consumed as one token. Script/style contents are skipped by
+  // state while the same global expression advances only forwards. The old
+  // implementation used lastIndexOf from every tag position, making a valid
+  // large XML document quadratic.
+  const tokenRegex = /<!--[\s\S]*?(?:-->|$)|<(\/?)([a-zA-Z][a-zA-Z0-9-]*)[^>]*?\/?>/g;
   let m: RegExpExecArray | null;
+  let rawTextTag: 'script' | 'style' | null = null;
 
-  while ((m = tagRegex.exec(text)) !== null) {
+  const popOpenTag = () => {
+    const entry = stack.pop();
+    if (!entry) return undefined;
+    const remaining = (openTagCounts.get(entry.tag) ?? 1) - 1;
+    if (remaining === 0) openTagCounts.delete(entry.tag);
+    else openTagCounts.set(entry.tag, remaining);
+    return entry;
+  };
+
+  while ((m = tokenRegex.exec(text)) !== null) {
+    if (m[0].startsWith('<!--')) continue;
+
     const pos = m.index;
-    if (isInsideComment(text, pos) || isInsideScriptOrStyle(text, pos)) {
-      continue;
-    }
-
     const isClose = m[1] === '/';
     const tag = m[2].toLowerCase();
+
+    if (rawTextTag && !(isClose && tag === rawTextTag)) {
+      continue;
+    }
+    if (rawTextTag && isClose && tag === rawTextTag) rawTextTag = null;
 
     if (isClose) {
       // Find the nearest (top-most) matching open tag
@@ -343,7 +333,7 @@ function xmlLinter(view: EditorView): Diagnostic[] {
           message: `标签不匹配：应为 </${stack[stack.length - 1].tag}>，但遇到 </${tag}>`,
         });
         while (stack.length > matchIdx + 1) {
-          const skipped = stack.pop()!;
+          const skipped = popOpenTag()!;
           const skippedLine = view.state.doc.lineAt(skipped.from);
           diagnostics.push({
             from: skippedLine.from,
@@ -352,16 +342,15 @@ function xmlLinter(view: EditorView): Diagnostic[] {
             message: `未闭合标签 <${skipped.tag}>`,
           });
         }
-        stack.pop(); // pop the matched open tag
+        popOpenTag(); // pop the matched open tag
       } else {
         // Normal match
-        stack.pop();
+        popOpenTag();
       }
     } else if (!m[0].endsWith('/>')) {
       // Duplicate open tag detection: if there's already an unclosed tag with the same name,
       // report it as info so the user knows earlier without cluttering warnings.
-      const existingIdx = stack.findIndex((s) => s.tag === tag);
-      if (existingIdx !== -1) {
+      if (openTagCounts.has(tag)) {
         const line = view.state.doc.lineAt(pos);
         diagnostics.push({
           from: line.from,
@@ -371,6 +360,8 @@ function xmlLinter(view: EditorView): Diagnostic[] {
         });
       }
       stack.push({ tag, from: pos });
+      openTagCounts.set(tag, (openTagCounts.get(tag) ?? 0) + 1);
+      if (tag === 'script' || tag === 'style') rawTextTag = tag;
     }
   }
 
@@ -467,7 +458,7 @@ function cssLinter(view: EditorView): Diagnostic[] {
 registerDiagnosticEngine({ name: 'json', supportedLanguages: ['json'], run: jsonLinter });
 registerDiagnosticEngine({ name: 'jsonl', supportedLanguages: ['jsonl'], run: jsonlLinter });
 registerDiagnosticEngine({ name: 'js-ts', supportedLanguages: ['javascript', 'typescript'], run: jsLinter });
-registerDiagnosticEngine({ name: 'xml-html', supportedLanguages: ['xml', 'html'], run: xmlLinter });
+registerDiagnosticEngine({ name: 'xml-html', supportedLanguages: ['xml', 'html'], run: runXmlLinter });
 registerDiagnosticEngine({ name: 'css', supportedLanguages: ['css'], run: cssLinter });
 
 /**

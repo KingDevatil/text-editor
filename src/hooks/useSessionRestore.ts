@@ -1,13 +1,13 @@
 import { useEffect } from 'react';
 import { useEditorStore } from './useEditorStore';
 import {
+  completeProgressiveEditorContent,
   getEditorState,
   getEditorContent,
   getEditorScrollTop,
   hasEditorState,
   setPendingScrollTop,
   setPendingSelection,
-  updateEditorContent,
 } from './useEditorStatePool';
 import type { Encoding } from '../types';
 import { normalizeLineEnding } from '../utils/lineEnding';
@@ -225,7 +225,19 @@ export function useSessionRestore() {
                     st.lineEnding as import('../types').LineEnding
                   );
                   if (hasEditorState(restoredTabId)) {
-                    updateEditorContent(restoredTabId, normalizedText);
+                    const completed = completeProgressiveEditorContent(
+                      restoredTabId,
+                      expectedPartialContent,
+                      normalizedText,
+                    );
+                    if (!completed) {
+                      setTabLoadState(
+                        restoredTabId,
+                        'error',
+                        '文件在完整内容加载期间发生变化，请关闭后重新打开文件。',
+                      );
+                      return;
+                    }
                     setTabInitialContent(restoredTabId, '');
                   } else {
                     setTabInitialContent(restoredTabId, normalizedText);

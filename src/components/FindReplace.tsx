@@ -95,22 +95,42 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
     setFolderMode(enabled);
   }, [defaultSearchDir, searchDir]);
 
+  const copyEditorSelectionToFind = useCallback(() => {
+    const markdownSurfaceActive =
+      activeTab?.language === 'markdown' &&
+      (readMode || (previewVisible && isMarkdownSearchSurface(document.activeElement)));
+    if (!activeTabId || markdownSurfaceActive) return;
+
+    const view = getActiveView(activeTabId);
+    if (!view) return;
+
+    const selection = view.state.selection.main;
+    if (selection.from === selection.to) return;
+
+    const selectedText = view.state.doc.sliceString(selection.from, selection.to);
+    if (selectedText.length <= 500) {
+      setFindText(selectedText);
+    }
+  }, [activeTab?.language, activeTabId, previewVisible, readMode]);
+
   const focusFind = useCallback(() => {
+    copyEditorSelectionToFind();
     setFolderModeWithDefaultDir(false);
     window.setTimeout(() => {
       findInputRef.current?.focus();
       findInputRef.current?.select();
     }, 0);
-  }, [setFolderModeWithDefaultDir]);
+  }, [copyEditorSelectionToFind, setFolderModeWithDefaultDir]);
 
   const openReplace = useCallback(() => {
+    copyEditorSelectionToFind();
     setFolderModeWithDefaultDir(false);
     setShowReplace(true);
     window.setTimeout(() => {
       findInputRef.current?.focus();
       findInputRef.current?.select();
     }, 0);
-  }, [setFolderModeWithDefaultDir]);
+  }, [copyEditorSelectionToFind, setFolderModeWithDefaultDir]);
 
   // Expose setFolderMode to parent via ref
   useEffect(() => {
@@ -137,15 +157,10 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
         if (!cancelled) setSearchTarget(nextSearchTarget);
       });
 
-      const view = activeTabId ? getActiveView(activeTabId) : undefined;
-      if (view && !folderMode && nextSearchTarget === 'editor') {
-        const sel = view.state.selection.main;
-        if (sel.from !== sel.to) {
-          const text = view.state.doc.sliceString(sel.from, sel.to);
-          if (text.length <= 500) {
-            queueMicrotask(() => setFindText(text));
-          }
-        }
+      if (!folderMode && nextSearchTarget === 'editor') {
+        queueMicrotask(() => {
+          if (!cancelled) copyEditorSelectionToFind();
+        });
       }
       if (findInputRef.current) {
         setTimeout(() => {
@@ -174,7 +189,7 @@ const FindReplace: React.FC<FindReplaceProps> = ({ visible, onClose, projectPath
     return () => {
       cancelled = true;
     };
-  }, [visible, activeTabId, activeTab?.language, folderMode, previewVisible, readMode, setMarkdownQuery]);
+  }, [visible, activeTabId, activeTab?.language, folderMode, previewVisible, readMode, setMarkdownQuery, copyEditorSelectionToFind]);
 
   // Sync search highlight + debounced match counting
   useEffect(() => {
